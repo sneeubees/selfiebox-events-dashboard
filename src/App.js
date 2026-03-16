@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SignIn, SignUp, useAuth as useClerkAuth, useClerk, useUser } from '@clerk/react';
-import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import './App.css';
@@ -181,7 +181,6 @@ function App() {
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
   const [authMode, setAuthMode] = useState('login');
   const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
-  const { isLoading: isConvexAuthLoading } = useConvexAuth();
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
   const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
@@ -2063,7 +2062,7 @@ function App() {
     });
   };
 
-  if (!isAuthLoaded || (isSignedIn && (isConvexAuthLoading || currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
+  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
