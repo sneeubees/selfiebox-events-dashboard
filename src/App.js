@@ -184,14 +184,14 @@ function App() {
   const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth();
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
-  const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
-  const listedUsers = useQuery(api.users.list, isSignedIn ? {} : 'skip');
-  const workspaceRecords = useQuery(api.workspaces.list, isSignedIn ? {} : 'skip');
-  const liveEvents = useQuery(api.events.listAll, isSignedIn ? {} : 'skip');
-  const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn ? {} : 'skip');
-  const customColumnRecords = useQuery(api.columns.listAll, isSignedIn ? {} : 'skip');
-  const currentColumnRights = useQuery(api.permissions.currentUserRights, isSignedIn ? {} : 'skip');
-  const allColumnPermissions = useQuery(api.permissions.listAll, isSignedIn && currentUser?.role === 'admin' ? {} : 'skip');
+  const currentUser = useQuery(api.users.current, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const listedUsers = useQuery(api.users.list, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const workspaceRecords = useQuery(api.workspaces.list, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const liveEvents = useQuery(api.events.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const customColumnRecords = useQuery(api.columns.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const currentColumnRights = useQuery(api.permissions.currentUserRights, isSignedIn && isConvexAuthenticated ? {} : 'skip');
+  const allColumnPermissions = useQuery(api.permissions.listAll, isSignedIn && isConvexAuthenticated && currentUser?.role === 'admin' ? {} : 'skip');
   const syncCurrentUser = useMutation(api.users.syncCurrentUser);
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
@@ -311,10 +311,10 @@ function App() {
       setMonthOrder(monthNames);
     }
   }, [currentUser]);
-  const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, isSignedIn ? { workspaceYear: selectedWorkspaceYear } : 'skip');
-  const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, isSignedIn && selectedId ? { eventKey: selectedId } : 'skip');
-  const eventActivityEntries = useQuery(api.collaboration.listEventActivity, isSignedIn && selectedId ? { eventKey: selectedId } : 'skip');
-  const eventFileEntries = useQuery(api.files.listEventFiles, isSignedIn && selectedId ? { eventKey: selectedId } : 'skip');
+  const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, isSignedIn && isConvexAuthenticated ? { workspaceYear: selectedWorkspaceYear } : 'skip');
+  const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventActivityEntries = useQuery(api.collaboration.listEventActivity, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventFileEntries = useQuery(api.files.listEventFiles, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
   const [draftUpdate, setDraftUpdate] = useState('');
@@ -545,7 +545,7 @@ function App() {
   }, [showProfileModal, currentUser]);
 
   useEffect(() => {
-    if (!isAuthLoaded || !isSignedIn || !clerkUser) {
+    if (!isAuthLoaded || !isSignedIn || !isConvexAuthenticated || !clerkUser) {
       userSyncKeyRef.current = '';
       return;
     }
@@ -574,7 +574,7 @@ function App() {
       console.error('Failed to sync current user', error);
       userSyncKeyRef.current = '';
     });
-  }, [isAuthLoaded, isSignedIn, clerkUser, currentUser, syncCurrentUser]);
+  }, [isAuthLoaded, isSignedIn, isConvexAuthenticated, clerkUser, currentUser, syncCurrentUser]);
 
 
   useEffect(() => {
