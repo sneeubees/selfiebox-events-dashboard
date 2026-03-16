@@ -1,13 +1,43 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+:root {
+  --bg: #f4f1e8;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-strong: #fffaf2;
+  --line: #d8d1c2;
+  --text: #1f2a37;
+  --muted: #667085;
+  --blue: #2558c7;
+  --sky: #6fc3ea;
+  --green: #1fb06b;
+  --amber: #efaa3b;
+  --rose: #dc4b68;
+  --shadow: 0 22px 60px rgba(49, 45, 36, 0.14);
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(111, 195, 234, 0.25), transparent 28%),
+    radial-gradient(circle at right, rgba(239, 170, 59, 0.18), transparent 25%),
+    linear-gradient(180deg, #f7f2e7 0%, #f1ecdf 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
 }
