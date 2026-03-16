@@ -12,6 +12,7 @@ import type * as collaboration from "../collaboration.js";
 import type * as columns from "../columns.js";
 import type * as events from "../events.js";
 import type * as files from "../files.js";
+import type * as imports from "../imports.js";
 import type * as labels from "../labels.js";
 import type * as permissions from "../permissions.js";
 import type * as users from "../users.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   columns: typeof columns;
   events: typeof events;
   files: typeof files;
+  imports: typeof imports;
   labels: typeof labels;
   permissions: typeof permissions;
   users: typeof users;
