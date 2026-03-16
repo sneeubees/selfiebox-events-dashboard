@@ -84,13 +84,29 @@ export const sendTestAdminNotification = action({
     recipient: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-
     return await ctx.runAction(internal.notifications.sendAdminNewUserNotification, {
       recipients: [args.recipient],
+      userEmail: "test-user@selfiebox.co.za",
+      firstName: "Test",
+      surname: "Registration",
+    });
+  },
+});
+
+export const debugNotificationConfig = action({
+  args: {},
+  handler: async () => ({
+    hasResendApiKey: Boolean(process.env.RESEND_API_KEY),
+    resendFromEmail: process.env.RESEND_FROM_EMAIL || "",
+    appBaseUrl: process.env.APP_BASE_URL || "",
+  }),
+});
+
+export const sendInfoAdminTestNotification = action({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.runAction(internal.notifications.sendAdminNewUserNotification, {
+      recipients: ["info@selfiebox.co.za"],
       userEmail: "test-user@selfiebox.co.za",
       firstName: "Test",
       surname: "Registration",
