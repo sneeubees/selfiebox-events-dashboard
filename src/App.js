@@ -2532,7 +2532,8 @@ function CompactTagList({ items, styles }) {
 }
 
 function FilterGroup({ title, options, selected, onToggle }) {
-  return <section className="filter-group"><h4>{title}</h4><div className="filter-options">{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
+  const shouldScroll = options.length > 10;
+  return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
 }
 
 function ModalShell({ title, onClose, children, hideCloseButton = false }) {
