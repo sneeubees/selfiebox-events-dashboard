@@ -2062,7 +2062,7 @@ function App() {
     });
   };
 
-  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || currentUser === null || (canAccessDashboard && workspaceRecords === undefined)))) {
+  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
     return (
       <div className="auth-shell">
         <div className="auth-card">

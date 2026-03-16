@@ -1,7 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ClerkProvider, useAuth } from '@clerk/react';
-import { ConvexProviderWithAuth, ConvexReactClient } from 'convex/react';
+import { ConvexReactClient } from 'convex/react';
+import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
@@ -19,24 +20,13 @@ if (!convexUrl) {
 
 const convex = new ConvexReactClient(convexUrl);
 
-function useConvexClerkAuth() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-
-  return {
-    isLoading: !isLoaded,
-    isAuthenticated: !!isSignedIn,
-    fetchAccessToken: async ({ forceRefreshToken } = {}) =>
-      (await getToken({ template: 'convex', skipCache: !!forceRefreshToken })) ?? null,
-  };
-}
-
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
-      <ConvexProviderWithAuth client={convex} useAuth={useConvexClerkAuth}>
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <App />
-      </ConvexProviderWithAuth>
+      </ConvexProviderWithClerk>
     </ClerkProvider>
   </React.StrictMode>
 );
