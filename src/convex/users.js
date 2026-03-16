@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const DEFAULT_WORKSPACE_YEARS = [2026, 2027];
 const PRIMARY_ADMIN_EMAIL = "info@selfiebox.co.za";
@@ -121,6 +122,18 @@ async function ensureWorkspaceYears(ctx, createdByUserId) {
   }
 }
 
+function getUniqueAdminEmails(users, excludeEmail = "") {
+  const excluded = excludeEmail.trim().toLowerCase();
+  return Array.from(
+    new Set(
+      users
+        .filter((record) => record.role === "admin" && record.isApproved && record.isActive)
+        .map((record) => record.email.trim().toLowerCase())
+        .filter((email) => email && email !== excluded)
+    )
+  );
+}
+
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function toUserDto(record) {
@@ -216,6 +229,7 @@ export const syncCurrentUser = mutation({
     const existingUsers = await ctx.db.query("users").collect();
     const isFirstUser = existingUsers.length === 0;
     const shouldBootstrapAdmin = isFirstUser || isPrimaryAdmin;
+    const adminEmails = getUniqueAdminEmails(existingUsers, email);
 
     const userId = await ctx.db.insert("users", {
       clerkId,
@@ -235,6 +249,15 @@ export const syncCurrentUser = mutation({
     });
 
     await ensureWorkspaceYears(ctx, userId);
+
+    if (!shouldBootstrapAdmin && adminEmails.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.notifications.sendAdminNewUserNotification, {
+        recipients: adminEmails,
+        userEmail: email,
+        firstName,
+        surname,
+      });
+    }
 
     return toUserDto(await ctx.db.get(userId));
   },
