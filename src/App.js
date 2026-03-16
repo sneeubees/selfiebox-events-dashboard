@@ -184,14 +184,14 @@ function App() {
   const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth();
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
-  const currentUser = useQuery(api.users.current, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const listedUsers = useQuery(api.users.list, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const workspaceRecords = useQuery(api.workspaces.list, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const liveEvents = useQuery(api.events.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const customColumnRecords = useQuery(api.columns.listAll, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const currentColumnRights = useQuery(api.permissions.currentUserRights, isSignedIn && isConvexAuthenticated ? {} : 'skip');
-  const allColumnPermissions = useQuery(api.permissions.listAll, isSignedIn && isConvexAuthenticated && currentUser?.role === 'admin' ? {} : 'skip');
+  const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
+  const listedUsers = useQuery(api.users.list, isSignedIn ? {} : 'skip');
+  const workspaceRecords = useQuery(api.workspaces.list, isSignedIn ? {} : 'skip');
+  const liveEvents = useQuery(api.events.listAll, isSignedIn ? {} : 'skip');
+  const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn ? {} : 'skip');
+  const customColumnRecords = useQuery(api.columns.listAll, isSignedIn ? {} : 'skip');
+  const currentColumnRights = useQuery(api.permissions.currentUserRights, isSignedIn ? {} : 'skip');
+  const allColumnPermissions = useQuery(api.permissions.listAll, isSignedIn && currentUser?.role === 'admin' ? {} : 'skip');
   const syncCurrentUser = useMutation(api.users.syncCurrentUser);
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
@@ -311,10 +311,11 @@ function App() {
       setMonthOrder(monthNames);
     }
   }, [currentUser]);
-  const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, isSignedIn && isConvexAuthenticated ? { workspaceYear: selectedWorkspaceYear } : 'skip');
-  const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
-  const eventActivityEntries = useQuery(api.collaboration.listEventActivity, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
-  const eventFileEntries = useQuery(api.files.listEventFiles, isSignedIn && isConvexAuthenticated && selectedId ? { eventKey: selectedId } : 'skip');
+  const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
+  const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip');
+  const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
   const [draftUpdate, setDraftUpdate] = useState('');
@@ -545,7 +546,7 @@ function App() {
   }, [showProfileModal, currentUser]);
 
   useEffect(() => {
-    if (!isAuthLoaded || !isSignedIn || !isConvexAuthenticated || !clerkUser) {
+    if (!isAuthLoaded || !isSignedIn || !clerkUser) {
       userSyncKeyRef.current = '';
       return;
     }
@@ -574,7 +575,7 @@ function App() {
       console.error('Failed to sync current user', error);
       userSyncKeyRef.current = '';
     });
-  }, [isAuthLoaded, isSignedIn, isConvexAuthenticated, clerkUser, currentUser, syncCurrentUser]);
+  }, [isAuthLoaded, isSignedIn, clerkUser, currentUser, syncCurrentUser]);
 
 
   useEffect(() => {
@@ -622,7 +623,7 @@ function App() {
   }, [liveEvents]);
 
   useEffect(() => {
-    if (!currentUser || liveEvents === undefined || liveEvents.length || eventsSeededRef.current) {
+    if (!canAccessDashboard || liveEvents === undefined || liveEvents.length || eventsSeededRef.current) {
       return;
     }
 
@@ -631,10 +632,10 @@ function App() {
       console.error('Failed to seed initial events', error);
       eventsSeededRef.current = false;
     });
-  }, [currentUser, liveEvents, seedInitialEvents]);
+  }, [canAccessDashboard, liveEvents, seedInitialEvents]);
 
   useEffect(() => {
-    if (!currentUser || liveEvents === undefined || collaborationMigratedRef.current) {
+    if (!canAccessDashboard || liveEvents === undefined || collaborationMigratedRef.current) {
       return;
     }
 
@@ -643,10 +644,10 @@ function App() {
       console.error('Failed to migrate legacy collaboration', error);
       collaborationMigratedRef.current = false;
     });
-  }, [currentUser, liveEvents, migrateLegacyCollaboration]);
+  }, [canAccessDashboard, liveEvents, migrateLegacyCollaboration]);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'admin' || futureActivityCleanupRef.current) {
+    if (!canAccessDashboard || !currentUser || currentUser.role !== 'admin' || futureActivityCleanupRef.current) {
       return;
     }
 
@@ -655,10 +656,10 @@ function App() {
       console.error('Failed to clean future activity entries', error);
       futureActivityCleanupRef.current = false;
     });
-  }, [currentUser, deleteFutureActivityEntries]);
+  }, [canAccessDashboard, currentUser, deleteFutureActivityEntries]);
 
   useEffect(() => {
-    if (!currentUser || liveEvents === undefined || filesMigratedRef.current) {
+    if (!canAccessDashboard || liveEvents === undefined || filesMigratedRef.current) {
       return;
     }
 
@@ -667,10 +668,10 @@ function App() {
       console.error('Failed to migrate legacy files', error);
       filesMigratedRef.current = false;
     });
-  }, [currentUser, liveEvents, migrateLegacyFiles]);
+  }, [canAccessDashboard, liveEvents, migrateLegacyFiles]);
 
   useEffect(() => {
-    if (!currentUser || liveLabelOptions === undefined || liveLabelOptions.length || labelsSeededRef.current) {
+    if (!canAccessDashboard || liveLabelOptions === undefined || liveLabelOptions.length || labelsSeededRef.current) {
       return;
     }
 
@@ -679,10 +680,10 @@ function App() {
       console.error('Failed to seed initial labels', error);
       labelsSeededRef.current = false;
     });
-  }, [currentUser, liveLabelOptions, seedInitialLabels]);
+  }, [canAccessDashboard, liveLabelOptions, seedInitialLabels]);
 
   useEffect(() => {
-    if (!currentUser || liveLabelOptions === undefined || productKeysMigratedRef.current) {
+    if (!canAccessDashboard || liveLabelOptions === undefined || productKeysMigratedRef.current) {
       return;
     }
 
@@ -691,10 +692,10 @@ function App() {
       console.error('Failed to migrate legacy product keys', error);
       productKeysMigratedRef.current = false;
     });
-  }, [currentUser, liveLabelOptions, migrateLegacyProductKeys]);
+  }, [canAccessDashboard, liveLabelOptions, migrateLegacyProductKeys]);
 
   useEffect(() => {
-    if (!currentUser || liveLabelOptions === undefined || labelCleanupRef.current) {
+    if (!canAccessDashboard || liveLabelOptions === undefined || labelCleanupRef.current) {
       return;
     }
 
@@ -703,10 +704,10 @@ function App() {
       console.error('Failed to clean duplicate labels', error);
       labelCleanupRef.current = false;
     });
-  }, [currentUser, liveLabelOptions, cleanupDuplicateLabels]);
+  }, [canAccessDashboard, liveLabelOptions, cleanupDuplicateLabels]);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'admin' || !customColumnRecords || customColumnTypeFixRef.current) {
+    if (!canAccessDashboard || !currentUser || currentUser.role !== 'admin' || !customColumnRecords || customColumnTypeFixRef.current) {
       return;
     }
 
@@ -720,7 +721,7 @@ function App() {
       console.error('Failed to convert TEMPLATE DESIGN to single item', error);
       customColumnTypeFixRef.current = false;
     });
-  }, [currentUser, customColumnRecords, convertCustomColumnToSingleItemMutation]);
+  }, [canAccessDashboard, currentUser, customColumnRecords, convertCustomColumnToSingleItemMutation]);
 
   useEffect(() => {
     if (liveLabelOptions === undefined) {
