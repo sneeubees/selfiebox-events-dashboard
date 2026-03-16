@@ -185,7 +185,7 @@ function App() {
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
   const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
-  const listedUsers = useQuery(api.users.list, isSignedIn ? {} : 'skip');
+  const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const workspaceRecords = useQuery(api.workspaces.list, isSignedIn ? {} : 'skip');
   const liveEvents = useQuery(api.events.listAll, isSignedIn ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn ? {} : 'skip');
