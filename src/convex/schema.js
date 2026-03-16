@@ -44,6 +44,7 @@ export default defineSchema({
     eventKey: v.string(),
     workspaceYear: v.number(),
     name: v.string(),
+    eventTitle: v.optional(v.string()),
     date: v.optional(v.string()),
     draftMonth: v.optional(v.string()),
     hours: v.optional(v.string()),

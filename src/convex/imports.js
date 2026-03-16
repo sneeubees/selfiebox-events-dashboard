@@ -201,6 +201,7 @@ export const importMonthWorkbook = mutation({
         eventKey,
         workspaceYear: args.workspaceYear,
         name: normalizeText(sourceEvent.name),
+        eventTitle: "",
         date: normalizeText(sourceEvent.date),
         draftMonth: normalizeText(sourceEvent.date) ? "" : monthName,
         hours: normalizeText(sourceEvent.hours),
