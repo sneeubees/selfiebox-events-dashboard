@@ -2062,7 +2062,7 @@ function App() {
     });
   };
 
-  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
+  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || currentUser === null || (canAccessDashboard && workspaceRecords === undefined)))) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
@@ -2074,7 +2074,7 @@ function App() {
     );
   }
 
-  if (!isSignedIn || !currentUser) {
+  if (!isSignedIn) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
