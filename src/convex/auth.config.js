@@ -1,7 +1,9 @@
+const clerkIssuerDomain = process.env.CLERK_JWT_ISSUER_DOMAIN || "https://clerk.events.selfiebox.co.za";
+
 export default {
   providers: [
     {
-      domain: "https://clerk.events.selfiebox.co.za",
+      domain: clerkIssuerDomain,
       applicationID: "convex",
     },
   ],
