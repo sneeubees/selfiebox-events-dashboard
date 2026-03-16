@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SignIn, SignUp, useAuth as useClerkAuth, useClerk, useUser } from '@clerk/react';
-import { useMutation, useQuery } from 'convex/react';
+import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
+import { Authenticated, AuthLoading, Unauthenticated, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import './App.css';
@@ -176,14 +176,12 @@ function serializeEventForConvex(event) {
   };
 }
 
-function App() {
+function DashboardApp() {
 
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
-  const [authMode, setAuthMode] = useState('login');
-  const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
-  const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
+  const currentUser = useQuery(api.users.current, {});
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
   const workspaceRecords = useQuery(api.workspaces.list, canAccessDashboard ? {} : 'skip');
@@ -545,7 +543,7 @@ function App() {
   }, [showProfileModal, currentUser]);
 
   useEffect(() => {
-    if (!isAuthLoaded || !isSignedIn || !clerkUser) {
+    if (!clerkUser) {
       userSyncKeyRef.current = '';
       return;
     }
@@ -574,7 +572,7 @@ function App() {
       console.error('Failed to sync current user', error);
       userSyncKeyRef.current = '';
     });
-  }, [isAuthLoaded, isSignedIn, clerkUser, currentUser, syncCurrentUser]);
+  }, [clerkUser, currentUser, syncCurrentUser]);
 
 
   useEffect(() => {
@@ -2062,7 +2060,9 @@ function App() {
     });
   };
 
-  if (!isAuthLoaded || (isSignedIn && (currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
+  const isUserSyncing = Boolean(clerkUser && !currentUser && userSyncKeyRef.current === clerkUser.id);
+
+  if (currentUser === undefined || isUserSyncing || (canAccessDashboard && workspaceRecords === undefined)) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
@@ -2074,20 +2074,13 @@ function App() {
     );
   }
 
-  if (!isSignedIn) {
+  if (!currentUser) {
     return (
       <div className="auth-shell">
         <div className="auth-card">
           <div className="auth-brand">SelfieBox Events</div>
-          <h1>{authMode === 'login' ? 'Sign in' : 'Create your account'}</h1>
-          <p>Log in with your email address to access the yearly event workspaces in your browser.</p>
-          <div className="auth-tabs">
-            <button className={authMode === 'login' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button>
-            <button className={authMode === 'register' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
-          </div>
-          <div className="clerk-auth-shell">
-            {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" /> : <SignUp routing="hash" signInUrl="#login" />}
-          </div>
+          <h1>Finalising your account</h1>
+          <p>Please wait while we create your user profile.</p>
         </div>
       </div>
     );
@@ -2535,6 +2528,55 @@ function CompactTagList({ items, styles }) {
 function FilterGroup({ title, options, selected, onToggle }) {
   const shouldScroll = options.length > 10;
   return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
+}
+
+function AuthShell({ authMode, setAuthMode }) {
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <div className="auth-brand">SelfieBox Events</div>
+        <h1>{authMode === 'login' ? 'Sign in' : 'Create your account'}</h1>
+        <p>Log in with your email address to access the yearly event workspaces in your browser.</p>
+        <div className="auth-tabs">
+          <button className={authMode === 'login' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button>
+          <button className={authMode === 'register' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
+        </div>
+        <div className="clerk-auth-shell">
+          {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" /> : <SignUp routing="hash" signInUrl="#login" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoadingShell() {
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <div className="auth-brand">SelfieBox Events</div>
+        <h1>Loading your account</h1>
+        <p>Please wait while Clerk connects your session.</p>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [authMode, setAuthMode] = useState('login');
+
+  return (
+    <>
+      <AuthLoading>
+        <LoadingShell />
+      </AuthLoading>
+      <Unauthenticated>
+        <AuthShell authMode={authMode} setAuthMode={setAuthMode} />
+      </Unauthenticated>
+      <Authenticated>
+        <DashboardApp />
+      </Authenticated>
+    </>
+  );
 }
 
 function ModalShell({ title, onClose, children, hideCloseButton = false }) {
