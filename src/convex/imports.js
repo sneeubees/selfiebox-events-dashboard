@@ -288,3 +288,49 @@ export const importMonthWorkbook = mutation({
     };
   },
 });
+
+export const normalizeImportedStatuses = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const typo = "In Progres";
+    const corrected = "In Progress";
+
+    const statusOptions = await ctx.db
+      .query("labelOptions")
+      .withIndex("by_column", (q) => q.eq("columnKey", "status"))
+      .collect();
+
+    const typoOption = statusOptions.find((option) => normalizeKey(option.name) === normalizeKey(typo));
+    const correctOption = statusOptions.find((option) => normalizeKey(option.name) === normalizeKey(corrected));
+
+    let updatedEvents = 0;
+    const typoEvents = await ctx.db
+      .query("events")
+      .filter((q) => q.eq(q.field("status"), typo))
+      .collect();
+
+    for (const event of typoEvents) {
+      await ctx.db.patch(event._id, {
+        status: corrected,
+        updatedAt: Date.now(),
+      });
+      updatedEvents += 1;
+    }
+
+    if (typoOption && correctOption) {
+      await ctx.db.delete(typoOption._id);
+    } else if (typoOption) {
+      await ctx.db.patch(typoOption._id, {
+        optionKey: corrected,
+        name: corrected,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return {
+      updatedEvents,
+      removedTypoOption: Boolean(typoOption && correctOption),
+      renamedTypoOption: Boolean(typoOption && !correctOption),
+    };
+  },
+});
