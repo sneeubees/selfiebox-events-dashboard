@@ -1,7 +1,8 @@
 "use node";
 
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 function formatRegistrantName(firstName, surname, userEmail) {
   const fullName = `${String(firstName || "").trim()} ${String(surname || "").trim()}`.trim();
@@ -75,5 +76,24 @@ export const sendAdminNewUserNotification = internalAction({
 
     const payload = await response.json();
     return { sent: true, recipients, id: payload?.id || null };
+  },
+});
+
+export const sendTestAdminNotification = action({
+  args: {
+    recipient: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
+    }
+
+    return await ctx.runAction(internal.notifications.sendAdminNewUserNotification, {
+      recipients: [args.recipient],
+      userEmail: "test-user@selfiebox.co.za",
+      firstName: "Test",
+      surname: "Registration",
+    });
   },
 });
