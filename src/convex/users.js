@@ -23,6 +23,86 @@ async function getCurrentUserRecord(ctx) {
   return { identity, clerkId, user };
 }
 
+async function findUsersByEmail(ctx, email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  return (await ctx.db.query("users").collect()).filter((record) => record.email === normalizedEmail);
+}
+
+function pickCanonicalUser(users, preferredClerkId) {
+  return users.slice().sort((left, right) => {
+    if (preferredClerkId) {
+      if (left.clerkId === preferredClerkId && right.clerkId !== preferredClerkId) return -1;
+      if (right.clerkId === preferredClerkId && left.clerkId !== preferredClerkId) return 1;
+    }
+    if (left.role === "admin" && right.role !== "admin") return -1;
+    if (right.role === "admin" && left.role !== "admin") return 1;
+    return left.createdAt - right.createdAt;
+  })[0] || null;
+}
+
+async function mergeDuplicateUsers(ctx, canonicalUser, duplicateUsers) {
+  for (const duplicate of duplicateUsers) {
+    if (!duplicate || duplicate._id === canonicalUser._id) {
+      continue;
+    }
+
+    const workspaces = await ctx.db.query("workspaces").collect();
+    for (const workspace of workspaces) {
+      if (workspace.createdByUserId === duplicate._id) {
+        await ctx.db.patch(workspace._id, { createdByUserId: canonicalUser._id });
+      }
+    }
+
+    const events = await ctx.db.query("events").collect();
+    for (const event of events) {
+      if (event.createdByUserId === duplicate._id) {
+        await ctx.db.patch(event._id, { createdByUserId: canonicalUser._id });
+      }
+    }
+
+    const updates = await ctx.db.query("eventUpdates").collect();
+    for (const update of updates) {
+      if (update.createdByUserId === duplicate._id) {
+        await ctx.db.patch(update._id, { createdByUserId: canonicalUser._id });
+      }
+    }
+
+    const files = await ctx.db.query("eventFiles").collect();
+    for (const file of files) {
+      if (file.createdByUserId === duplicate._id) {
+        await ctx.db.patch(file._id, { createdByUserId: canonicalUser._id });
+      }
+    }
+
+    const activityEntries = await ctx.db.query("activityLog").collect();
+    for (const entry of activityEntries) {
+      if (entry.actorUserId === duplicate._id) {
+        await ctx.db.patch(entry._id, { actorUserId: canonicalUser._id });
+      }
+    }
+
+    const permissions = await ctx.db.query("columnPermissions").collect();
+    for (const permission of permissions) {
+      if (permission.userId === duplicate._id) {
+        const existingForCanonical = permissions.find(
+          (candidate) =>
+            candidate._id !== permission._id &&
+            candidate.columnKey === permission.columnKey &&
+            candidate.subjectType === permission.subjectType &&
+            candidate.userId === canonicalUser._id
+        );
+        if (existingForCanonical) {
+          await ctx.db.delete(permission._id);
+        } else {
+          await ctx.db.patch(permission._id, { userId: canonicalUser._id });
+        }
+      }
+    }
+
+    await ctx.db.delete(duplicate._id);
+  }
+}
+
 async function ensureWorkspaceYears(ctx, createdByUserId) {
   for (const year of DEFAULT_WORKSPACE_YEARS) {
     const existing = await ctx.db
@@ -79,8 +159,10 @@ export const syncCurrentUser = mutation({
     const firstName = args.firstName.trim() || identity.givenName || "User";
     const surname = args.surname.trim() || identity.familyName || "";
     const now = Date.now();
+    const emailMatches = await findUsersByEmail(ctx, email);
 
     if (user) {
+      const duplicates = emailMatches.filter((candidate) => candidate._id !== user._id);
       const nextFirstName = user.firstName || firstName;
       const nextSurname = user.surname || surname;
       await ctx.db.patch(user._id, {
@@ -98,8 +180,37 @@ export const syncCurrentUser = mutation({
         updatedAt: now,
       });
 
+      if (duplicates.length > 0) {
+        await mergeDuplicateUsers(ctx, user, duplicates);
+      }
+
       const refreshed = await ctx.db.get(user._id);
       return toUserDto(refreshed);
+    }
+
+    const existingByEmail = pickCanonicalUser(emailMatches, clerkId);
+    if (existingByEmail) {
+      await ctx.db.patch(existingByEmail._id, {
+        clerkId,
+        email,
+        firstName: existingByEmail.firstName || firstName,
+        surname: existingByEmail.surname || surname,
+        fullName: `${existingByEmail.firstName || firstName} ${existingByEmail.surname || surname}`.trim(),
+        designation: isPrimaryAdmin ? "Operations Admin" : existingByEmail.designation,
+        profilePic: existingByEmail.profilePic || args.profilePic || "",
+        monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
+        role: isPrimaryAdmin ? "admin" : existingByEmail.role,
+        isApproved: isPrimaryAdmin ? true : existingByEmail.isApproved,
+        isActive: isPrimaryAdmin ? true : existingByEmail.isActive,
+        lastSignInAt: now,
+        updatedAt: now,
+      });
+      await mergeDuplicateUsers(
+        ctx,
+        existingByEmail,
+        emailMatches.filter((candidate) => candidate._id !== existingByEmail._id)
+      );
+      return toUserDto(await ctx.db.get(existingByEmail._id));
     }
 
     const existingUsers = await ctx.db.query("users").collect();
@@ -311,6 +422,11 @@ export const bootstrapPrimaryAdmin = mutation({
         lastSignInAt: now,
         updatedAt: now,
       });
+      await mergeDuplicateUsers(
+        ctx,
+        existingByClerkId,
+        (await findUsersByEmail(ctx, email)).filter((candidate) => candidate._id !== existingByClerkId._id)
+      );
       return toUserDto(await ctx.db.get(existingByClerkId._id));
     }
 
@@ -335,6 +451,11 @@ export const bootstrapPrimaryAdmin = mutation({
         lastSignInAt: now,
         updatedAt: now,
       });
+      await mergeDuplicateUsers(
+        ctx,
+        existingByEmail,
+        (await findUsersByEmail(ctx, email)).filter((candidate) => candidate._id !== existingByEmail._id)
+      );
       return toUserDto(await ctx.db.get(existingByEmail._id));
     }
 
@@ -356,6 +477,44 @@ export const bootstrapPrimaryAdmin = mutation({
     });
 
     await ensureWorkspaceYears(ctx, userId);
+    const createdUser = await ctx.db.get(userId);
+    await mergeDuplicateUsers(
+      ctx,
+      createdUser,
+      (await findUsersByEmail(ctx, email)).filter((candidate) => candidate._id !== userId)
+    );
     return toUserDto(await ctx.db.get(userId));
+  },
+});
+
+export const cleanupDuplicateEmails = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await getCurrentUserRecord(ctx);
+    if (!user || user.role !== "admin") {
+      throw new Error("Only admins can clean up duplicate users.");
+    }
+
+    const allUsers = await ctx.db.query("users").collect();
+    const grouped = new Map();
+    for (const record of allUsers) {
+      const email = record.email.trim().toLowerCase();
+      const list = grouped.get(email) || [];
+      list.push(record);
+      grouped.set(email, list);
+    }
+
+    let cleaned = 0;
+    for (const [email, records] of grouped.entries()) {
+      if (records.length < 2) {
+        continue;
+      }
+      const canonical = pickCanonicalUser(records, email === PRIMARY_ADMIN_EMAIL ? user.clerkId : undefined);
+      const duplicates = records.filter((record) => record._id !== canonical._id);
+      await mergeDuplicateUsers(ctx, canonical, duplicates);
+      cleaned += duplicates.length;
+    }
+
+    return { cleaned };
   },
 });
