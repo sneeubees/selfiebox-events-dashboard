@@ -272,3 +272,90 @@ export const remove = mutation({
     return toUserDto(target);
   },
 });
+
+export const bootstrapPrimaryAdmin = mutation({
+  args: {
+    clerkId: v.string(),
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    surname: v.optional(v.string()),
+    profilePic: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    if (email !== PRIMARY_ADMIN_EMAIL) {
+      throw new Error("This bootstrap is only allowed for the primary admin email.");
+    }
+
+    const firstName = args.firstName?.trim() || "Info";
+    const surname = args.surname?.trim() || "SelfieBox";
+    const now = Date.now();
+
+    const existingByClerkId = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+
+    if (existingByClerkId) {
+      await ctx.db.patch(existingByClerkId._id, {
+        email,
+        firstName,
+        surname,
+        fullName: `${firstName} ${surname}`.trim(),
+        designation: "Operations Admin",
+        role: "admin",
+        profilePic: args.profilePic || existingByClerkId.profilePic || "",
+        monthOrder: Array.isArray(existingByClerkId.monthOrder) && existingByClerkId.monthOrder.length === monthNames.length ? existingByClerkId.monthOrder : monthNames,
+        isApproved: true,
+        isActive: true,
+        lastSignInAt: now,
+        updatedAt: now,
+      });
+      return toUserDto(await ctx.db.get(existingByClerkId._id));
+    }
+
+    const existingByEmail = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .unique();
+
+    if (existingByEmail) {
+      await ctx.db.patch(existingByEmail._id, {
+        clerkId: args.clerkId,
+        email,
+        firstName,
+        surname,
+        fullName: `${firstName} ${surname}`.trim(),
+        designation: "Operations Admin",
+        role: "admin",
+        profilePic: args.profilePic || existingByEmail.profilePic || "",
+        monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
+        isApproved: true,
+        isActive: true,
+        lastSignInAt: now,
+        updatedAt: now,
+      });
+      return toUserDto(await ctx.db.get(existingByEmail._id));
+    }
+
+    const userId = await ctx.db.insert("users", {
+      clerkId: args.clerkId,
+      email,
+      firstName,
+      surname,
+      fullName: `${firstName} ${surname}`.trim(),
+      designation: "Operations Admin",
+      role: "admin",
+      profilePic: args.profilePic || "",
+      monthOrder: monthNames,
+      isApproved: true,
+      isActive: true,
+      lastSignInAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ensureWorkspaceYears(ctx, userId);
+    return toUserDto(await ctx.db.get(userId));
+  },
+});
