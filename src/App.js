@@ -2125,7 +2125,10 @@ function DashboardApp() {
       <section className="board-shell">
         <div className="board-toolbar compact-toolbar">
           <div className="filters-grid compact-filters single-row-tools">
-            <input className="text-input search-wide" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name" />
+            <div className="search-input-wrap">
+              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name" />
+              {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
+            </div>
             <button className="ghost-button filter-button" type="button" onClick={() => setFiltersOpen(true)}>Filter</button>
             <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear</button>
           </div>

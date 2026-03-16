@@ -90,7 +90,11 @@ button { cursor: pointer; }
 .board-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .board-activities-link { margin-left: auto; font-size: 0.78rem; }
 .filters-grid.single-row-tools { display: flex; gap: 8px; width: min(760px, 100%); }
+.search-input-wrap { position: relative; flex: 1; min-width: 0; }
 .search-wide { min-width: 380px; }
+.search-input { padding-right: 34px; }
+.search-clear-button { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 20px; height: 20px; border: 0; border-radius: 999px; background: #e7ecf7; color: #54627e; font-size: 0.72rem; line-height: 1; display: inline-grid; place-items: center; }
+.search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
