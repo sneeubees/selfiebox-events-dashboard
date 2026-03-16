@@ -186,12 +186,13 @@ function App() {
   const { user: clerkUser } = useUser();
   const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
-  const workspaceRecords = useQuery(api.workspaces.list, isSignedIn ? {} : 'skip');
-  const liveEvents = useQuery(api.events.listAll, isSignedIn ? {} : 'skip');
-  const liveLabelOptions = useQuery(api.labels.listAll, isSignedIn ? {} : 'skip');
-  const customColumnRecords = useQuery(api.columns.listAll, isSignedIn ? {} : 'skip');
-  const currentColumnRights = useQuery(api.permissions.currentUserRights, isSignedIn ? {} : 'skip');
-  const allColumnPermissions = useQuery(api.permissions.listAll, isSignedIn && currentUser?.role === 'admin' ? {} : 'skip');
+  const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
+  const workspaceRecords = useQuery(api.workspaces.list, canAccessDashboard ? {} : 'skip');
+  const liveEvents = useQuery(api.events.listAll, canAccessDashboard ? {} : 'skip');
+  const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
+  const customColumnRecords = useQuery(api.columns.listAll, canAccessDashboard ? {} : 'skip');
+  const currentColumnRights = useQuery(api.permissions.currentUserRights, canAccessDashboard ? {} : 'skip');
+  const allColumnPermissions = useQuery(api.permissions.listAll, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const syncCurrentUser = useMutation(api.users.syncCurrentUser);
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
@@ -311,7 +312,6 @@ function App() {
       setMonthOrder(monthNames);
     }
   }, [currentUser]);
-  const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
   const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip');
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
