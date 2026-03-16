@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
-import { Authenticated, AuthLoading, Unauthenticated, useMutation, useQuery } from 'convex/react';
+import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import './App.css';
@@ -194,7 +194,7 @@ function DashboardApp() {
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
   const updateManagedUserMutation = useMutation(api.users.update);
-  const removeManagedUserMutation = useMutation(api.users.remove);
+  const removeManagedUserAction = useAction(api.adminUsers.removeWithClerk);
   const createNextWorkspaceYear = useMutation(api.workspaces.createNextYear);
   const ensureWorkspaceYear = useMutation(api.workspaces.ensureYear);
   const seedInitialEvents = useMutation(api.events.seedInitialData);
@@ -1260,7 +1260,7 @@ function DashboardApp() {
       return;
     }
 
-    await removeManagedUserMutation({ userId: editingUser.id });
+    await removeManagedUserAction({ userId: editingUser.id });
     setEditingUserId('');
     setShowUsersModal(false);
   };

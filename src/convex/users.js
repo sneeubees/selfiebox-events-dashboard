@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const DEFAULT_WORKSPACE_YEARS = [2026, 2027];
@@ -400,6 +400,61 @@ export const remove = mutation({
     const target = await ctx.db.get(args.userId);
     if (!target) {
       return null;
+    }
+
+    await ctx.db.delete(args.userId);
+    return toUserDto(target);
+  },
+});
+
+export const removeLocalUser = internalMutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const target = await ctx.db.get(args.userId);
+    if (!target) {
+      return null;
+    }
+
+    const workspaces = await ctx.db.query("workspaces").collect();
+    for (const workspace of workspaces) {
+      if (workspace.createdByUserId === args.userId) {
+        await ctx.db.patch(workspace._id, { createdByUserId: undefined });
+      }
+    }
+
+    const events = await ctx.db.query("events").collect();
+    for (const event of events) {
+      if (event.createdByUserId === args.userId) {
+        await ctx.db.patch(event._id, { createdByUserId: undefined });
+      }
+    }
+
+    const updates = await ctx.db.query("eventUpdates").collect();
+    for (const update of updates) {
+      if (update.createdByUserId === args.userId) {
+        await ctx.db.patch(update._id, { createdByUserId: undefined });
+      }
+    }
+
+    const files = await ctx.db.query("eventFiles").collect();
+    for (const file of files) {
+      if (file.createdByUserId === args.userId) {
+        await ctx.db.patch(file._id, { createdByUserId: undefined });
+      }
+    }
+
+    const activityEntries = await ctx.db.query("activityLog").collect();
+    for (const entry of activityEntries) {
+      if (entry.actorUserId === args.userId) {
+        await ctx.db.patch(entry._id, { actorUserId: undefined });
+      }
+    }
+
+    const permissions = await ctx.db.query("columnPermissions").collect();
+    for (const permission of permissions) {
+      if (permission.userId === args.userId) {
+        await ctx.db.delete(permission._id);
+      }
     }
 
     await ctx.db.delete(args.userId);
