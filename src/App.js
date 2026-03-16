@@ -181,7 +181,7 @@ function App() {
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
   const [authMode, setAuthMode] = useState('login');
   const { isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
-  const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth();
+  const { isLoading: isConvexAuthLoading } = useConvexAuth();
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
   const currentUser = useQuery(api.users.current, isSignedIn ? {} : 'skip');
@@ -2063,7 +2063,7 @@ function App() {
     });
   };
 
-  if (!isAuthLoaded || (isSignedIn && (isConvexAuthLoading || !isConvexAuthenticated || !currentUser || workspaceRecords === undefined))) {
+  if (!isAuthLoaded || (isSignedIn && (isConvexAuthLoading || currentUser === undefined || (canAccessDashboard && workspaceRecords === undefined)))) {
     return (
       <div className="auth-shell">
         <div className="auth-card">

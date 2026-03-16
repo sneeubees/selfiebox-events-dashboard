@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 const DEFAULT_WORKSPACE_YEARS = [2026, 2027];
+const PRIMARY_ADMIN_EMAIL = "info@selfiebox.co.za";
 
 async function requireIdentity(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -74,6 +75,7 @@ export const syncCurrentUser = mutation({
   handler: async (ctx, args) => {
     const { identity, clerkId, user } = await getCurrentUserRecord(ctx);
     const email = args.email.trim().toLowerCase();
+    const isPrimaryAdmin = email === PRIMARY_ADMIN_EMAIL;
     const firstName = args.firstName.trim() || identity.givenName || "User";
     const surname = args.surname.trim() || identity.familyName || "";
     const now = Date.now();
@@ -86,8 +88,12 @@ export const syncCurrentUser = mutation({
         firstName: nextFirstName,
         surname: nextSurname,
         fullName: `${nextFirstName} ${nextSurname}`.trim(),
+        designation: isPrimaryAdmin ? "Operations Admin" : user.designation,
         profilePic: user.profilePic || args.profilePic || "",
-          monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
+        monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
+        role: isPrimaryAdmin ? "admin" : user.role,
+        isApproved: isPrimaryAdmin ? true : user.isApproved,
+        isActive: isPrimaryAdmin ? true : user.isActive,
         lastSignInAt: now,
         updatedAt: now,
       });
@@ -98,6 +104,7 @@ export const syncCurrentUser = mutation({
 
     const existingUsers = await ctx.db.query("users").collect();
     const isFirstUser = existingUsers.length === 0;
+    const shouldBootstrapAdmin = isFirstUser || isPrimaryAdmin;
 
     const userId = await ctx.db.insert("users", {
       clerkId,
@@ -105,12 +112,12 @@ export const syncCurrentUser = mutation({
       firstName,
       surname,
       fullName: `${firstName} ${surname}`.trim(),
-      designation: isFirstUser ? "Operations Admin" : "Coordinator",
-      role: isFirstUser ? "admin" : "user",
+      designation: shouldBootstrapAdmin ? "Operations Admin" : "Coordinator",
+      role: shouldBootstrapAdmin ? "admin" : "user",
       profilePic: args.profilePic || "",
-        monthOrder: monthNames,
-      isApproved: isFirstUser,
-      isActive: isFirstUser,
+      monthOrder: monthNames,
+      isApproved: shouldBootstrapAdmin,
+      isActive: shouldBootstrapAdmin,
       lastSignInAt: now,
       createdAt: now,
       updatedAt: now,
