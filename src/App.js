@@ -2610,49 +2610,21 @@ function FilterGroup({ title, options, selected, onToggle }) {
 
 function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
   const [form, setForm] = useState({ firstName: '', surname: '', designation: '' });
-  const [errorMessage, setErrorMessage] = useState('');
-  const [showClerkSignUp, setShowClerkSignUp] = useState(false);
 
   const updateFormField = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      window.sessionStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify({
+        firstName: next.firstName.trim(),
+        surname: next.surname.trim(),
+        designation: next.designation.trim(),
+      }));
+      return next;
+    });
   };
-
-  const handleContinue = (event) => {
-    event.preventDefault();
-    const firstName = form.firstName.trim();
-    const surname = form.surname.trim();
-    const designation = form.designation.trim();
-
-    if (!firstName || !surname) {
-      setErrorMessage('Please complete first name and last name.');
-      return;
-    }
-
-    setErrorMessage('');
-    window.sessionStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify({
-      firstName,
-      surname,
-      designation,
-    }));
-    setShowClerkSignUp(true);
-  };
-
-  if (showClerkSignUp) {
-    return (
-      <div className="auth-custom-form">
-        <p className="auth-helper-text">Complete your email and password below to finish creating the account.</p>
-        <div className="clerk-auth-shell">
-          <SignUp routing="hash" signInUrl="#login" appearance={clerkAppearance} />
-        </div>
-        <div className="auth-actions">
-          <button className="ghost-button" type="button" onClick={() => setShowClerkSignUp(false)}>Back</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <form className="auth-custom-form" onSubmit={handleContinue}>
+    <div className="auth-custom-form">
       <div className="auth-form-grid">
         <label>
           <span>First name</span>
@@ -2667,12 +2639,22 @@ function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
           <input className="text-input" value={form.designation} onChange={(event) => updateFormField('designation', event.target.value)} autoComplete="organization-title" />
         </label>
       </div>
-      {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+      <p className="auth-helper-text">Complete your email and password below to finish creating the account.</p>
+      <div className="clerk-auth-shell">
+        <SignUp
+          routing="hash"
+          signInUrl="#login"
+          appearance={clerkAppearance}
+          initialValues={{
+            firstName: form.firstName.trim(),
+            lastName: form.surname.trim(),
+          }}
+        />
+      </div>
       <div className="auth-actions">
         <button className="ghost-button" type="button" onClick={onSwitchToLogin}>Back to login</button>
-        <button className="primary-button" type="submit">Continue</button>
       </div>
-    </form>
+    </div>
   );
 }
 
