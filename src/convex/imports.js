@@ -14,7 +14,7 @@ function normalizeKey(value) {
 function abbreviateLabel(value) {
   return normalizeText(value)
     .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 5)
+    .slice(0, 7)
     .toUpperCase();
 }
 

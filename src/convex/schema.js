@@ -26,6 +26,7 @@ export default defineSchema({
     role: v.union(v.literal("admin"), v.literal("manager"), v.literal("user")),
     profilePic: v.optional(v.string()),
     monthOrder: v.optional(v.array(v.string())),
+    columnOrderAfterPayment: v.optional(v.array(v.string())),
     isApproved: v.boolean(),
     isActive: v.boolean(),
     lastSignInAt: v.optional(v.number()),
@@ -58,6 +59,7 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     quoteNumber: v.optional(v.string()),
     invoiceNumber: v.optional(v.string()),
+    exVatAuto: v.optional(v.union(v.number(), v.string())),
     vinyl: v.optional(v.string()),
     gsAi: v.optional(v.string()),
     imagesSent: v.optional(v.string()),
@@ -150,4 +152,9 @@ export default defineSchema({
   })
     .index("by_column_key", ["columnKey"])
     .index("by_order", ["order"]),
+  staticColumnLabels: defineTable({
+    columnKey: v.string(),
+    label: v.string(),
+    updatedAt: v.number(),
+  }).index("by_column_key", ["columnKey"]),
 });

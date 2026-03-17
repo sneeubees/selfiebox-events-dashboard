@@ -114,6 +114,29 @@ function extractDocumentNumber(text, fileName, type) {
   return genericFallbackFromName?.[1] || "";
 }
 
+function extractExVatAuto(text) {
+  const normalized = normalizeExtractedText(text);
+  const patterns = [
+    /\btotal\s+exclusive\s*[:\-]?\s*(?:r|zar)?\s*([\d.,\s]+)/i,
+    /\btotal\s+ex(?:clusive)?\s*vat\s*[:\-]?\s*(?:r|zar)?\s*([\d.,\s]+)/i,
+    /\bsubtotal\s*[:\-]?\s*(?:r|zar)?\s*([\d.,\s]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+    const cleaned = match[1].replace(/\s+/g, "").replace(/(?<=\d),(?=\d{3}\b)/g, "");
+    if (!/[0-9]/.test(cleaned)) {
+      continue;
+    }
+    return cleaned;
+  }
+
+  return "";
+}
+
 export const extractUploadedDocumentNumber = action({
   args: {
     eventKey: v.string(),
@@ -150,8 +173,21 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
   const text = normalizeExtractedText(parsed.text || "");
   const knownDocument = extractKnownDocument(text, args.name);
   const documentType = knownDocument?.documentType || detectDocumentType(args.name, text);
+  const exVatAuto = extractExVatAuto(text);
 
   if (!documentType) {
+    if (exVatAuto) {
+      await ctx.runMutation(internal.events.applyExtractedPdfData, {
+        eventKey: args.eventKey,
+        exVatAuto,
+      });
+      console.log("Document extraction applied ExVAT Auto only", {
+        eventKey: args.eventKey,
+        name: args.name,
+        exVatAuto,
+      });
+      return { processed: true, exVatAuto, reason: "exvat_only" };
+    }
     console.log("Document extraction could not detect document type", {
       eventKey: args.eventKey,
       name: args.name,
@@ -162,6 +198,20 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
 
   const documentNumber = knownDocument?.documentNumber || extractDocumentNumber(text, args.name, documentType);
   if (!documentNumber) {
+    if (exVatAuto) {
+      await ctx.runMutation(internal.events.applyExtractedPdfData, {
+        eventKey: args.eventKey,
+        documentType,
+        exVatAuto,
+      });
+      console.log("Document extraction applied ExVAT Auto without number", {
+        eventKey: args.eventKey,
+        name: args.name,
+        documentType,
+        exVatAuto,
+      });
+      return { processed: true, documentType, exVatAuto, reason: "number_not_found_exvat_saved" };
+    }
     console.log("Document extraction found type but no number", {
       eventKey: args.eventKey,
       name: args.name,
@@ -171,10 +221,11 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     return { processed: false, reason: "number_not_found", documentType };
   }
 
-  await ctx.runMutation(internal.events.setDocumentNumberFromUpload, {
+  await ctx.runMutation(internal.events.applyExtractedPdfData, {
     eventKey: args.eventKey,
     documentType,
     documentNumber,
+    exVatAuto: exVatAuto || undefined,
   });
 
   console.log("Document extraction succeeded", {
@@ -182,9 +233,10 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     name: args.name,
     documentType,
     documentNumber,
+    exVatAuto: exVatAuto || undefined,
   });
 
-  return { processed: true, documentType, documentNumber };
+  return { processed: true, documentType, documentNumber, exVatAuto: exVatAuto || "" };
 }
 
 export const backfillLatestPdfDocumentNumbers = action({

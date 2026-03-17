@@ -200,6 +200,10 @@ export const removeFile = mutation({
       return null;
     }
 
+    if (eventRecord.status === "Event Completed") {
+      throw new Error("Completed event files can no longer be deleted.");
+    }
+
     if (fileRecord.storageId) {
       await ctx.storage.delete(fileRecord.storageId);
     }

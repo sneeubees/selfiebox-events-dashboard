@@ -5,7 +5,7 @@ import { seedEvents } from "../seedData";
 function abbreviateLabel(value) {
   return (value || "")
     .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 5)
+    .slice(0, 7)
     .toUpperCase();
 }
 
@@ -29,6 +29,7 @@ function normalizeSeedEvent(event) {
     paymentStatus: event.paymentStatus || "",
     quoteNumber: event.quoteNumber || "",
     invoiceNumber: event.invoiceNumber || "",
+    exVatAuto: event.exVatAuto ?? "",
     vinyl: event.vinyl || "",
     gsAi: event.gsAi || "",
     imagesSent: event.imagesSent || "",
@@ -44,7 +45,7 @@ function normalizeSeedEvent(event) {
   };
 }
 
-function toEventDto(record) {
+function toEventDto(record, creator = null) {
   return {
     id: record.eventKey,
     workspaceYear: record.workspaceYear,
@@ -63,6 +64,7 @@ function toEventDto(record) {
     paymentStatus: record.paymentStatus || "",
     quoteNumber: record.quoteNumber || "",
     invoiceNumber: record.invoiceNumber || "",
+    exVatAuto: record.exVatAuto ?? "",
     vinyl: record.vinyl || "",
     gsAi: record.gsAi || "",
     imagesSent: record.imagesSent || "",
@@ -75,6 +77,9 @@ function toEventDto(record) {
     updates: record.updates || [],
     files: record.files || [],
     activity: record.activity || [],
+    createdByUserId: record.createdByUserId || null,
+    createdByName: creator?.fullName || "",
+    createdByProfilePic: creator?.profilePic || "",
   };
 }
 
@@ -110,9 +115,11 @@ export const listAll = query({
     }
 
     const events = await ctx.db.query("events").collect();
+    const users = await ctx.db.query("users").collect();
+    const userById = new Map(users.map((record) => [String(record._id), record]));
     return events
       .sort((left, right) => String(left.eventKey).localeCompare(String(right.eventKey)))
-      .map(toEventDto);
+      .map((record) => toEventDto(record, userById.get(String(record.createdByUserId || "")) || null));
   },
 });
 
@@ -161,6 +168,7 @@ export const upsert = mutation({
       paymentStatus: v.optional(v.string()),
       quoteNumber: v.optional(v.string()),
       invoiceNumber: v.optional(v.string()),
+      exVatAuto: v.optional(v.union(v.number(), v.string())),
       vinyl: v.optional(v.string()),
       gsAi: v.optional(v.string()),
       imagesSent: v.optional(v.string()),
@@ -215,6 +223,7 @@ export const upsert = mutation({
       paymentStatus: args.event.paymentStatus || "",
       quoteNumber: args.event.quoteNumber || "",
       invoiceNumber: args.event.invoiceNumber || "",
+      exVatAuto: args.event.exVatAuto ?? "",
       vinyl: args.event.vinyl || "",
       gsAi: args.event.gsAi || "",
       imagesSent: args.event.imagesSent || "",
@@ -286,5 +295,41 @@ export const setDocumentNumberFromUpload = internalMutation({
 
     await ctx.db.patch(existing._id, patch);
     return toEventDto(await ctx.db.get(existing._id));
+  },
+});
+
+export const applyExtractedPdfData = internalMutation({
+  args: {
+    eventKey: v.string(),
+    documentType: v.optional(v.union(v.literal("quote"), v.literal("invoice"))),
+    documentNumber: v.optional(v.string()),
+    exVatAuto: v.optional(v.union(v.number(), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("events")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
+      .unique();
+
+    if (!existing) {
+      return null;
+    }
+
+    const patch = {
+      updatedAt: Date.now(),
+    };
+
+    if (args.documentType === "quote" && args.documentNumber) {
+      patch.quoteNumber = args.documentNumber;
+    }
+    if (args.documentType === "invoice" && args.documentNumber) {
+      patch.invoiceNumber = args.documentNumber;
+    }
+    if (args.exVatAuto !== undefined) {
+      patch.exVatAuto = args.exVatAuto;
+    }
+
+    await ctx.db.patch(existing._id, patch);
+    return await ctx.db.get(existing._id);
   },
 });

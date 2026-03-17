@@ -149,7 +149,8 @@ function toUserDto(record) {
     surname: record.surname,
     designation: record.designation,
     profilePic: record.profilePic || "",
-      monthOrder: Array.isArray(record.monthOrder) && record.monthOrder.length === monthNames.length ? record.monthOrder : monthNames,
+    monthOrder: Array.isArray(record.monthOrder) && record.monthOrder.length === monthNames.length ? record.monthOrder : monthNames,
+    columnOrderAfterPayment: Array.isArray(record.columnOrderAfterPayment) ? record.columnOrderAfterPayment : [],
     role: record.role,
     isApproved: record.isApproved,
     isActive: record.isActive,
@@ -188,6 +189,7 @@ export const syncCurrentUser = mutation({
         designation: isPrimaryAdmin ? "Operations Admin" : (user.designation || designation),
         profilePic: user.profilePic || args.profilePic || "",
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
+        columnOrderAfterPayment: Array.isArray(user.columnOrderAfterPayment) ? user.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : user.role,
         isApproved: isPrimaryAdmin ? true : user.isApproved,
         isActive: isPrimaryAdmin ? true : user.isActive,
@@ -214,6 +216,7 @@ export const syncCurrentUser = mutation({
         designation: isPrimaryAdmin ? "Operations Admin" : (existingByEmail.designation || designation),
         profilePic: existingByEmail.profilePic || args.profilePic || "",
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
+        columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : existingByEmail.role,
         isApproved: isPrimaryAdmin ? true : existingByEmail.isApproved,
         isActive: isPrimaryAdmin ? true : existingByEmail.isActive,
@@ -243,6 +246,7 @@ export const syncCurrentUser = mutation({
       role: shouldBootstrapAdmin ? "admin" : "user",
       profilePic: args.profilePic || "",
       monthOrder: monthNames,
+      columnOrderAfterPayment: [],
       isApproved: shouldBootstrapAdmin,
       isActive: shouldBootstrapAdmin,
       lastSignInAt: now,
@@ -409,6 +413,25 @@ export const remove = mutation({
   },
 });
 
+export const updateColumnOrderAfterPayment = mutation({
+  args: {
+    columnOrderAfterPayment: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await getCurrentUserRecord(ctx);
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    await ctx.db.patch(user._id, {
+      columnOrderAfterPayment: Array.from(new Set(args.columnOrderAfterPayment.map((value) => String(value || "").trim()).filter(Boolean))),
+      updatedAt: Date.now(),
+    });
+
+    return toUserDto(await ctx.db.get(user._id));
+  },
+});
+
 export const removeLocalUser = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -497,6 +520,7 @@ export const bootstrapPrimaryAdmin = mutation({
         role: "admin",
         profilePic: args.profilePic || existingByClerkId.profilePic || "",
         monthOrder: Array.isArray(existingByClerkId.monthOrder) && existingByClerkId.monthOrder.length === monthNames.length ? existingByClerkId.monthOrder : monthNames,
+        columnOrderAfterPayment: Array.isArray(existingByClerkId.columnOrderAfterPayment) ? existingByClerkId.columnOrderAfterPayment : [],
         isApproved: true,
         isActive: true,
         lastSignInAt: now,
@@ -526,6 +550,7 @@ export const bootstrapPrimaryAdmin = mutation({
         role: "admin",
         profilePic: args.profilePic || existingByEmail.profilePic || "",
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
+        columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
         isApproved: true,
         isActive: true,
         lastSignInAt: now,
@@ -549,6 +574,7 @@ export const bootstrapPrimaryAdmin = mutation({
       role: "admin",
       profilePic: args.profilePic || "",
       monthOrder: monthNames,
+      columnOrderAfterPayment: [],
       isApproved: true,
       isActive: true,
       lastSignInAt: now,
