@@ -334,6 +334,9 @@ function DashboardApp() {
   const [attendantDrafts, setAttendantDrafts] = useState({});
   const [collapsedMonths, setCollapsedMonths] = useState({ January: true, February: true, March: false, April: true, May: true, June: true, July: true, August: true, September: true, October: true, November: true, December: true });
   const [monthOrder, setMonthOrder] = useState(monthNames);
+  const [columnOrderAfterPaymentDraft, setColumnOrderAfterPaymentDraft] = useState([]);
+  const [draggedColumnKey, setDraggedColumnKey] = useState('');
+  const [dragOverColumnKey, setDragOverColumnKey] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const [activeRowId, setActiveRowId] = useState('');
@@ -373,6 +376,9 @@ function DashboardApp() {
       setMonthOrder(monthNames);
     }
   }, [currentUser]);
+  useEffect(() => {
+    setColumnOrderAfterPaymentDraft(currentUser?.columnOrderAfterPayment || []);
+  }, [currentUser?.columnOrderAfterPayment]);
   const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip');
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
@@ -411,8 +417,8 @@ function DashboardApp() {
     };
   }, [staticColumnLabelRecords]);
   const allColumns = useMemo(
-    () => orderColumnsAfterPayment([...STATIC_COLUMNS, ...customColumns], currentUser?.columnOrderAfterPayment || []),
-    [customColumns, currentUser?.columnOrderAfterPayment]
+    () => orderColumnsAfterPayment([...STATIC_COLUMNS, ...customColumns], columnOrderAfterPaymentDraft.length ? columnOrderAfterPaymentDraft : (currentUser?.columnOrderAfterPayment || [])),
+    [columnOrderAfterPaymentDraft, customColumns, currentUser?.columnOrderAfterPayment]
   );
   const columnVisibility = useMemo(() => Object.fromEntries(allColumns.map((column) => [column.key, true])), [allColumns]);
   const permissionsByColumn = useMemo(() => (allColumnPermissions || []).reduce((accumulator, permission) => {
@@ -1457,26 +1463,60 @@ function DashboardApp() {
       window.alert('The month order could not be saved. Please try again.');
     }
   };
-  const moveColumnAfterPayment = async (columnKey, direction) => {
-    const paymentIndex = allColumns.findIndex((column) => column.key === 'paymentStatus');
-    const movable = paymentIndex === -1 ? [] : allColumns.slice(paymentIndex + 1).map((column) => column.key);
-    const currentIndex = movable.indexOf(columnKey);
-    const targetIndex = currentIndex + direction;
-
-    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= movable.length) {
-      return;
-    }
-
-    const nextOrder = [...movable];
-    const [moved] = nextOrder.splice(currentIndex, 1);
-    nextOrder.splice(targetIndex, 0, moved);
-
+  const saveColumnOrderAfterPayment = async (nextOrder, fallbackOrder) => {
+    setColumnOrderAfterPaymentDraft(nextOrder);
     try {
       await updateColumnOrderAfterPaymentMutation({ columnOrderAfterPayment: nextOrder });
     } catch (error) {
       console.error('Failed to save column order', error);
+      setColumnOrderAfterPaymentDraft(fallbackOrder || currentUser?.columnOrderAfterPayment || []);
       window.alert('The column order could not be saved. Please try again.');
     }
+  };
+
+  const startColumnDrag = (columnKey) => {
+    setDraggedColumnKey(columnKey);
+    setDragOverColumnKey(columnKey);
+  };
+
+  const handleColumnDragOver = (event, columnKey) => {
+    event.preventDefault();
+    if (!draggedColumnKey || draggedColumnKey === columnKey) {
+      return;
+    }
+    setDragOverColumnKey(columnKey);
+  };
+
+  const handleColumnDrop = async (targetColumnKey) => {
+    if (!draggedColumnKey || draggedColumnKey === targetColumnKey) {
+      setDraggedColumnKey('');
+      setDragOverColumnKey('');
+      return;
+    }
+
+    const paymentIndex = allColumns.findIndex((column) => column.key === 'paymentStatus');
+    const movable = paymentIndex === -1 ? [] : allColumns.slice(paymentIndex + 1).map((column) => column.key);
+    const sourceIndex = movable.indexOf(draggedColumnKey);
+    const targetIndex = movable.indexOf(targetColumnKey);
+
+    if (sourceIndex === -1 || targetIndex === -1) {
+      setDraggedColumnKey('');
+      setDragOverColumnKey('');
+      return;
+    }
+
+    const nextOrder = [...movable];
+    const [moved] = nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, moved);
+
+    setDraggedColumnKey('');
+    setDragOverColumnKey('');
+    await saveColumnOrderAfterPayment(nextOrder, movable);
+  };
+
+  const endColumnDrag = () => {
+    setDraggedColumnKey('');
+    setDragOverColumnKey('');
   };
   const renameColumn = (columnKey) => {
     if (currentUser?.role !== 'admin') {
@@ -2323,14 +2363,14 @@ function DashboardApp() {
         <div className="board-surface" ref={boardSurfaceRef} style={{ '--board-columns': boardColumnTemplate, '--board-width': `${boardWidth}px` }}>
           <div className="board-row board-header" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }} onClick={() => setAdminMenuColumn(null)}>
             {visibleColumns.map((column) => (
-              <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined} onContextMenu={(event) => {
+              <div className={`cell cell-${column.key} ${draggedColumnKey === column.key ? 'is-dragging-column' : ''} ${dragOverColumnKey === column.key ? 'is-drag-target' : ''}`} key={column.key} draggable={allColumns.findIndex((entry) => entry.key === column.key) > allColumns.findIndex((entry) => entry.key === 'paymentStatus')} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined} onDragStart={() => startColumnDrag(column.key)} onDragOver={(event) => handleColumnDragOver(event, column.key)} onDrop={() => void handleColumnDrop(column.key)} onDragEnd={endColumnDrag} onContextMenu={(event) => {
                 if (currentUser.role !== 'admin') return;
                 event.preventDefault();
                 setAdminMenuColumn(column.key);
                 setAdminMenuPosition({ top: event.clientY + 4, left: event.clientX + 4 });
               }}>
                 <div className="column-header-label">{displayColumnLabel(column)}</div>
-                {allColumns.findIndex((entry) => entry.key === column.key) > allColumns.findIndex((entry) => entry.key === 'paymentStatus') ? <div className="column-order-controls"><button className="column-order-button" type="button" title="Move column left" onClick={(event) => { event.stopPropagation(); void moveColumnAfterPayment(column.key, -1); }}>{'<'}</button><button className="column-order-button" type="button" title="Move column right" onClick={(event) => { event.stopPropagation(); void moveColumnAfterPayment(column.key, 1); }}>{'>'}</button></div> : null}
+                {allColumns.findIndex((entry) => entry.key === column.key) > allColumns.findIndex((entry) => entry.key === 'paymentStatus') ? <div className="column-order-controls"><span className="column-drag-hint">Drag</span></div> : null}
                 {adminMenuColumn === column.key ? <div className="admin-menu" style={{ top: adminMenuPosition.top, left: adminMenuPosition.left }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => renameColumn(column.key)}>Rename header</button><button type="button" onClick={() => openRightsManager(column.key)}>Manage rights</button>{column.key === 'branch' ? <button type="button" onClick={openBranchManager}>Add/Edit item</button> : null}{column.key === 'products' ? <button type="button" onClick={openProductManager}>Add/Edit item</button> : null}{column.key === 'status' ? <button type="button" onClick={openStatusManager}>Add/Edit item</button> : null}{['paymentStatus', 'vinyl', 'gsAi', 'imagesSent', 'snappic'].includes(column.key) ? <button type="button" onClick={() => openManagedSingleManager(column.key)}>Add/Edit item</button> : null}{column.key === 'attendants' ? <button type="button" onClick={openAttendantManager}>Add/Edit item</button> : null}{customColumns.some((customColumn) => customColumn.key === column.key && ['singleItem', 'multiItem'].includes(customColumn.type)) ? <button type="button" onClick={() => openCustomOptionManager(column.key)}>Add/Edit item</button> : null}{column.isCustom ? <button type="button" onClick={() => deleteCustomColumn(column.key)}>Delete column</button> : null}</div> : null}
               </div>
             ))}
