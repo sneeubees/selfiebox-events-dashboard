@@ -340,6 +340,8 @@ function DashboardApp() {
   const [attendantDrafts, setAttendantDrafts] = useState({});
   const [collapsedMonths, setCollapsedMonths] = useState({ January: true, February: true, March: false, April: true, May: true, June: true, July: true, August: true, September: true, October: true, November: true, December: true });
   const [monthOrder, setMonthOrder] = useState(monthNames);
+  const [draggedMonth, setDraggedMonth] = useState('');
+  const [dragOverMonth, setDragOverMonth] = useState('');
   const [columnOrderAfterPaymentDraft, setColumnOrderAfterPaymentDraft] = useState([]);
   const [draggedColumnKey, setDraggedColumnKey] = useState('');
   const [dragOverColumnKey, setDragOverColumnKey] = useState('');
@@ -1504,15 +1506,7 @@ function DashboardApp() {
   };
 
   const toggleMonth = (month) => setCollapsedMonths((current) => ({ ...current, [month]: !current[month] }));
-  const moveMonth = async (month, direction) => {
-    const currentIndex = monthOrder.indexOf(month);
-    const targetIndex = currentIndex + direction;
-    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= monthOrder.length) {
-      return;
-    }
-    const nextOrder = [...monthOrder];
-    const [movedMonth] = nextOrder.splice(currentIndex, 1);
-    nextOrder.splice(targetIndex, 0, movedMonth);
+  const saveMonthOrder = async (nextOrder) => {
     pendingMonthOrderRef.current = nextOrder;
     setMonthOrder(nextOrder);
     try {
@@ -1532,6 +1526,41 @@ function DashboardApp() {
       }
       window.alert('The month order could not be saved. Please try again.');
     }
+  };
+  const startMonthDrag = (month) => {
+    setDraggedMonth(month);
+    setDragOverMonth('');
+  };
+  const handleMonthDragOver = (event, month) => {
+    event.preventDefault();
+    if (!draggedMonth || draggedMonth === month) {
+      return;
+    }
+    setDragOverMonth(month);
+  };
+  const handleMonthDrop = async (targetMonth) => {
+    if (!draggedMonth || draggedMonth === targetMonth) {
+      setDraggedMonth('');
+      setDragOverMonth('');
+      return;
+    }
+    const currentIndex = monthOrder.indexOf(draggedMonth);
+    const targetIndex = monthOrder.indexOf(targetMonth);
+    if (currentIndex === -1 || targetIndex === -1) {
+      setDraggedMonth('');
+      setDragOverMonth('');
+      return;
+    }
+    const nextOrder = [...monthOrder];
+    const [movedMonth] = nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedMonth);
+    setDraggedMonth('');
+    setDragOverMonth('');
+    await saveMonthOrder(nextOrder);
+  };
+  const endMonthDrag = () => {
+    setDraggedMonth('');
+    setDragOverMonth('');
   };
   const saveColumnOrderAfterPayment = async (nextOrder, fallbackOrder) => {
     setColumnOrderAfterPaymentDraft(nextOrder);
@@ -2496,10 +2525,10 @@ function DashboardApp() {
             const completedCount = monthItems.filter((event) => event.status === 'Event Completed').length;
             const fullyPaidCount = monthItems.filter((event) => event.status === 'Event Completed' && event.paymentStatus === '100%').length;
             return (
-              <section className={`month-section ${monthAccentClass[month]}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
-                <button className="month-header" type="button" style={{ minWidth: `${boardWidth}px` }} onClick={() => toggleMonth(month)}>
+              <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
+                <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions"><div className="month-order-controls"><button className="month-order-button" type="button" onClick={(event) => { event.stopPropagation(); void moveMonth(month, -1); }} disabled={orderedMonths.indexOf(month) === 0} title="Move month up">^</button><button className="month-order-button" type="button" onClick={(event) => { event.stopPropagation(); void moveMonth(month, 1); }} disabled={orderedMonths.indexOf(month) === orderedMonths.length - 1} title="Move month down">v</button></div><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions"><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
