@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SignIn, useClerk, useSignUp, useUser } from '@clerk/react';
+import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
@@ -572,7 +572,7 @@ function DashboardApp() {
     }
 
     const normalizedPendingEmail = String(pendingRegistration?.email || '').trim().toLowerCase();
-    const matchesPendingRegistration = normalizedPendingEmail && normalizedPendingEmail === email.trim().toLowerCase();
+    const matchesPendingRegistration = !normalizedPendingEmail || normalizedPendingEmail === email.trim().toLowerCase();
     const pendingFirstName = matchesPendingRegistration ? String(pendingRegistration?.firstName || '').trim() : '';
     const pendingSurname = matchesPendingRegistration ? String(pendingRegistration?.surname || '').trim() : '';
     const pendingDesignation = matchesPendingRegistration ? String(pendingRegistration?.designation || '').trim() : '';
@@ -2608,112 +2608,52 @@ function FilterGroup({ title, options, selected, onToggle }) {
   return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
 }
 
-function RegistrationForm({ onSwitchToLogin }) {
-  const { isLoaded, signUp } = useSignUp();
-  const { setActive } = useClerk();
-  const [form, setForm] = useState({ firstName: '', surname: '', designation: '', email: '', password: '', confirmPassword: '' });
-  const [verificationCode, setVerificationCode] = useState('');
-  const [awaitingVerification, setAwaitingVerification] = useState(false);
+function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
+  const [form, setForm] = useState({ firstName: '', surname: '', designation: '' });
   const [errorMessage, setErrorMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showClerkSignUp, setShowClerkSignUp] = useState(false);
 
   const updateFormField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const handleCreateAccount = async (event) => {
+  const handleContinue = (event) => {
     event.preventDefault();
-    if (!isLoaded || !signUp) {
-      setErrorMessage('Registration is still loading. Please try again.');
-      return;
-    }
-
     const firstName = form.firstName.trim();
     const surname = form.surname.trim();
     const designation = form.designation.trim();
-    const emailAddress = form.email.trim();
-    const password = form.password;
-    const confirmPassword = form.confirmPassword;
 
-    if (!firstName || !surname || !emailAddress || !password) {
-      setErrorMessage('Please complete the required fields.');
+    if (!firstName || !surname) {
+      setErrorMessage('Please complete first name and last name.');
       return;
     }
 
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
-      return;
-    }
-
-    setIsSubmitting(true);
     setErrorMessage('');
-
-    try {
-      window.sessionStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify({
-        email: emailAddress.toLowerCase(),
-        firstName,
-        surname,
-        designation,
-      }));
-      await signUp.create({
-        emailAddress,
-        password,
-      });
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-      setAwaitingVerification(true);
-    } catch (error) {
-      console.error('Registration failed', error);
-      setErrorMessage(error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || 'Unable to create your account right now.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    window.sessionStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify({
+      firstName,
+      surname,
+      designation,
+    }));
+    setShowClerkSignUp(true);
   };
 
-  const handleVerifyEmail = async (event) => {
-    event.preventDefault();
-    if (!isLoaded || !signUp) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setErrorMessage('');
-
-    try {
-      const result = await signUp.attemptEmailAddressVerification({ code: verificationCode.trim() });
-      if (result.status === 'complete' && result.createdSessionId) {
-        await setActive({ session: result.createdSessionId });
-        return;
-      }
-      setErrorMessage('Verification could not be completed. Please try again.');
-    } catch (error) {
-      setErrorMessage(error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || 'Verification failed.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (awaitingVerification) {
+  if (showClerkSignUp) {
     return (
-      <form className="auth-custom-form" onSubmit={handleVerifyEmail}>
-        <div className="auth-form-grid single-column">
-          <label>
-            <span>Email verification code</span>
-            <input className="text-input" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} autoFocus />
-          </label>
+      <div className="auth-custom-form">
+        <p className="auth-helper-text">Complete your email and password below to finish creating the account.</p>
+        <div className="clerk-auth-shell">
+          <SignUp routing="hash" signInUrl="#login" appearance={clerkAppearance} />
         </div>
-        <p className="auth-helper-text">Enter the code sent to {form.email.trim()}.</p>
-        {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
         <div className="auth-actions">
-          <button className="ghost-button" type="button" onClick={() => setAwaitingVerification(false)} disabled={isSubmitting}>Back</button>
-          <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Verifying...' : 'Verify email'}</button>
+          <button className="ghost-button" type="button" onClick={() => setShowClerkSignUp(false)}>Back</button>
         </div>
-      </form>
+      </div>
     );
   }
 
   return (
-      <form className="auth-custom-form" onSubmit={handleCreateAccount}>
-        <div className="auth-form-grid">
+    <form className="auth-custom-form" onSubmit={handleContinue}>
+      <div className="auth-form-grid">
         <label>
           <span>First name</span>
           <input className="text-input" value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
@@ -2726,24 +2666,11 @@ function RegistrationForm({ onSwitchToLogin }) {
           <span>Designation</span>
           <input className="text-input" value={form.designation} onChange={(event) => updateFormField('designation', event.target.value)} autoComplete="organization-title" />
         </label>
-        <label className="full-span">
-          <span>Email address</span>
-          <input className="text-input" type="email" value={form.email} onChange={(event) => updateFormField('email', event.target.value)} autoComplete="email" />
-        </label>
-        <label>
-          <span>Password</span>
-          <input className="text-input" type="password" value={form.password} onChange={(event) => updateFormField('password', event.target.value)} autoComplete="new-password" />
-        </label>
-        <label>
-          <span>Confirm password</span>
-          <input className="text-input" type="password" value={form.confirmPassword} onChange={(event) => updateFormField('confirmPassword', event.target.value)} autoComplete="new-password" />
-        </label>
-        </div>
-        <div id="clerk-captcha" className="auth-captcha" />
-        {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
-        <div className="auth-actions">
-        <button className="ghost-button" type="button" onClick={onSwitchToLogin} disabled={isSubmitting}>Back to login</button>
-        <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create account'}</button>
+      </div>
+      {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+      <div className="auth-actions">
+        <button className="ghost-button" type="button" onClick={onSwitchToLogin}>Back to login</button>
+        <button className="primary-button" type="submit">Continue</button>
       </div>
     </form>
   );
@@ -2775,7 +2702,7 @@ function AuthShell({ authMode, setAuthMode }) {
             <button className={authMode === 'register' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
           </div>
           <div className="clerk-auth-shell">
-            {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" appearance={clerkAppearance} /> : <RegistrationForm onSwitchToLogin={() => setAuthMode('login')} />}
+            {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" appearance={clerkAppearance} /> : <RegistrationForm onSwitchToLogin={() => setAuthMode('login')} clerkAppearance={clerkAppearance} />}
           </div>
         </div>
       </div>
