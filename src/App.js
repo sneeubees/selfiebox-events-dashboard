@@ -2517,20 +2517,55 @@ function columnTitle(columnKey) {
 }
 
 function ColorSwatchPicker({ value, onChange, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef(null);
   const palette = value && !COLOR_SWATCHES.includes(value) ? [value, ...COLOR_SWATCHES] : COLOR_SWATCHES;
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (!pickerRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [open]);
+
   return (
-    <div className={['color-swatch-picker', className].filter(Boolean).join(' ')}>
-      {palette.map((color) => (
-        <button
-          key={color}
-          className={['color-swatch-button', value === color ? 'is-selected' : ''].join(' ').trim()}
-          type="button"
-          aria-label={`Select color ${color}`}
-          title={color}
-          onClick={() => onChange(color)}
-          style={{ background: color }}
-        />
-      ))}
+    <div ref={pickerRef} className={['color-swatch-picker-wrap', className].filter(Boolean).join(' ')}>
+      <button
+        className="color-swatch-trigger"
+        type="button"
+        aria-label="Choose color"
+        title={value || 'Choose color'}
+        onClick={() => setOpen((current) => !current)}
+        style={{ background: value || '#d6d6d6' }}
+      />
+      {open ? (
+        <div className="color-swatch-popover">
+          <div className="color-swatch-picker">
+            {palette.map((color) => (
+              <button
+                key={color}
+                className={['color-swatch-button', value === color ? 'is-selected' : ''].join(' ').trim()}
+                type="button"
+                aria-label={`Select color ${color}`}
+                title={color}
+                onClick={() => {
+                  onChange(color);
+                  setOpen(false);
+                }}
+                style={{ background: color }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
