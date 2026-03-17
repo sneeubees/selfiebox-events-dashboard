@@ -250,7 +250,7 @@ textarea { resize: vertical; min-height: 110px; }
 .auth-tabs button { border: 0; padding: 9px 14px; border-radius: 999px; background: transparent; color: #365286; font-weight: 600; }
 .auth-tabs .is-active { background: #fff; color: #21406f; box-shadow: 0 8px 16px rgba(47, 92, 174, 0.12); }
 .auth-submit { margin-top: 6px; }
-.clerk-auth-shell { margin-top: 8px; display: grid; }
+.clerk-auth-shell { margin-top: 2px; display: grid; }
 .cl-cardBox { box-shadow: none !important; }
 .cl-card { box-shadow: none !important; background: transparent !important; padding: 0 !important; border: 0 !important; }
 .clerk-cardbox, .clerk-card { width: 100%; }
@@ -267,8 +267,8 @@ textarea { resize: vertical; min-height: 110px; }
   background: #fff !important;
 }
 .clerk-label, .cl-formFieldLabel { color: #38537f !important; font-weight: 600 !important; }
-.auth-custom-form { display: grid; gap: 12px; margin-top: 6px; }
-.auth-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.auth-custom-form { display: grid; gap: 8px; margin-top: 6px; }
+.auth-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .auth-form-grid.single-column { grid-template-columns: 1fr; }
 .auth-custom-form label { display: grid; gap: 6px; font-size: 0.78rem; color: #365286; font-weight: 600; }
 .auth-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }

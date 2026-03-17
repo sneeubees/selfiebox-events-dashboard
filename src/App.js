@@ -2637,7 +2637,7 @@ function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
 
   return (
     <div className="auth-custom-form">
-      <div className="auth-form-grid">
+      <div className="auth-form-grid single-column">
         <label>
           <span>First name</span>
           <input className="text-input" required value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
@@ -2646,13 +2646,12 @@ function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
           <span>Last name</span>
           <input className="text-input" required value={form.surname} onChange={(event) => updateFormField('surname', event.target.value)} autoComplete="family-name" />
         </label>
-        <label className="full-span">
+        <label>
           <span>Designation</span>
           <input className="text-input" value={form.designation} onChange={(event) => updateFormField('designation', event.target.value)} autoComplete="organization-title" />
         </label>
       </div>
       {showNameError ? <div className="auth-error">Please complete first name and last name before creating the account.</div> : null}
-      <p className="auth-helper-text">Complete your email and password below to finish creating the account.</p>
       <div className="clerk-auth-shell" onClickCapture={handleSignUpClickCapture}>
         <SignUp
           routing="hash"
