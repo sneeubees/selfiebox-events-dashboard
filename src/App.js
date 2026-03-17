@@ -2562,7 +2562,10 @@ function formatDateDisplay(value) {
   if (!value) return '';
   const [year, month, day] = String(value).split('-');
   if (!year || !month || !day) return value;
-  return day + '/' + month + '/' + year;
+  const monthIndex = Number(month) - 1;
+  const shortMonth = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][monthIndex];
+  if (!shortMonth) return value;
+  return Number(day) + ' ' + shortMonth;
 }
 
 function getCalendarMonth(value) {
