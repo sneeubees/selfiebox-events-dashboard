@@ -46,6 +46,42 @@ function detectDocumentType(name, text) {
   return null;
 }
 
+function extractKnownDocument(text, fileName) {
+  const normalized = normalizeExtractedText(text);
+  const quotePatterns = [
+    /\b(?:quotation|quote)\s*(?:number|no\.?|#|nr)?\s*[:\-]?\s*(Q\d{4,})\b/i,
+    /\bnumber\s*[:\-]?\s*(Q\d{4,})\b/i,
+    /\b(Q\d{4,})\b/i,
+  ];
+  const invoicePatterns = [
+    /\b(?:tax invoice|invoice)\s*(?:number|no\.?|#|nr)?\s*[:\-]?\s*((?:INV[-_ ]?\d{3,})|(?:I\d{5,}))\b/i,
+    /\bnumber\s*[:\-]?\s*((?:INV[-_ ]?\d{3,})|(?:I\d{5,}))\b/i,
+    /\b(INV[-_ ]?\d{3,}|I\d{5,})\b/i,
+  ];
+
+  for (const pattern of quotePatterns) {
+    const match = normalized.match(pattern) || String(fileName || "").match(pattern);
+    if (match?.[1]) {
+      return {
+        documentType: "quote",
+        documentNumber: match[1].replace(/[_ ]+/g, "-"),
+      };
+    }
+  }
+
+  for (const pattern of invoicePatterns) {
+    const match = normalized.match(pattern) || String(fileName || "").match(pattern);
+    if (match?.[1]) {
+      return {
+        documentType: "invoice",
+        documentNumber: match[1].replace(/[_ ]+/g, "-"),
+      };
+    }
+  }
+
+  return null;
+}
+
 function extractDocumentNumber(text, fileName, type) {
   const normalized = normalizeExtractedText(text);
   const patterns = type === "invoice"
@@ -107,7 +143,8 @@ export const extractUploadedDocumentNumber = action({
     const buffer = Buffer.from(await storedFile.arrayBuffer());
     const parsed = await pdfParse(buffer);
     const text = normalizeExtractedText(parsed.text || "");
-    const documentType = detectDocumentType(args.name, text);
+    const knownDocument = extractKnownDocument(text, args.name);
+    const documentType = knownDocument?.documentType || detectDocumentType(args.name, text);
 
     if (!documentType) {
       console.log("Document extraction could not detect document type", {
@@ -118,7 +155,7 @@ export const extractUploadedDocumentNumber = action({
       return { processed: false, reason: "not_quote_or_invoice" };
     }
 
-    const documentNumber = extractDocumentNumber(text, args.name, documentType);
+    const documentNumber = knownDocument?.documentNumber || extractDocumentNumber(text, args.name, documentType);
     if (!documentNumber) {
       console.log("Document extraction found type but no number", {
         eventKey: args.eventKey,
