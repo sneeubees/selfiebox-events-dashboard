@@ -175,6 +175,9 @@ const currencyFormatter = new Intl.NumberFormat('en-ZA', {
 });
 
 function getColumnWidth(column) {
+  if (column.isCustom) {
+    return 84;
+  }
   if (column.key === 'name') return 260;
   if (column.key === 'date') return 70;
   if (column.key === 'hours') return 120;
@@ -539,7 +542,7 @@ function DashboardApp() {
   const orderedMonths = monthOrder.length === monthNames.length ? monthOrder : monthNames;
   const displayColumnLabel = (column) => column.isCustom ? column.label : (columnLabels[column.key] || column.label);
   const buildDefaultCustomFields = () => Object.fromEntries(customColumns.map((column) => [column.key, column.type === 'multiItem' ? [] : '']));
-  const getRenderedColumnWidth = (column) => column.isCustom ? Math.max(getColumnWidth(column), customColumnWidths[column.key] || 0) : getColumnWidth(column);
+  const getRenderedColumnWidth = (column) => column.isCustom ? Math.max(84, customColumnWidths[column.key] || 0) : getColumnWidth(column);
   const boardColumnTemplate = [...visibleColumns.map((column) => `${getRenderedColumnWidth(column)}px`), '48px'].join(' ');
   const boardWidth = visibleColumns.reduce((total, column) => total + getRenderedColumnWidth(column), 0) + 48;
 
