@@ -232,7 +232,7 @@ button { cursor: pointer; }
 .file-preview-link { text-decoration: none; }
 textarea { resize: vertical; min-height: 110px; }
 .modal-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
-.modal-panel, .auth-card { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
+.modal-panel { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .modal-close-x { width: 24px; height: 24px; border: 0; border-radius: 999px; background: #eef2ff; color: #26427b; font-size: 0.82rem; line-height: 1; }
 .modal-close-x:hover { background: #dfe7ff; }
