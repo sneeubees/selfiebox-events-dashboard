@@ -107,6 +107,7 @@ button { cursor: pointer; }
 .board-header .cell-name, .board-entry .cell-name { position: sticky; left: 0; z-index: 6; }
 .board-header .cell-name { z-index: 9; background: #f3f5f9; }
 .board-entry .cell-name { background: #fff; box-shadow: 1px 0 0 var(--line); }
+.cell-name { overflow: visible; }
 .board-entry:hover .cell-name { background: #f5fbff; }
 .cell { min-height: 42px; padding: 5px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; align-items: center; background: #fff; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell:last-child { border-right: 0; }
@@ -152,7 +153,7 @@ button { cursor: pointer; }
 .month-section > .board-row.board-entry:first-of-type .cell { border-top: 1px solid var(--line); }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }
-.name-cell-copy { display: grid; gap: 1px; min-width: 0; align-content: center; }
+.name-cell-copy { display: grid; gap: 1px; min-width: 0; align-content: center; overflow: visible; }
 .plus-trigger, .drawer-close { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--blue); color: #fff; font-size: 0.8rem; line-height: 1; padding: 0; text-align: center; }
 .plus-trigger { font-weight: 700; letter-spacing: -0.06em; }
 .row-creator-avatar { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; overflow: hidden; background: #dfe8fb; color: #294777; font-size: 0.55rem; font-weight: 700; }
@@ -176,7 +177,7 @@ button { cursor: pointer; }
 .inline-input { width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; padding: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inline-input:hover, .inline-input:focus { border-color: #b8c7ef; background: #fff; padding: 4px 6px; border-radius: 6px; outline: none; }
 .name-cell-copy .autocomplete-field { min-width: 0; }
-.name-cell-copy .autocomplete-popover { left: 0; right: auto; min-width: min(220px, 100%); }
+.name-cell-copy .autocomplete-popover { left: 0; right: auto; min-width: 220px; }
 .cell-hours .autocomplete-popover { min-width: 96px; }
 .cell-location { overflow: visible; }
 .location-field { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
