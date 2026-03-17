@@ -5,6 +5,24 @@ param(
 
 $excel = $null
 $workbook = $null
+$IgnoredColumnLetters = @("M", "N", "P", "R", "S", "U", "V", "W", "X", "Y")
+
+function Get-ColumnLetter {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$ColumnNumber
+  )
+
+  $current = $ColumnNumber
+  $letter = ""
+  while ($current -gt 0) {
+    $remainder = ($current - 1) % 26
+    $letter = [char](65 + $remainder) + $letter
+    $current = [Math]::Floor(($current - 1) / 26)
+  }
+
+  return $letter
+}
 
 function Get-SheetRows {
   param(
@@ -20,6 +38,10 @@ function Get-SheetRows {
   $headers = @()
 
   for ($col = 1; $col -le $colCount; $col++) {
+    if ($IgnoredColumnLetters -contains (Get-ColumnLetter -ColumnNumber $col)) {
+      $headers += ""
+      continue
+    }
     $headers += [string]$Sheet.Cells.Item($HeaderRow, $col).Text
   }
 
@@ -62,6 +84,10 @@ function Find-HeaderRow {
   for ($row = 1; $row -le $rowCount; $row++) {
     $headers = @()
     for ($col = 1; $col -le $colCount; $col++) {
+      if ($IgnoredColumnLetters -contains (Get-ColumnLetter -ColumnNumber $col)) {
+        $headers += ""
+        continue
+      }
       $headers += [string]$Sheet.Cells.Item($row, $col).Text
     }
 
