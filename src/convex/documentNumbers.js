@@ -30,6 +30,12 @@ function detectDocumentType(name, text) {
   }
 
   const fileName = String(name || "").toLowerCase();
+  if (/\bq\d{4,}\b/.test(fileName)) {
+    return "quote";
+  }
+  if (/\binv[-_ ]?\d{3,}\b|\bi\d{5,}\b/.test(fileName)) {
+    return "invoice";
+  }
   if (/\binvoice\b/.test(fileName)) {
     return "invoice";
   }
@@ -59,8 +65,17 @@ function extractDocumentNumber(text, fileName, type) {
     }
   }
 
-  const fallbackFromName = String(fileName || "").match(/(?:quote|quotation|invoice)[^\w]?([A-Z0-9][A-Z0-9\-\/]{2,})/i);
-  return fallbackFromName?.[1] || "";
+  const fallbackFromName = String(fileName || "").match(
+    type === "quote"
+      ? /\b(Q\d{4,})\b/i
+      : /\b(INV[-_ ]?\d{3,}|I\d{5,})\b/i,
+  );
+  if (fallbackFromName?.[1]) {
+    return fallbackFromName[1].replace(/[_ ]+/g, "-");
+  }
+
+  const genericFallbackFromName = String(fileName || "").match(/(?:quote|quotation|invoice)[^\w]?([A-Z0-9][A-Z0-9\-\/]{2,})/i);
+  return genericFallbackFromName?.[1] || "";
 }
 
 export const extractUploadedDocumentNumber = action({
@@ -80,32 +95,49 @@ export const extractUploadedDocumentNumber = action({
       return { processed: false, reason: "not_pdf" };
     }
 
-    const fileUrl = await ctx.storage.getUrl(args.storageId);
-    if (!fileUrl) {
-      return { processed: false, reason: "missing_storage_url" };
+    const storedFile = await ctx.storage.get(args.storageId);
+    if (!storedFile) {
+      console.log("Document extraction skipped: storage file missing", {
+        eventKey: args.eventKey,
+        name: args.name,
+      });
+      return { processed: false, reason: "missing_storage_blob" };
     }
 
-    const response = await fetch(fileUrl);
-    if (!response.ok) {
-      return { processed: false, reason: `fetch_failed_${response.status}` };
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const buffer = Buffer.from(await storedFile.arrayBuffer());
     const parsed = await pdfParse(buffer);
     const text = normalizeExtractedText(parsed.text || "");
     const documentType = detectDocumentType(args.name, text);
 
     if (!documentType) {
+      console.log("Document extraction could not detect document type", {
+        eventKey: args.eventKey,
+        name: args.name,
+        preview: text.slice(0, 240),
+      });
       return { processed: false, reason: "not_quote_or_invoice" };
     }
 
     const documentNumber = extractDocumentNumber(text, args.name, documentType);
     if (!documentNumber) {
+      console.log("Document extraction found type but no number", {
+        eventKey: args.eventKey,
+        name: args.name,
+        documentType,
+        preview: text.slice(0, 240),
+      });
       return { processed: false, reason: "number_not_found", documentType };
     }
 
     await ctx.runMutation(internal.events.setDocumentNumberFromUpload, {
       eventKey: args.eventKey,
+      documentType,
+      documentNumber,
+    });
+
+    console.log("Document extraction succeeded", {
+      eventKey: args.eventKey,
+      name: args.name,
       documentType,
       documentNumber,
     });
