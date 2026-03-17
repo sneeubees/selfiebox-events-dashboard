@@ -305,7 +305,7 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-options { gap: 2px; }
 .filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
 .filter-option { min-width: 0; font-size: 0.66rem; line-height: 1; padding: 1px 0; }
-.filter-option span { display: inline-block; max-width: 10ch; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.filter-option span { display: inline-block; max-width: 16ch; white-space: nowrap; overflow: hidden; text-overflow: clip; }
 .filter-option input { transform: scale(0.85); }
 .totals-row { min-width: max-content; }
 @media (max-width: 1200px) { .filter-popup { grid-template-columns: 1fr 1fr; } }
