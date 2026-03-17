@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
+import { SignIn, useClerk, useSignUp, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
@@ -571,15 +571,16 @@ function DashboardApp() {
     }
 
     userSyncKeyRef.current = clerkUser.id;
-    void syncCurrentUser({
-      email,
-      firstName: clerkUser.firstName || 'New',
-      surname: clerkUser.lastName || 'User',
-      profilePic: clerkUser.imageUrl || '',
-    }).catch((error) => {
-      console.error('Failed to sync current user', error);
-      userSyncKeyRef.current = '';
-    });
+      void syncCurrentUser({
+        email,
+        firstName: clerkUser.firstName || 'New',
+        surname: clerkUser.lastName || 'User',
+        designation: String(clerkUser.unsafeMetadata?.designation || ''),
+        profilePic: clerkUser.imageUrl || '',
+      }).catch((error) => {
+        console.error('Failed to sync current user', error);
+        userSyncKeyRef.current = '';
+      });
   }, [clerkUser, currentUser, syncCurrentUser]);
 
 
@@ -1227,10 +1228,25 @@ function DashboardApp() {
       return;
     }
 
+    const nextFirstName = profileForm.firstName.trim() || currentUser.firstName;
+    const nextSurname = profileForm.surname.trim() || currentUser.surname;
+    const nextDesignation = profileForm.designation.trim() || currentUser.designation;
+
+    if (clerkUser) {
+      await clerkUser.update({
+        firstName: nextFirstName,
+        lastName: nextSurname,
+        unsafeMetadata: {
+          ...(clerkUser.unsafeMetadata || {}),
+          designation: nextDesignation,
+        },
+      });
+    }
+
     await updateMyProfile({
-      firstName: profileForm.firstName.trim() || currentUser.firstName,
-      surname: profileForm.surname.trim() || currentUser.surname,
-      designation: profileForm.designation.trim() || currentUser.designation,
+      firstName: nextFirstName,
+      surname: nextSurname,
+      designation: nextDesignation,
       profilePic: profileForm.profilePic || '',
     });
     setShowProfileModal(false);
@@ -2560,32 +2576,181 @@ function FilterGroup({ title, options, selected, onToggle }) {
   return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
 }
 
-function AuthShell({ authMode, setAuthMode }) {
-  return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="auth-brand">SelfieBox Events</div>
-        <h1>{authMode === 'login' ? 'Sign in' : 'Create your account'}</h1>
-        <p>Log in with your email address to access the yearly event workspaces in your browser.</p>
-        <div className="auth-tabs">
-          <button className={authMode === 'login' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button>
-          <button className={authMode === 'register' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
+function RegistrationForm({ onSwitchToLogin }) {
+  const { isLoaded, signUp } = useSignUp();
+  const { setActive } = useClerk();
+  const [form, setForm] = useState({ firstName: '', surname: '', designation: '', email: '', password: '', confirmPassword: '' });
+  const [verificationCode, setVerificationCode] = useState('');
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const updateFormField = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleCreateAccount = async (event) => {
+    event.preventDefault();
+    if (!isLoaded || !signUp) {
+      return;
+    }
+
+    const firstName = form.firstName.trim();
+    const surname = form.surname.trim();
+    const designation = form.designation.trim();
+    const emailAddress = form.email.trim();
+    const password = form.password;
+    const confirmPassword = form.confirmPassword;
+
+    if (!firstName || !surname || !emailAddress || !password) {
+      setErrorMessage('Please complete the required fields.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      await signUp.create({
+        firstName,
+        lastName: surname,
+        emailAddress,
+        password,
+        unsafeMetadata: designation ? { designation } : undefined,
+      });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setAwaitingVerification(true);
+    } catch (error) {
+      setErrorMessage(error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || 'Unable to create your account right now.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyEmail = async (event) => {
+    event.preventDefault();
+    if (!isLoaded || !signUp) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code: verificationCode.trim() });
+      if (result.status === 'complete' && result.createdSessionId) {
+        await setActive({ session: result.createdSessionId });
+        return;
+      }
+      setErrorMessage('Verification could not be completed. Please try again.');
+    } catch (error) {
+      setErrorMessage(error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || 'Verification failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (awaitingVerification) {
+    return (
+      <form className="auth-custom-form" onSubmit={handleVerifyEmail}>
+        <div className="auth-form-grid single-column">
+          <label>
+            <span>Email verification code</span>
+            <input className="text-input" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} autoFocus />
+          </label>
         </div>
-        <div className="clerk-auth-shell">
-          {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" /> : <SignUp routing="hash" signInUrl="#login" />}
+        <p className="auth-helper-text">Enter the code sent to {form.email.trim()}.</p>
+        {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+        <div className="auth-actions">
+          <button className="ghost-button" type="button" onClick={() => setAwaitingVerification(false)} disabled={isSubmitting}>Back</button>
+          <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Verifying...' : 'Verify email'}</button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <form className="auth-custom-form" onSubmit={handleCreateAccount}>
+      <div className="auth-form-grid">
+        <label>
+          <span>First name</span>
+          <input className="text-input" value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
+        </label>
+        <label>
+          <span>Last name</span>
+          <input className="text-input" value={form.surname} onChange={(event) => updateFormField('surname', event.target.value)} autoComplete="family-name" />
+        </label>
+        <label className="full-span">
+          <span>Designation</span>
+          <input className="text-input" value={form.designation} onChange={(event) => updateFormField('designation', event.target.value)} autoComplete="organization-title" />
+        </label>
+        <label className="full-span">
+          <span>Email address</span>
+          <input className="text-input" type="email" value={form.email} onChange={(event) => updateFormField('email', event.target.value)} autoComplete="email" />
+        </label>
+        <label>
+          <span>Password</span>
+          <input className="text-input" type="password" value={form.password} onChange={(event) => updateFormField('password', event.target.value)} autoComplete="new-password" />
+        </label>
+        <label>
+          <span>Confirm password</span>
+          <input className="text-input" type="password" value={form.confirmPassword} onChange={(event) => updateFormField('confirmPassword', event.target.value)} autoComplete="new-password" />
+        </label>
+      </div>
+      {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+      <div className="auth-actions">
+        <button className="ghost-button" type="button" onClick={onSwitchToLogin} disabled={isSubmitting}>Back to login</button>
+        <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create account'}</button>
+      </div>
+    </form>
+  );
+}
+
+function AuthShell({ authMode, setAuthMode }) {
+  const clerkAppearance = {
+    elements: {
+      cardBox: 'clerk-cardbox',
+      card: 'clerk-card',
+      headerTitle: 'clerk-header-title',
+      headerSubtitle: 'clerk-header-subtitle',
+      socialButtonsBlockButton: 'clerk-social-button',
+      socialButtonsBlockButtonText: 'clerk-social-button-text',
+      formButtonPrimary: 'clerk-primary-button',
+      footerActionLink: 'clerk-footer-link',
+      formFieldInput: 'clerk-input',
+      formFieldLabel: 'clerk-label',
+    },
+  };
+
+  return (
+      <div className="auth-shell">
+        <div className="auth-card">
+          <div className="auth-brand">SelfieBox Events Platform</div>
+          <h1>{authMode === 'login' ? 'Sign in' : 'Create your account'}</h1>
+          <div className="auth-tabs">
+            <button className={authMode === 'login' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button>
+            <button className={authMode === 'register' ? 'is-active' : ''} type="button" onClick={() => setAuthMode('register')}>Register</button>
+          </div>
+          <div className="clerk-auth-shell">
+            {authMode === 'login' ? <SignIn routing="hash" signUpUrl="#register" appearance={clerkAppearance} /> : <RegistrationForm onSwitchToLogin={() => setAuthMode('login')} />}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 }
 
 function LoadingShell() {
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <div className="auth-brand">SelfieBox Events</div>
+        <div className="auth-brand">SelfieBox Events Platform</div>
         <h1>Loading your account</h1>
-        <p>Please wait while Clerk connects your session.</p>
+        <p>Please wait while you are being logged in.</p>
       </div>
     </div>
   );

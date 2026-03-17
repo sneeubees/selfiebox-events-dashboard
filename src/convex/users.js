@@ -163,6 +163,7 @@ export const syncCurrentUser = mutation({
     email: v.string(),
     firstName: v.string(),
     surname: v.string(),
+    designation: v.optional(v.string()),
     profilePic: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -171,6 +172,7 @@ export const syncCurrentUser = mutation({
     const isPrimaryAdmin = email === PRIMARY_ADMIN_EMAIL;
     const firstName = args.firstName.trim() || identity.givenName || "User";
     const surname = args.surname.trim() || identity.familyName || "";
+    const designation = args.designation?.trim() || "";
     const now = Date.now();
     const emailMatches = await findUsersByEmail(ctx, email);
 
@@ -183,7 +185,7 @@ export const syncCurrentUser = mutation({
         firstName: nextFirstName,
         surname: nextSurname,
         fullName: `${nextFirstName} ${nextSurname}`.trim(),
-        designation: isPrimaryAdmin ? "Operations Admin" : user.designation,
+        designation: isPrimaryAdmin ? "Operations Admin" : (user.designation || designation),
         profilePic: user.profilePic || args.profilePic || "",
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
         role: isPrimaryAdmin ? "admin" : user.role,
@@ -209,7 +211,7 @@ export const syncCurrentUser = mutation({
         firstName: existingByEmail.firstName || firstName,
         surname: existingByEmail.surname || surname,
         fullName: `${existingByEmail.firstName || firstName} ${existingByEmail.surname || surname}`.trim(),
-        designation: isPrimaryAdmin ? "Operations Admin" : existingByEmail.designation,
+        designation: isPrimaryAdmin ? "Operations Admin" : (existingByEmail.designation || designation),
         profilePic: existingByEmail.profilePic || args.profilePic || "",
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         role: isPrimaryAdmin ? "admin" : existingByEmail.role,
@@ -237,7 +239,7 @@ export const syncCurrentUser = mutation({
       firstName,
       surname,
       fullName: `${firstName} ${surname}`.trim(),
-      designation: shouldBootstrapAdmin ? "Operations Admin" : "Coordinator",
+      designation: shouldBootstrapAdmin ? "Operations Admin" : (designation || "Coordinator"),
       role: shouldBootstrapAdmin ? "admin" : "user",
       profilePic: args.profilePic || "",
       monthOrder: monthNames,

@@ -241,14 +241,39 @@ textarea { resize: vertical; min-height: 110px; }
 .full-span { grid-column: 1 / -1; }
 .filter-group { min-width: 0; padding: 8px; border-radius: 10px; background: #f8fafc; border: 1px solid var(--line); }
 .filter-option { display: flex; align-items: center; gap: 8px; }
-.auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
-.auth-card { max-width: 500px; }
-.auth-tabs { display: inline-flex; gap: 8px; margin: 16px 0; padding: 6px; border-radius: 999px; background: #eef1f5; }
-.auth-tabs button { border: 0; padding: 9px 12px; border-radius: 999px; background: transparent; }
-.auth-tabs .is-active { background: #fff; }
+.auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at top left, #f2f7ff 0%, #eef4ff 28%, #f6f8fc 62%, #f9fbff 100%); }
+.auth-card { max-width: 560px; border-radius: 22px; padding: 24px; background: linear-gradient(180deg, #fbfdff 0%, #f3f7ff 100%); border-color: #d6e1f6; box-shadow: 0 22px 50px rgba(30, 58, 117, 0.12); }
+.auth-card h1 { font-size: 1.05rem; line-height: 1.1; color: #1d355f; margin-top: 2px; }
+.auth-card p { font-size: 0.82rem; }
+.auth-brand { color: #2f5cae; letter-spacing: 0.14em; }
+.auth-tabs { display: inline-flex; gap: 8px; margin: 16px 0 10px; padding: 6px; border-radius: 999px; background: #dfe9fb; }
+.auth-tabs button { border: 0; padding: 9px 14px; border-radius: 999px; background: transparent; color: #365286; font-weight: 600; }
+.auth-tabs .is-active { background: #fff; color: #21406f; box-shadow: 0 8px 16px rgba(47, 92, 174, 0.12); }
 .auth-submit { margin-top: 6px; }
-.clerk-auth-shell { margin-top: 12px; display: grid; }
-.cl-cardBox, .cl-card { box-shadow: none !important; }
+.clerk-auth-shell { margin-top: 8px; display: grid; }
+.cl-cardBox { box-shadow: none !important; }
+.cl-card { box-shadow: none !important; background: transparent !important; padding: 0 !important; border: 0 !important; }
+.clerk-cardbox, .clerk-card { width: 100%; }
+.clerk-header-title, .clerk-header-subtitle { display: none !important; }
+.clerk-primary-button, .cl-formButtonPrimary {
+  background: linear-gradient(135deg, #2f5cae, #21406f) !important;
+  box-shadow: 0 12px 24px rgba(47, 92, 174, 0.18) !important;
+  border-radius: 10px !important;
+}
+.clerk-footer-link, .cl-footerActionLink { color: #2f5cae !important; }
+.clerk-input, .cl-formFieldInput {
+  border-radius: 10px !important;
+  border-color: #c7d6f3 !important;
+  background: #fff !important;
+}
+.clerk-label, .cl-formFieldLabel { color: #38537f !important; font-weight: 600 !important; }
+.auth-custom-form { display: grid; gap: 12px; margin-top: 6px; }
+.auth-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.auth-form-grid.single-column { grid-template-columns: 1fr; }
+.auth-custom-form label { display: grid; gap: 6px; font-size: 0.78rem; color: #365286; font-weight: 600; }
+.auth-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.auth-helper-text { margin: -2px 0 0; color: #6b7da3; }
+.auth-error { border-radius: 10px; padding: 10px 12px; background: #fff0f3; border: 1px solid #f1c0cb; color: #b43b52; font-size: 0.8rem; }
 .filter-popup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
