@@ -418,7 +418,13 @@ function DashboardApp() {
   const filteredEvents = useMemo(() => {
     return [...events]
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
-      .filter((event) => (search.trim() ? event.name.toLowerCase().includes(search.trim().toLowerCase()) : true))
+      .filter((event) => {
+        if (!search.trim()) {
+          return true;
+        }
+        const query = search.trim().toLowerCase();
+        return event.name.toLowerCase().includes(query) || String(event.eventTitle || '').toLowerCase().includes(query);
+      })
       .filter((event) => (selectedBranches.length ? event.branch.some((item) => selectedBranches.includes(item)) : true))
       .filter((event) => (selectedProducts.length ? event.products.some((item) => selectedProducts.includes(item)) : true))
       .filter((event) => (selectedStatuses.length ? selectedStatuses.includes(event.status) : true))
