@@ -2593,7 +2593,7 @@ function formatFileSize(bytes) {
 }
 
 function CompactNameList({ items }) {
-  if (!items || items.length === 0) return <span className="empty-cell-value">Select</span>;
+  if (!items || items.length === 0) return <Tag value="" styles={{}} placeholder="Select" />;
   const firstItem = items[0];
   const overflowCount = items.length - 1;
   return <div className="compact-name-wrap"><div className="compact-tag-slot"><span className="compact-name-pill" title={firstItem}>{truncateName(firstItem)}</span>{overflowCount > 0 ? <span className="extra-pill extra-pill-corner">+{overflowCount}</span> : null}</div></div>;
