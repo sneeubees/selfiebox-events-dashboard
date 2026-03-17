@@ -46,6 +46,41 @@ function Get-SheetRows {
   return $rows
 }
 
+function Find-HeaderRow {
+  param(
+    [Parameter(Mandatory = $true)]
+    $Sheet,
+    [Parameter(Mandatory = $true)]
+    [string[]]$ExpectedHeaders,
+    [int]$MaxRowsToScan = 6
+  )
+
+  $usedRange = $Sheet.UsedRange
+  $rowCount = [Math]::Min($usedRange.Rows.Count, $MaxRowsToScan)
+  $colCount = $usedRange.Columns.Count
+
+  for ($row = 1; $row -le $rowCount; $row++) {
+    $headers = @()
+    for ($col = 1; $col -le $colCount; $col++) {
+      $headers += [string]$Sheet.Cells.Item($row, $col).Text
+    }
+
+    $matchesAll = $true
+    foreach ($expected in $ExpectedHeaders) {
+      if (-not ($headers -contains $expected)) {
+        $matchesAll = $false
+        break
+      }
+    }
+
+    if ($matchesAll) {
+      return $row
+    }
+  }
+
+  throw "Could not find expected header row."
+}
+
 try {
   $excel = New-Object -ComObject Excel.Application
   $excel.Visible = $false
@@ -53,11 +88,21 @@ try {
   $workbook = $excel.Workbooks.Open($Path, $null, $true)
 
   $sheet1 = $workbook.Worksheets.Item(1)
-  $sheet2 = $workbook.Worksheets.Item(2)
+  $sheet2 = $null
+  if ($workbook.Worksheets.Count -ge 2) {
+    $sheet2 = $workbook.Worksheets.Item(2)
+  }
+
+  $eventsHeaderRow = Find-HeaderRow -Sheet $sheet1 -ExpectedHeaders @("Name", "Item ID (auto generated)")
+  $updates = @()
+  if ($sheet2) {
+    $updatesHeaderRow = Find-HeaderRow -Sheet $sheet2 -ExpectedHeaders @("Item ID", "Update Content")
+    $updates = Get-SheetRows -Sheet $sheet2 -HeaderRow $updatesHeaderRow
+  }
 
   $result = [pscustomobject]@{
-    events = Get-SheetRows -Sheet $sheet1 -HeaderRow 1
-    updates = Get-SheetRows -Sheet $sheet2 -HeaderRow 2
+    events = Get-SheetRows -Sheet $sheet1 -HeaderRow $eventsHeaderRow
+    updates = $updates
   }
 
   $result | ConvertTo-Json -Depth 6 -Compress

@@ -106,6 +106,16 @@ function parseWorkbook(workbookPath) {
   return JSON.parse(result.stdout);
 }
 
+function ensureRows(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    return [value];
+  }
+  return [];
+}
+
 function mapEvents(rows) {
   return rows.map((row) => ({
     itemId: normalizeText(row["Item ID (auto generated)"]),
@@ -116,7 +126,7 @@ function mapEvents(rows) {
     products: splitMulti(row["Product/s"]),
     status: normalizeText(row["Status"]),
     location: normalizeText(row["Location"]),
-    paymentStatus: normalizeText(row["Payment"]),
+    paymentStatus: normalizeText(row["Payment"] || row["Payment Status"]),
     vinyl: normalizeText(row["Vinyl?"]),
     gsAi: normalizeText(row["GS / AI?"]),
     imagesSent: normalizeText(row["Images sent?"]),
@@ -138,8 +148,8 @@ function mapUpdates(rows) {
 
 async function runImport({ workbookPath, workspaceYear, monthNumber, prod, deploymentUrl }) {
   const workbook = parseWorkbook(workbookPath);
-  const allEvents = mapEvents(workbook.events || []);
-  const allUpdates = mapUpdates(workbook.updates || []);
+  const allEvents = mapEvents(ensureRows(workbook.events));
+  const allUpdates = mapUpdates(ensureRows(workbook.updates));
   const chunkSize = 20;
 
   for (let start = 0; start < allEvents.length; start += chunkSize) {
