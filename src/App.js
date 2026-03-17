@@ -1331,12 +1331,18 @@ function DashboardApp() {
 
   const handleCreateWorkspace = async (submitEvent) => {
     submitEvent?.preventDefault?.();
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
+      return;
+    }
     const createdWorkspace = await createNextWorkspaceYear({});
     setSelectedWorkspaceYear(createdWorkspace.year);
     setShowWorkspaceModal(false);
   };
 
   const exportWorkspaceToExcel = () => {
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
+      return;
+    }
     const workspaceEvents = [...events]
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
       .sort(sortEvents);
@@ -2347,8 +2353,8 @@ function DashboardApp() {
             <span className="workspace-prefix">Workspace for</span>
             <select value={selectedWorkspaceYear} onChange={(event) => setSelectedWorkspaceYear(Number(event.target.value))}>{workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}</select>
             <div className="workspace-link-stack">
-              <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button>
-              <button className="workspace-text-button" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button>
+              {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button> : null}
+              {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
             </div>
           </div>
           {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
@@ -2363,8 +2369,8 @@ function DashboardApp() {
               <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name" />
               {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
-            <button className="ghost-button filter-button" type="button" onClick={() => setFiltersOpen(true)}>Filter</button>
-            <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear</button>
+            <button className="ghost-button filter-button filter-open-button" type="button" onClick={() => setFiltersOpen(true)}>Filter</button>
+            <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clar filter</button>
           </div>
           <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
         </div>
@@ -2427,7 +2433,7 @@ function DashboardApp() {
       {renameDialog.isOpen ? <ModalShell title="Rename header" onClose={closeRenameDialog}><div className="simple-stack"><label className="full-span"><span>Header name</span><input className="text-input" value={renameDialog.value} onChange={(event) => setRenameDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveRenamedColumn(); } }} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeRenameDialog}>Cancel</button><button className="primary-button" type="button" onClick={saveRenamedColumn}>Save</button></div></div></ModalShell> : null}
 
       {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4>{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</section><section className="rights-section"><h4>Users</h4>{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</section></div></ModalShell> : null}
-      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup"><FilterGroup title="Branches" options={branchAbbreviations} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productAbbreviations} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><div className="modal-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></div></ModalShell> : null}
+      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup"><FilterGroup title="Branches" options={branchAbbreviations} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productAbbreviations} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><div className="modal-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clar filter</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></div></ModalShell> : null}
         {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {branchEditorEventId && selectedBranchEvent ? <ModalShell title="Select branch" onClose={() => setBranchEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{branchOptions.map((option) => <button className={["branch-selector-item", selectedBranchEvent.branch.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleBranchOnEvent(selectedBranchEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.abbreviation}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setBranchEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
         {productManagerOpen ? <ModalShell title="Manage product items" onClose={() => setProductManagerOpen(false)}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-product-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newProductFullName} onChange={(event) => { const value = event.target.value; setNewProductFullName(value); setNewProductAbbreviation((current) => (current ? current : abbreviateLabel(value))); }} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newProductAbbreviation || abbreviateLabel(newProductFullName)} onChange={(event) => setNewProductAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newProductColor} onChange={setNewProductColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addProductOption}>Add</button></div><div className="branch-preview-list is-editor">{productOptions.map((option) => <div className="branch-editor-row compact-product-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color} onChange={(value) => updateProductDraft(option.optionKey || option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color, color: getContrastColor(productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color) }} title={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName}>{productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveProductOption(option.optionKey || option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteProductOption(option.optionKey || option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
@@ -2776,7 +2782,52 @@ function AutocompleteTextInput({ value, onChange, suggestions = [], readOnly = f
 function ColorSwatchPicker({ value, onChange, className = '' }) {
   const [open, setOpen] = useState(false);
   const pickerRef = useRef(null);
+  const triggerRef = useRef(null);
+  const popoverRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
   const palette = value && !COLOR_SWATCHES.includes(value) ? [value, ...COLOR_SWATCHES] : COLOR_SWATCHES;
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      return;
+    }
+
+    const updatePosition = () => {
+      if (!triggerRef.current) {
+        return;
+      }
+
+      const rect = triggerRef.current.getBoundingClientRect();
+      const menuWidth = 228;
+      const estimatedHeight = 170;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const left = Math.min(
+        Math.max(8, rect.left),
+        Math.max(8, viewportWidth - menuWidth - 8)
+      );
+      const openAbove = rect.bottom + estimatedHeight > viewportHeight - 8 && rect.top > estimatedHeight;
+      const top = openAbove
+        ? Math.max(8, rect.top - estimatedHeight - 6)
+        : Math.min(viewportHeight - estimatedHeight - 8, rect.bottom + 6);
+
+      setMenuStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        width: `${menuWidth}px`,
+        zIndex: 1300,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -2784,7 +2835,9 @@ function ColorSwatchPicker({ value, onChange, className = '' }) {
     }
 
     const handleOutsideClick = (event) => {
-      if (!pickerRef.current?.contains(event.target)) {
+      const withinTrigger = pickerRef.current?.contains(event.target);
+      const withinPopover = popoverRef.current?.contains(event.target);
+      if (!withinTrigger && !withinPopover) {
         setOpen(false);
       }
     };
@@ -2796,6 +2849,7 @@ function ColorSwatchPicker({ value, onChange, className = '' }) {
   return (
     <div ref={pickerRef} className={['color-swatch-picker-wrap', className].filter(Boolean).join(' ')}>
       <button
+        ref={triggerRef}
         className="color-swatch-trigger"
         type="button"
         aria-label="Choose color"
@@ -2803,8 +2857,8 @@ function ColorSwatchPicker({ value, onChange, className = '' }) {
         onClick={() => setOpen((current) => !current)}
         style={{ background: value || '#d6d6d6' }}
       />
-      {open ? (
-        <div className="color-swatch-popover">
+      {open && menuStyle ? createPortal(
+        <div ref={popoverRef} className="color-swatch-popover color-swatch-popover-portal" style={menuStyle}>
           <div className="color-swatch-picker">
             {palette.map((color) => (
               <button
@@ -2832,7 +2886,8 @@ function ColorSwatchPicker({ value, onChange, className = '' }) {
               }}
             />
           </label>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

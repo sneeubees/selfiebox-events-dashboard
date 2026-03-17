@@ -96,6 +96,7 @@ button { cursor: pointer; }
 .search-clear-button { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 20px; height: 20px; border: 0; border-radius: 999px; background: #e7ecf7; color: #54627e; font-size: 0.72rem; line-height: 1; display: inline-grid; place-items: center; }
 .search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
+.filter-open-button { margin-left: 12px; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: sticky; top: 0; z-index: 8; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
@@ -402,6 +403,12 @@ textarea { resize: vertical; min-height: 110px; }
   background: #ffffff;
   border: 1px solid var(--line);
   box-shadow: 0 14px 28px rgba(24, 42, 77, 0.16);
+}
+.color-swatch-popover-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1300;
 }
 .color-swatch-picker {
   display: grid;
