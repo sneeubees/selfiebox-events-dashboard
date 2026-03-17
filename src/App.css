@@ -272,6 +272,7 @@ textarea { resize: vertical; min-height: 110px; }
 .auth-form-grid.single-column { grid-template-columns: 1fr; }
 .auth-custom-form label { display: grid; gap: 6px; font-size: 0.78rem; color: #365286; font-weight: 600; }
 .auth-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.auth-captcha { min-height: 78px; }
 .auth-helper-text { margin: -2px 0 0; color: #6b7da3; }
 .auth-error { border-radius: 10px; padding: 10px 12px; background: #fff0f3; border: 1px solid #f1c0cb; color: #b43b52; font-size: 0.8rem; }
 .filter-popup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }

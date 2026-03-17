@@ -15,6 +15,8 @@ import {
   STATUS_STYLES,
 } from './seedData';
 
+const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
+
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const ROLE_OPTIONS = ['admin', 'manager', 'user'];
 const STATIC_COLUMN_TYPES = {
@@ -561,8 +563,38 @@ function DashboardApp() {
       return;
     }
 
+    let pendingRegistration = null;
+    try {
+      const stored = window.sessionStorage.getItem(PENDING_REGISTRATION_KEY);
+      pendingRegistration = stored ? JSON.parse(stored) : null;
+    } catch {
+      pendingRegistration = null;
+    }
+
+    const normalizedPendingEmail = String(pendingRegistration?.email || '').trim().toLowerCase();
+    const matchesPendingRegistration = normalizedPendingEmail && normalizedPendingEmail === email.trim().toLowerCase();
+    const pendingFirstName = matchesPendingRegistration ? String(pendingRegistration?.firstName || '').trim() : '';
+    const pendingSurname = matchesPendingRegistration ? String(pendingRegistration?.surname || '').trim() : '';
+    const pendingDesignation = matchesPendingRegistration ? String(pendingRegistration?.designation || '').trim() : '';
+
+    if (matchesPendingRegistration && (pendingFirstName || pendingSurname || pendingDesignation)) {
+      void clerkUser.update({
+        firstName: clerkUser.firstName || pendingFirstName || undefined,
+        lastName: clerkUser.lastName || pendingSurname || undefined,
+        unsafeMetadata: {
+          ...(clerkUser.unsafeMetadata || {}),
+          ...(pendingDesignation ? { designation: pendingDesignation } : {}),
+        },
+      }).catch((error) => {
+        console.error('Failed to sync pending Clerk profile fields', error);
+      });
+    }
+
     if (currentUser) {
       userSyncKeyRef.current = clerkUser.id;
+      if (matchesPendingRegistration) {
+        window.sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
+      }
       return;
     }
 
@@ -571,11 +603,11 @@ function DashboardApp() {
     }
 
     userSyncKeyRef.current = clerkUser.id;
-      void syncCurrentUser({
+    void syncCurrentUser({
         email,
-        firstName: clerkUser.firstName || 'New',
-        surname: clerkUser.lastName || 'User',
-        designation: String(clerkUser.unsafeMetadata?.designation || ''),
+        firstName: clerkUser.firstName || pendingFirstName || 'New',
+        surname: clerkUser.lastName || pendingSurname || 'User',
+        designation: String(clerkUser.unsafeMetadata?.designation || pendingDesignation || ''),
         profilePic: clerkUser.imageUrl || '',
       }).catch((error) => {
         console.error('Failed to sync current user', error);
@@ -2592,6 +2624,7 @@ function RegistrationForm({ onSwitchToLogin }) {
   const handleCreateAccount = async (event) => {
     event.preventDefault();
     if (!isLoaded || !signUp) {
+      setErrorMessage('Registration is still loading. Please try again.');
       return;
     }
 
@@ -2616,16 +2649,20 @@ function RegistrationForm({ onSwitchToLogin }) {
     setErrorMessage('');
 
     try {
-      await signUp.create({
+      window.sessionStorage.setItem(PENDING_REGISTRATION_KEY, JSON.stringify({
+        email: emailAddress.toLowerCase(),
         firstName,
-        lastName: surname,
+        surname,
+        designation,
+      }));
+      await signUp.create({
         emailAddress,
         password,
-        unsafeMetadata: designation ? { designation } : undefined,
       });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setAwaitingVerification(true);
     } catch (error) {
+      console.error('Registration failed', error);
       setErrorMessage(error?.errors?.[0]?.longMessage || error?.errors?.[0]?.message || 'Unable to create your account right now.');
     } finally {
       setIsSubmitting(false);
@@ -2675,8 +2712,8 @@ function RegistrationForm({ onSwitchToLogin }) {
   }
 
   return (
-    <form className="auth-custom-form" onSubmit={handleCreateAccount}>
-      <div className="auth-form-grid">
+      <form className="auth-custom-form" onSubmit={handleCreateAccount}>
+        <div className="auth-form-grid">
         <label>
           <span>First name</span>
           <input className="text-input" value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
@@ -2701,9 +2738,10 @@ function RegistrationForm({ onSwitchToLogin }) {
           <span>Confirm password</span>
           <input className="text-input" type="password" value={form.confirmPassword} onChange={(event) => updateFormField('confirmPassword', event.target.value)} autoComplete="new-password" />
         </label>
-      </div>
-      {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
-      <div className="auth-actions">
+        </div>
+        <div id="clerk-captcha" className="auth-captcha" />
+        {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
+        <div className="auth-actions">
         <button className="ghost-button" type="button" onClick={onSwitchToLogin} disabled={isSubmitting}>Back to login</button>
         <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create account'}</button>
       </div>
