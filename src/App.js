@@ -2610,6 +2610,7 @@ function FilterGroup({ title, options, selected, onToggle }) {
 
 function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
   const [form, setForm] = useState({ firstName: '', surname: '', designation: '' });
+  const [showNameError, setShowNameError] = useState(false);
 
   const updateFormField = (key, value) => {
     setForm((current) => {
@@ -2621,6 +2622,17 @@ function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
       }));
       return next;
     });
+    if (key === 'firstName' || key === 'surname') {
+      setShowNameError(false);
+    }
+  };
+
+  const handleSignUpClickCapture = (event) => {
+    if (!form.firstName.trim() || !form.surname.trim()) {
+      event.preventDefault();
+      event.stopPropagation();
+      setShowNameError(true);
+    }
   };
 
   return (
@@ -2628,19 +2640,20 @@ function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
       <div className="auth-form-grid">
         <label>
           <span>First name</span>
-          <input className="text-input" value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
+          <input className="text-input" required value={form.firstName} onChange={(event) => updateFormField('firstName', event.target.value)} autoComplete="given-name" />
         </label>
         <label>
           <span>Last name</span>
-          <input className="text-input" value={form.surname} onChange={(event) => updateFormField('surname', event.target.value)} autoComplete="family-name" />
+          <input className="text-input" required value={form.surname} onChange={(event) => updateFormField('surname', event.target.value)} autoComplete="family-name" />
         </label>
         <label className="full-span">
           <span>Designation</span>
           <input className="text-input" value={form.designation} onChange={(event) => updateFormField('designation', event.target.value)} autoComplete="organization-title" />
         </label>
       </div>
+      {showNameError ? <div className="auth-error">Please complete first name and last name before creating the account.</div> : null}
       <p className="auth-helper-text">Complete your email and password below to finish creating the account.</p>
-      <div className="clerk-auth-shell">
+      <div className="clerk-auth-shell" onClickCapture={handleSignUpClickCapture}>
         <SignUp
           routing="hash"
           signInUrl="#login"
