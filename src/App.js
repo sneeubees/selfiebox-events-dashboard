@@ -119,18 +119,38 @@ const monthAccentClass = {
 };
 
 const COLOR_SWATCHES = [
-  '#b8d9ff',
-  '#d9edf8',
-  '#23b26d',
-  '#2b61d1',
-  '#d93c56',
-  '#f08c2e',
+  '#ffffff',
+  '#f5f5f5',
   '#d6d6d6',
+  '#7b8794',
+  '#233142',
+  '#b8d9ff',
+  '#cfe5ff',
+  '#9cc7ff',
+  '#6fa8ff',
+  '#d9edf8',
+  '#d8f3dc',
+  '#95d5b2',
+  '#23b26d',
+  '#1b8f58',
+  '#2b61d1',
+  '#274582',
+  '#fee2e2',
+  '#fda4af',
+  '#d93c56',
+  '#be123c',
+  '#fef3c7',
+  '#f08c2e',
+  '#d97706',
   '#dfe7f6',
   '#ffe1b8',
   '#c8ddf7',
   '#eadfb8',
   '#d7c8f5',
+  '#c4b5fd',
+  '#8b5cf6',
+  '#fbcfe8',
+  '#ec4899',
 ];
 
 const currencyFormatter = new Intl.NumberFormat('en-ZA', {
@@ -2564,6 +2584,18 @@ function ColorSwatchPicker({ value, onChange, className = '' }) {
               />
             ))}
           </div>
+          <label className="color-swatch-custom">
+            <span>Custom</span>
+            <input
+              className="color-swatch-native-input"
+              type="color"
+              value={value || '#d6d6d6'}
+              onChange={(event) => {
+                onChange(event.target.value);
+                setOpen(false);
+              }}
+            />
+          </label>
         </div>
       ) : null}
     </div>
