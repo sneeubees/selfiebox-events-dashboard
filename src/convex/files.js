@@ -53,6 +53,10 @@ function inferTypeLabel(name, contentType) {
   return extension ? extension.toUpperCase() : "File";
 }
 
+function isPdfFile(name, contentType) {
+  return String(contentType || "").toLowerCase().includes("pdf") || /\.pdf$/i.test(String(name || ""));
+}
+
 function parseLegacyTimestamp() {
   return Date.now();
 }
@@ -91,6 +95,28 @@ export const listEventFiles = query({
     }
 
     return results;
+  },
+});
+
+export const listPdfCandidatesForDocumentNumbers = query({
+  args: {},
+  handler: async (ctx) => {
+    const events = await ctx.db.query("events").collect();
+    const eventKeyById = new Map(events.map((event) => [String(event._id), event.eventKey]));
+
+    const files = await ctx.db.query("eventFiles").collect();
+    return files
+      .filter((file) => file.storageId && isPdfFile(file.name, file.contentType))
+      .map((file) => ({
+        id: String(file._id),
+        eventKey: eventKeyById.get(String(file.eventId)) || "",
+        storageId: file.storageId,
+        name: file.name,
+        contentType: file.contentType || "",
+        createdAt: file.createdAt,
+      }))
+      .filter((file) => file.eventKey)
+      .sort((left, right) => right.createdAt - left.createdAt);
   },
 });
 

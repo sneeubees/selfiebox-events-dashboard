@@ -121,64 +121,95 @@ export const extractUploadedDocumentNumber = action({
     name: v.string(),
     contentType: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => processUploadedDocument(ctx, args),
+});
+
+async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}) {
+  if (!skipUserCheck) {
     const currentUser = await ctx.runQuery(api.users.current, {});
     if (!currentUser || !currentUser.isApproved || !currentUser.isActive) {
       throw new Error("User access is pending approval.");
     }
+  }
 
-    if (!isPdfUpload(args.name, args.contentType)) {
-      return { processed: false, reason: "not_pdf" };
-    }
+  if (!isPdfUpload(args.name, args.contentType)) {
+    return { processed: false, reason: "not_pdf" };
+  }
 
-    const storedFile = await ctx.storage.get(args.storageId);
-    if (!storedFile) {
-      console.log("Document extraction skipped: storage file missing", {
-        eventKey: args.eventKey,
-        name: args.name,
-      });
-      return { processed: false, reason: "missing_storage_blob" };
-    }
-
-    const buffer = Buffer.from(await storedFile.arrayBuffer());
-    const parsed = await pdfParse(buffer);
-    const text = normalizeExtractedText(parsed.text || "");
-    const knownDocument = extractKnownDocument(text, args.name);
-    const documentType = knownDocument?.documentType || detectDocumentType(args.name, text);
-
-    if (!documentType) {
-      console.log("Document extraction could not detect document type", {
-        eventKey: args.eventKey,
-        name: args.name,
-        preview: text.slice(0, 240),
-      });
-      return { processed: false, reason: "not_quote_or_invoice" };
-    }
-
-    const documentNumber = knownDocument?.documentNumber || extractDocumentNumber(text, args.name, documentType);
-    if (!documentNumber) {
-      console.log("Document extraction found type but no number", {
-        eventKey: args.eventKey,
-        name: args.name,
-        documentType,
-        preview: text.slice(0, 240),
-      });
-      return { processed: false, reason: "number_not_found", documentType };
-    }
-
-    await ctx.runMutation(internal.events.setDocumentNumberFromUpload, {
+  const storedFile = await ctx.storage.get(args.storageId);
+  if (!storedFile) {
+    console.log("Document extraction skipped: storage file missing", {
       eventKey: args.eventKey,
-      documentType,
-      documentNumber,
+      name: args.name,
     });
+    return { processed: false, reason: "missing_storage_blob" };
+  }
 
-    console.log("Document extraction succeeded", {
+  const buffer = Buffer.from(await storedFile.arrayBuffer());
+  const parsed = await pdfParse(buffer);
+  const text = normalizeExtractedText(parsed.text || "");
+  const knownDocument = extractKnownDocument(text, args.name);
+  const documentType = knownDocument?.documentType || detectDocumentType(args.name, text);
+
+  if (!documentType) {
+    console.log("Document extraction could not detect document type", {
+      eventKey: args.eventKey,
+      name: args.name,
+      preview: text.slice(0, 240),
+    });
+    return { processed: false, reason: "not_quote_or_invoice" };
+  }
+
+  const documentNumber = knownDocument?.documentNumber || extractDocumentNumber(text, args.name, documentType);
+  if (!documentNumber) {
+    console.log("Document extraction found type but no number", {
       eventKey: args.eventKey,
       name: args.name,
       documentType,
-      documentNumber,
+      preview: text.slice(0, 240),
     });
+    return { processed: false, reason: "number_not_found", documentType };
+  }
 
-    return { processed: true, documentType, documentNumber };
+  await ctx.runMutation(internal.events.setDocumentNumberFromUpload, {
+    eventKey: args.eventKey,
+    documentType,
+    documentNumber,
+  });
+
+  console.log("Document extraction succeeded", {
+    eventKey: args.eventKey,
+    name: args.name,
+    documentType,
+    documentNumber,
+  });
+
+  return { processed: true, documentType, documentNumber };
+}
+
+export const backfillLatestPdfDocumentNumbers = action({
+  args: {},
+  handler: async (ctx) => {
+    const candidates = await ctx.runQuery(api.files.listPdfCandidatesForDocumentNumbers, {});
+    const seen = new Set();
+    let updated = 0;
+    let skipped = 0;
+
+    for (const candidate of candidates) {
+      const result = await processUploadedDocument(ctx, candidate, { skipUserCheck: true });
+      if (!result.processed) {
+        skipped += 1;
+        continue;
+      }
+
+      const key = `${candidate.eventKey}:${result.documentType}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      updated += 1;
+    }
+
+    return { updated, skipped, scanned: candidates.length };
   },
 });
