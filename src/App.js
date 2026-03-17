@@ -393,6 +393,7 @@ function DashboardApp() {
   const [managedUserForm, setManagedUserForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: 'user', profilePic: '', isApproved: false });
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
+  const [noticeDialog, setNoticeDialog] = useState({ isOpen: false, title: '', message: '' });
   const [renameDialog, setRenameDialog] = useState({ isOpen: false, columnKey: '', value: '' });
   const [dateEditor, setDateEditor] = useState({ eventId: '', columnKey: 'date', value: '' });
   const [eventForm, setEventForm] = useState({ ...eventDefaults });
@@ -549,6 +550,14 @@ function DashboardApp() {
       confirmResolverRef.current = null;
     }
     setConfirmDialog({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
+  };
+
+  const openNotice = (message, title = 'Notice') => {
+    setNoticeDialog({ isOpen: true, title, message });
+  };
+
+  const closeNotice = () => {
+    setNoticeDialog({ isOpen: false, title: '', message: '' });
   };
 
   const closeRenameDialog = () => {
@@ -1703,15 +1712,15 @@ function DashboardApp() {
   const addBranchOption = () => {
     const fullName = newBranchFullName.trim();
     const abbreviation = newBranchAbbreviation.trim().toUpperCase();
-    if (!fullName || !abbreviation || abbreviation.length > 5) {
+    if (!fullName || !abbreviation || abbreviation.length > 7) {
       return;
     }
     if (branchOptions.some((option) => option.abbreviation.toLowerCase() === abbreviation.toLowerCase())) {
-      window.alert('That abbreviation already exists.');
+      openNotice('That abbreviation already exists.');
       return;
     }
     if (branchOptions.some((option) => option.fullName.toLowerCase() === fullName.toLowerCase())) {
-      window.alert('That branch name already exists.');
+      openNotice('That branch name already exists.');
       return;
     }
     const newOption = { abbreviation, fullName, color: newBranchColor };
@@ -1738,18 +1747,18 @@ function DashboardApp() {
     const nextFullName = draft?.fullName?.trim();
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
     const nextColor = draft?.color || '#b8d9ff';
-    if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 5) {
-      window.alert('Please enter a full name and an abbreviation of 5 characters or less.');
+    if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 7) {
+      openNotice('Please enter a full name and an abbreviation of 7 characters or less.');
       return;
     }
     const duplicateAbbreviation = branchOptions.some((option) => option.abbreviation !== branchKey && option.abbreviation.toLowerCase() === nextAbbreviation.toLowerCase());
     if (duplicateAbbreviation) {
-      window.alert('That abbreviation already exists.');
+      openNotice('That abbreviation already exists.');
       return;
     }
     const duplicateBranchName = branchOptions.some((option) => option.abbreviation !== branchKey && option.fullName.toLowerCase() === nextFullName.toLowerCase());
     if (duplicateBranchName) {
-      window.alert('That branch name already exists.');
+      openNotice('That branch name already exists.');
       return;
     }
 
@@ -1830,15 +1839,15 @@ function DashboardApp() {
   const addProductOption = () => {
     const fullName = newProductFullName.trim();
     const abbreviation = newProductAbbreviation.trim().toUpperCase();
-    if (!fullName || !abbreviation || abbreviation.length > 5) {
+    if (!fullName || !abbreviation || abbreviation.length > 7) {
       return;
     }
     if (productOptions.some((option) => option.abbreviation === abbreviation)) {
-      window.alert('A product with that abbreviation already exists. Please change it slightly.');
+      openNotice('A product with that abbreviation already exists. Please change it slightly.');
       return;
     }
     if (productOptions.some((option) => option.fullName.toLowerCase() === fullName.toLowerCase())) {
-      window.alert('That product name already exists.');
+      openNotice('That product name already exists.');
       return;
     }
     const newOption = { abbreviation, fullName, color: newProductColor };
@@ -1865,18 +1874,18 @@ function DashboardApp() {
     const nextFullName = draft?.fullName?.trim();
     const nextColor = draft?.color || '#d9edf8';
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
-    if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 5) {
-      window.alert('Please enter a full name and an abbreviation of 5 characters or less.');
+    if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 7) {
+      openNotice('Please enter a full name and an abbreviation of 7 characters or less.');
       return;
     }
     const duplicateAbbreviation = productOptions.some((option) => (option.optionKey || option.abbreviation) !== productKey && option.abbreviation === nextAbbreviation);
     if (duplicateAbbreviation) {
-      window.alert('Another product already uses that abbreviation.');
+      openNotice('Another product already uses that abbreviation.');
       return;
     }
     const duplicateProductName = productOptions.some((option) => (option.optionKey || option.abbreviation) !== productKey && option.fullName.toLowerCase() === nextFullName.toLowerCase());
     if (duplicateProductName) {
-      window.alert('That product name already exists.');
+      openNotice('That product name already exists.');
       return;
     }
     persistLabelOption('products', productKey, nextFullName, nextAbbreviation, nextColor, productOptions.findIndex((option) => (option.optionKey || option.abbreviation) === productKey));
@@ -2388,6 +2397,7 @@ function DashboardApp() {
       {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
       {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace}>Yes</button></div></div></div></div> : null}
       {confirmDialog.isOpen ? <ModalShell title={confirmDialog.title} onClose={() => closeConfirmation(false)}><div className="simple-stack"><p>{confirmDialog.message}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => closeConfirmation(false)}>Cancel</button><button className={confirmDialog.tone === 'danger' ? 'branch-delete-button danger-button' : 'primary-button'} type="button" onClick={() => closeConfirmation(true)}>{confirmDialog.confirmLabel}</button></div></div></ModalShell> : null}
+      {noticeDialog.isOpen ? <ModalShell title={noticeDialog.title} onClose={closeNotice}><div className="simple-stack"><p>{noticeDialog.message}</p><div className="modal-actions"><button className="primary-button" type="button" onClick={closeNotice}>OK</button></div></div></ModalShell> : null}
     </div>
   );
 }
