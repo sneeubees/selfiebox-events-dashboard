@@ -57,6 +57,7 @@ function parseLegacyTimestamp() {
   return Date.now();
 }
 
+
 export const listEventFiles = query({
   args: { eventKey: v.string() },
   handler: async (ctx, args) => {
@@ -196,6 +197,7 @@ export const removeFile = mutation({
     return String(args.fileId);
   },
 });
+
 
 export const migrateLegacyFiles = mutation({
   args: {},

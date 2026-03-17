@@ -28,6 +28,8 @@ const STATIC_COLUMN_TYPES = {
   status: 'singleItem',
   location: 'text',
   paymentStatus: 'singleItem',
+  quoteNumber: 'text',
+  invoiceNumber: 'text',
   vinyl: 'singleItem',
   gsAi: 'singleItem',
   imagesSent: 'singleItem',
@@ -36,7 +38,13 @@ const STATIC_COLUMN_TYPES = {
   exVat: 'number',
   packageOnly: 'number',
 };
-const STATIC_COLUMNS = BOARD_COLUMNS.map((column) => ({
+const EXTENDED_BOARD_COLUMNS = [
+  ...BOARD_COLUMNS.slice(0, 8),
+  { key: 'quoteNumber', label: 'Quote Number' },
+  { key: 'invoiceNumber', label: 'Invoice Number' },
+  ...BOARD_COLUMNS.slice(8),
+];
+const STATIC_COLUMNS = EXTENDED_BOARD_COLUMNS.map((column) => ({
   ...column,
   type: STATIC_COLUMN_TYPES[column.key] || 'text',
   isCustom: false,
@@ -61,6 +69,8 @@ const eventDefaults = {
   locationLat: null,
   locationLng: null,
   paymentStatus: '50%',
+  quoteNumber: '',
+  invoiceNumber: '',
   vinyl: 'No',
   gsAi: 'No',
   imagesSent: 'No',
@@ -168,6 +178,8 @@ function getColumnWidth(column) {
   if (column.key === 'status') return 132;
   if (column.key === 'location') return 230;
   if (column.key === 'paymentStatus') return 104;
+  if (column.key === 'quoteNumber') return 118;
+  if (column.key === 'invoiceNumber') return 118;
   if (column.key === 'vinyl') return 80;
   if (column.key === 'gsAi') return 86;
   if (column.key === 'imagesSent') return 102;
@@ -200,6 +212,8 @@ function serializeEventForConvex(event) {
     locationLat: typeof event.locationLat === 'number' ? event.locationLat : null,
     locationLng: typeof event.locationLng === 'number' ? event.locationLng : null,
     paymentStatus: event.paymentStatus || '',
+    quoteNumber: event.quoteNumber || '',
+    invoiceNumber: event.invoiceNumber || '',
     vinyl: event.vinyl || '',
     gsAi: event.gsAi || '',
     imagesSent: event.imagesSent || '',
@@ -256,6 +270,7 @@ function DashboardApp() {
   const deleteFutureActivityEntries = useMutation(api.collaboration.deleteFutureActivityEntries);
   const generateEventFileUploadUrl = useMutation(api.files.generateUploadUrl);
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
+  const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
   const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
@@ -371,7 +386,7 @@ function DashboardApp() {
   const [renameDialog, setRenameDialog] = useState({ isOpen: false, columnKey: '', value: '' });
   const [dateEditor, setDateEditor] = useState({ eventId: '', columnKey: 'date', value: '' });
   const [eventForm, setEventForm] = useState({ ...eventDefaults });
-  const [columnLabels, setColumnLabels] = useState(() => { const defaults = BOARD_COLUMNS.reduce((accumulator, column) => ({ ...accumulator, [column.key]: column.label }), {}); if (typeof window === 'undefined') return defaults; try { const stored = JSON.parse(window.localStorage.getItem('selfiebox-column-labels-v1') || '{}'); return { ...defaults, ...stored }; } catch { return defaults; } });
+  const [columnLabels, setColumnLabels] = useState(() => { const defaults = STATIC_COLUMNS.reduce((accumulator, column) => ({ ...accumulator, [column.key]: column.label }), {}); if (typeof window === 'undefined') return defaults; try { const stored = JSON.parse(window.localStorage.getItem('selfiebox-column-labels-v1') || '{}'); return { ...defaults, ...stored }; } catch { return defaults; } });
   const [adminMenuColumn, setAdminMenuColumn] = useState(null);
   const [adminMenuPosition, setAdminMenuPosition] = useState({ top: 0, left: 0 });
   const [rightsColumnKey, setRightsColumnKey] = useState('');
@@ -1028,6 +1043,16 @@ function DashboardApp() {
         contentType: file.type || '',
         sizeLabel: formatFileSize(file.size),
       });
+      if ((file.type || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(file.name)) {
+        void extractUploadedDocumentNumber({
+          eventKey: selectedEvent.id,
+          storageId,
+          name: file.name,
+          contentType: file.type || '',
+        }).catch((error) => {
+          console.error('Failed to extract document number', error);
+        });
+      }
     } catch (error) {
       console.error('Failed to upload file', error);
       window.alert('The file could not be uploaded. Please try again.');
@@ -2467,6 +2492,7 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
   if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
   if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value)} />;
   if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value)} />;
+  if (columnKey === 'quoteNumber' || columnKey === 'invoiceNumber') return <span title={event[columnKey] || ''}>{event[columnKey] || ''}</span>;
   if (columnKey === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === 'date' ? <DateInlineEditor value={dateEditor.value} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, 'date')} /> : <button className='cell-select-button date-cell-button' type='button' title={event.date || ''} disabled={!canEdit} onClick={() => openDateEditor(event, 'date')}><span>{formatDateDisplay(event.date) || 'Pick date'}</span></button>;
   if (columnKey === 'branch') return <button className='cell-select-button' type='button' title={event.branch.map((item) => branchFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openBranchSelector(event.id)}><CompactTagList items={event.branch} styles={branchStyles} /></button>;
   if (columnKey === 'products') return <button className='cell-select-button' type='button' title={event.products.map((item) => productFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openProductSelector(event.id)}><CompactTagList items={event.products} styles={productStyles} /></button>;

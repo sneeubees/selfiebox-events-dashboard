@@ -56,6 +56,8 @@ export default defineSchema({
     locationLat: v.optional(v.number()),
     locationLng: v.optional(v.number()),
     paymentStatus: v.optional(v.string()),
+    quoteNumber: v.optional(v.string()),
+    invoiceNumber: v.optional(v.string()),
     vinyl: v.optional(v.string()),
     gsAi: v.optional(v.string()),
     imagesSent: v.optional(v.string()),

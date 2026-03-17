@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { seedEvents } from "../seedData";
 
 function abbreviateLabel(value) {
@@ -27,6 +27,8 @@ function normalizeSeedEvent(event) {
     locationLat: typeof event.locationLat === 'number' ? event.locationLat : undefined,
     locationLng: typeof event.locationLng === 'number' ? event.locationLng : undefined,
     paymentStatus: event.paymentStatus || "",
+    quoteNumber: event.quoteNumber || "",
+    invoiceNumber: event.invoiceNumber || "",
     vinyl: event.vinyl || "",
     gsAi: event.gsAi || "",
     imagesSent: event.imagesSent || "",
@@ -59,6 +61,8 @@ function toEventDto(record) {
     locationLat: typeof record.locationLat === 'number' ? record.locationLat : null,
     locationLng: typeof record.locationLng === 'number' ? record.locationLng : null,
     paymentStatus: record.paymentStatus || "",
+    quoteNumber: record.quoteNumber || "",
+    invoiceNumber: record.invoiceNumber || "",
     vinyl: record.vinyl || "",
     gsAi: record.gsAi || "",
     imagesSent: record.imagesSent || "",
@@ -155,6 +159,8 @@ export const upsert = mutation({
       locationLat: v.optional(v.union(v.number(), v.null())),
       locationLng: v.optional(v.union(v.number(), v.null())),
       paymentStatus: v.optional(v.string()),
+      quoteNumber: v.optional(v.string()),
+      invoiceNumber: v.optional(v.string()),
       vinyl: v.optional(v.string()),
       gsAi: v.optional(v.string()),
       imagesSent: v.optional(v.string()),
@@ -207,6 +213,8 @@ export const upsert = mutation({
       locationLat: typeof args.event.locationLat === 'number' ? args.event.locationLat : undefined,
       locationLng: typeof args.event.locationLng === 'number' ? args.event.locationLng : undefined,
       paymentStatus: args.event.paymentStatus || "",
+      quoteNumber: args.event.quoteNumber || "",
+      invoiceNumber: args.event.invoiceNumber || "",
       vinyl: args.event.vinyl || "",
       gsAi: args.event.gsAi || "",
       imagesSent: args.event.imagesSent || "",
@@ -252,5 +260,31 @@ export const remove = mutation({
 
     await ctx.db.delete(existing._id);
     return args.eventId;
+  },
+});
+
+export const setDocumentNumberFromUpload = internalMutation({
+  args: {
+    eventKey: v.string(),
+    documentType: v.union(v.literal("quote"), v.literal("invoice")),
+    documentNumber: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("events")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
+      .unique();
+
+    if (!existing) {
+      return null;
+    }
+
+    const patch =
+      args.documentType === "quote"
+        ? { quoteNumber: args.documentNumber, updatedAt: Date.now() }
+        : { invoiceNumber: args.documentNumber, updatedAt: Date.now() };
+
+    await ctx.db.patch(existing._id, patch);
+    return toEventDto(await ctx.db.get(existing._id));
   },
 });
