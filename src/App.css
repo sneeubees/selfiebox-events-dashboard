@@ -161,6 +161,10 @@ button { cursor: pointer; }
 .row-copy:hover { background: #dbe6ff; }
 .row-delete { width: 24px; height: 24px; border-radius: 999px; background: transparent; color: #cf334e; font-weight: 700; }
 .row-delete:hover { background: #ffe8ed; }
+.autocomplete-field { position: relative; width: 100%; min-width: 0; }
+.autocomplete-popover { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 70; display: grid; gap: 2px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14); }
+.autocomplete-option { width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text); padding: 6px 8px; text-align: left; font-size: 0.78rem; }
+.autocomplete-option:hover { background: #edf3ff; color: #274784; }
 .tag { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 4px 8px; border-radius: 8px; font-size: 0.72rem; font-weight: 700; text-align: center; }
 .tag-empty { background: #eef1f5; color: #60708b; }
 .empty-cell-value { color: #60708b; font-size: 0.68rem; }
@@ -171,6 +175,9 @@ button { cursor: pointer; }
 .extra-pill-corner { position: absolute; top: -5px; right: -6px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 0.52rem; line-height: 1; box-shadow: 0 0 0 1px #fff; }
 .inline-input { width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; padding: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inline-input:hover, .inline-input:focus { border-color: #b8c7ef; background: #fff; padding: 4px 6px; border-radius: 6px; outline: none; }
+.name-cell-copy .autocomplete-field { min-width: 0; }
+.name-cell-copy .autocomplete-popover { left: 0; right: auto; min-width: min(220px, 100%); }
+.cell-hours .autocomplete-popover { min-width: 96px; }
 .cell-location { overflow: visible; }
 .location-field { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .location-field.compact { gap: 4px; }

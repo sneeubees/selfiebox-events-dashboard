@@ -1102,10 +1102,6 @@ function DashboardApp() {
   };
 
   const deleteEventFile = async (fileId) => {
-    if (selectedEvent?.status === 'Event Completed') {
-      window.alert('Files can no longer be deleted once the event is completed.');
-      return;
-    }
     const shouldDelete = await requestConfirmation({ title: 'Delete file', message: 'Delete this file?', confirmLabel: 'Delete', tone: 'danger' });
     if (!shouldDelete) {
       return;
@@ -1183,6 +1179,11 @@ function DashboardApp() {
   };
 
   const deleteEvent = async (eventId) => {
+    const eventRecord = eventsRef.current.find((event) => event.id === eventId);
+    if (eventRecord && isPastEvent(eventRecord) && currentUser?.role !== 'admin') {
+      openNotice('Only admins can delete past events.');
+      return;
+    }
     const shouldDelete = await requestConfirmation({ title: 'Delete event', message: 'Delete this event?', confirmLabel: 'Delete', tone: 'danger' });
     if (!shouldDelete) {
       return;
@@ -2306,9 +2307,7 @@ function DashboardApp() {
         </div>
       </header>
 
-      <section className="board-shell">
-        <datalist id="event-name-history">{mainNameSuggestions.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="event-hours-history">{hoursSuggestions.map((value) => <option key={value} value={value} />)}</datalist>
+        <section className="board-shell">
         <div className="board-toolbar compact-toolbar">
           <div className="filters-grid compact-filters single-row-tools">
             <div className="search-input-wrap">
@@ -2351,7 +2350,7 @@ function DashboardApp() {
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
-                {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, customItemStyles, customColumns, customSingleTagWidths, setActiveRowId, openLocationPreview, canEdit: canEditEventColumn(event, column.key, effectiveColumnRights[column.key]?.canEdit ?? true) })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Duplicate" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>D</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, customItemStyles, customColumns, customSingleTagWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Duplicate" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>D</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows}>+ Add Event</button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.key === 'exVat' ? currencyFormatter.format(totals.exVat) : column.key === 'packageOnly' ? currencyFormatter.format(totals.packageOnly) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -2370,7 +2369,7 @@ function DashboardApp() {
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
       <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'activity', label: 'Activity Log' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" disabled={selectedEvent.status === 'Event Completed'} onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'activity', label: 'Activity Log' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
       </aside>
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={previewFile.url} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
@@ -2556,12 +2555,12 @@ function LocationMapPreview({ location }) {
   return <div className="map-preview-canvas" ref={mapRef} />;
 }
 
-function renderEventFields(form, setForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, paymentNames, yesNoNames, attendantNames, openLocationPreview) {
-  return <><label><span>Name / Item</span><input className="text-input" list="event-name-history" required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label><label><span>Event name</span><input className="text-input" placeholder="Event Name" value={form.eventTitle || ''} onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))} /></label><label><span>Date</span><input className="text-input" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Hours</span><input className="text-input" list="event-hours-history" value={form.hours} onChange={(event) => setForm((current) => ({ ...current, hours: event.target.value }))} /></label><label><span>Branch</span><select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>{branchAbbreviations.map((option) => <option key={option} value={option} title={branchFullNames[option] || option}>{option}</option>)}</select></label><label><span>Product</span><select value={form.products[0] || ''} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}><option value=''>Select product</option>{productAbbreviations.map((option) => <option key={option} value={option} title={productFullNames[option] || option}>{productFullNames[option] || option}</option>)}</select></label><label><span>Status</span><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{statusNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label className="full-span"><span>Location</span><LocationInputField value={form.location || ''} placeholder='Start typing address' className='text-input' onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: '', locationLat: null, locationLng: null }))} onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))} onOpenMap={() => openLocationPreview({ name: form.name || 'New event', location: form.location || '', locationLat: form.locationLat, locationLng: form.locationLng })} hasCoordinates={typeof form.locationLat === 'number' && typeof form.locationLng === 'number'} /></label><label><span>Payment</span><select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>{paymentNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Vinyl</span><select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>GS / AI</span><select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Images sent</span><select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Snappic</span><select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Attendant/s</span><select value={form.attendants[0] || ''} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}><option value="">Select attendant</option>{attendantNames.map((option) => <option key={option} value={option} title={option}>{option}</option>)}</select></label><label><span>Ex. VAT</span><input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} /></label><label><span>Package only</span><input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} /></label></>;
+function renderEventFields(form, setForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, paymentNames, yesNoNames, attendantNames, openLocationPreview, mainNameSuggestions, hoursSuggestions) {
+  return <><label><span>Name / Item</span><AutocompleteTextInput className="text-input" required value={form.name} suggestions={mainNameSuggestions} onChange={(nextValue) => setForm((current) => ({ ...current, name: nextValue }))} /></label><label><span>Event name</span><input className="text-input" placeholder="Event Name" value={form.eventTitle || ''} onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))} /></label><label><span>Date</span><input className="text-input" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Hours</span><AutocompleteTextInput className="text-input" value={form.hours} suggestions={hoursSuggestions} onChange={(nextValue) => setForm((current) => ({ ...current, hours: nextValue }))} /></label><label><span>Branch</span><select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>{branchAbbreviations.map((option) => <option key={option} value={option} title={branchFullNames[option] || option}>{option}</option>)}</select></label><label><span>Product</span><select value={form.products[0] || ''} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}><option value=''>Select product</option>{productAbbreviations.map((option) => <option key={option} value={option} title={productFullNames[option] || option}>{productFullNames[option] || option}</option>)}</select></label><label><span>Status</span><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{statusNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label className="full-span"><span>Location</span><LocationInputField value={form.location || ''} placeholder='Start typing address' className='text-input' onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: '', locationLat: null, locationLng: null }))} onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))} onOpenMap={() => openLocationPreview({ name: form.name || 'New event', location: form.location || '', locationLat: form.locationLat, locationLng: form.locationLng })} hasCoordinates={typeof form.locationLat === 'number' && typeof form.locationLng === 'number'} /></label><label><span>Payment</span><select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>{paymentNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Vinyl</span><select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>GS / AI</span><select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Images sent</span><select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Snappic</span><select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Attendant/s</span><select value={form.attendants[0] || ''} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}><option value="">Select attendant</option>{attendantNames.map((option) => <option key={option} value={option} title={option}>{option}</option>)}</select></label><label><span>Ex. VAT</span><input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} /></label><label><span>Package only</span><input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} /></label></>;
 }
-function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, customItemStyles, customColumns, customSingleTagWidths, setActiveRowId, openLocationPreview, canEdit }) {
-    if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><input className="inline-input inline-name" list="event-name-history" title={event.name} value={event.name} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'name', inputEvent.target.value)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
-  if (columnKey === 'hours') return <input className="inline-input inline-hours" list="event-hours-history" title={event.hours} value={event.hours} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'hours', inputEvent.target.value)} />;
+function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, customItemStyles, customColumns, customSingleTagWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit }) {
+    if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
+  if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;
   if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
   if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value)} />;
   if (columnKey === 'exVatAuto') return <span title={String(event.exVatAuto || '')}>{event.exVatAuto || ''}</span>;
@@ -2634,6 +2633,65 @@ function getMonthOrderStorageKey(userId) {
 function columnTitle(columnKey) {
   const titles = { paymentStatus: 'Payment', vinyl: 'Vinyl', gsAi: 'GS / AI', imagesSent: 'Images Sent', snappic: 'Snappic' };
   return titles[columnKey] || columnKey;
+}
+
+function AutocompleteTextInput({ value, onChange, suggestions = [], readOnly = false, className = '', onFocus, title, placeholder, required = false }) {
+  const [isFocused, setIsFocused] = useState(false);
+  const normalizedValue = String(value || '');
+  const normalizedPrefix = normalizedValue.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!normalizedPrefix) {
+      return [];
+    }
+
+    return suggestions
+      .filter((option) => option.toLowerCase().startsWith(normalizedPrefix))
+      .slice(0, 8);
+  }, [normalizedPrefix, suggestions]);
+
+  const showSuggestions = !readOnly && isFocused && normalizedPrefix.length > 0 && matches.length > 0;
+
+  return (
+    <div className="autocomplete-field">
+      <input
+        className={className}
+        title={title}
+        value={normalizedValue}
+        readOnly={readOnly}
+        placeholder={placeholder}
+        required={required}
+        autoComplete="off"
+        onFocus={(event) => {
+          setIsFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => {
+            setIsFocused(false);
+          }, 120);
+        }}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {showSuggestions ? (
+        <div className="autocomplete-popover">
+          {matches.map((option) => (
+            <button
+              key={option}
+              className="autocomplete-option"
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onChange(option);
+                setIsFocused(false);
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ColorSwatchPicker({ value, onChange, className = '' }) {
@@ -3022,18 +3080,26 @@ function formatExportValue(columnKey, event, lookups) {
   return event[columnKey] == null ? '' : String(event[columnKey]);
 }
 
-function isCompletedEvent(event) {
-  return String(event?.status || '').trim() === 'Event Completed';
-}
-
-function canEditEventColumn(event, columnKey, baseCanEdit) {
-  if (!baseCanEdit) {
+function isPastEvent(event) {
+  const value = String(event?.date || '').trim();
+  if (!value) {
     return false;
   }
-  if (!isCompletedEvent(event)) {
-    return true;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const eventDate = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    return eventDate < today;
   }
-  return columnKey === 'imagesSent';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+  parsed.setHours(0, 0, 0, 0);
+  return parsed < today;
 }
 
 function orderColumnsAfterPayment(columns, savedOrder) {
