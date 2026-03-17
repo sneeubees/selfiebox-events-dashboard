@@ -104,8 +104,8 @@ button { cursor: pointer; }
 .column-order-controls { display: inline-flex; align-items: center; gap: 3px; margin-top: 3px; }
 .column-order-button { width: 15px; height: 15px; border: 0; border-radius: 999px; background: #e7eefc; color: #355190; font-size: 0.52rem; font-weight: 700; line-height: 1; padding: 0; }
 .column-order-button:hover { background: #d8e5ff; }
-.board-header .cell-name, .board-entry .cell-name { position: sticky; left: 0; z-index: 6; }
-.board-header .cell-name { z-index: 9; background: #f3f5f9; }
+.board-header .cell-name, .board-entry .cell-name { position: sticky; left: 0; z-index: 12; }
+.board-header .cell-name { z-index: 14; background: #f3f5f9; }
 .board-entry .cell-name { background: #fff; box-shadow: 1px 0 0 var(--line); }
 .cell-name { overflow: visible; }
 .board-entry:hover .cell-name { background: #f5fbff; }
@@ -162,8 +162,8 @@ button { cursor: pointer; }
 .row-copy:hover { background: #dbe6ff; }
 .row-delete { width: 24px; height: 24px; border-radius: 999px; background: transparent; color: #cf334e; font-weight: 700; }
 .row-delete:hover { background: #ffe8ed; }
-.autocomplete-field { position: relative; width: 100%; min-width: 0; }
-.autocomplete-popover { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 70; display: grid; gap: 2px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14); }
+.autocomplete-field { position: relative; width: 100%; min-width: 0; overflow: visible; }
+.autocomplete-popover { position: absolute; top: calc(100% + 4px); left: 0; right: auto; z-index: 120; display: grid; gap: 2px; width: max-content; min-width: 280px; max-width: 360px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14); }
 .autocomplete-option { width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text); padding: 6px 8px; text-align: left; font-size: 0.78rem; }
 .autocomplete-option:hover { background: #edf3ff; color: #274784; }
 .tag { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 4px 8px; border-radius: 8px; font-size: 0.72rem; font-weight: 700; text-align: center; }
@@ -177,8 +177,8 @@ button { cursor: pointer; }
 .inline-input { width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; padding: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inline-input:hover, .inline-input:focus { border-color: #b8c7ef; background: #fff; padding: 4px 6px; border-radius: 6px; outline: none; }
 .name-cell-copy .autocomplete-field { min-width: 0; }
-.name-cell-copy .autocomplete-popover { left: 0; right: auto; min-width: 220px; }
-.cell-hours .autocomplete-popover { min-width: 96px; }
+.name-cell-copy .autocomplete-popover { left: 0; min-width: 300px; max-width: 380px; }
+.cell-hours .autocomplete-popover { min-width: 120px; max-width: 160px; }
 .cell-location { overflow: visible; }
 .location-field { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .location-field.compact { gap: 4px; }
