@@ -140,6 +140,8 @@ button { cursor: pointer; }
 .month-accent-11 .month-header strong { color: #6240c3; }
 .month-accent-12 .month-header strong { color: #196aa0; }
 .board-entry { background: #fff; transition: background 120ms ease; }
+.board-entry.is-alt-day .cell { background: #f6f7fa; }
+.board-entry.is-alt-day .cell-name { background: #f6f7fa; }
 .board-entry:hover .cell { background: #f5fbff; }
 .board-entry.is-active .cell { background: #eef4ff; }
 .board-entry.is-active .cell-name { background: #e6efff; }
