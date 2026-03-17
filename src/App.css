@@ -149,7 +149,7 @@ button { cursor: pointer; }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }
 .name-cell-copy { display: grid; gap: 1px; min-width: 0; align-content: center; }
-.plus-trigger, .drawer-close { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 999px; background: var(--blue); color: #fff; font-size: 0.8rem; line-height: 1; }
+.plus-trigger, .drawer-close { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--blue); color: #fff; font-size: 0.8rem; line-height: 1; padding: 0; text-align: center; }
 .row-copy { width: 24px; height: 24px; border-radius: 999px; background: #e8edf8; color: #355190; font-weight: 700; }
 .row-copy:hover { background: #dbe6ff; }
 .row-delete { width: 24px; height: 24px; border-radius: 999px; background: transparent; color: #cf334e; font-weight: 700; }
