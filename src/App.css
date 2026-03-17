@@ -97,6 +97,11 @@ button { cursor: pointer; }
 .search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
 .filter-open-button { margin-left: 12px; }
+.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #d5def1; border-radius: 999px; background: #eef3ff; padding: 0 24px 0 0; }
+.saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #33508b; font-size: 0.72rem; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-filter-chip-button:hover { color: #223d74; }
+.saved-filter-chip-close { position: absolute; top: 2px; right: 4px; width: 16px; height: 16px; border: 0; border-radius: 999px; background: #d9e4fb; color: #4b628f; font-size: 0.62rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
+.saved-filter-chip-close:hover { background: #c7d7fb; color: #243e75; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: sticky; top: 0; z-index: 8; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
