@@ -19,8 +19,8 @@ function normalizeExtractedText(value) {
 
 function detectDocumentType(name, text) {
   const haystack = `${name || ""}\n${text || ""}`.toLowerCase();
-  const hasInvoice = /\btax invoice\b|\binvoice\b/.test(haystack);
-  const hasQuote = /\bquotation\b|\bquote\b/.test(haystack);
+  const hasInvoice = /\btax invoice\b|\binvoice\b|inv[-_ ]?\d{3,}|\bi\d{5,}\b/.test(haystack);
+  const hasQuote = /\bquotation\b|\bquote\b|q\d{4,}/.test(haystack);
 
   if (hasInvoice && !hasQuote) {
     return "invoice";
