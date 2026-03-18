@@ -1370,6 +1370,7 @@ function DashboardApp() {
       eventName: newEvent.name || 'Untitled event',
       text: `Added blank event line for ${monthName}.`,
     }, 500);
+    clearFilters({ includeSearch: true });
     setCollapsedMonths((current) => ({ ...current, [monthName]: false }));
   };
 
