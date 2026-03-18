@@ -321,6 +321,7 @@ function DashboardApp() {
   const [newStatusColor, setNewStatusColor] = useState('#23b26d');
   const [statusDrafts, setStatusDrafts] = useState({});
   const [selectedPayments, setSelectedPayments] = useState([]);
+  const [selectedAttendants, setSelectedAttendants] = useState([]);
   const [managedSingleOptions, setManagedSingleOptions] = useState({
     paymentStatus: defaultPaymentOptions,
     accounts: defaultPaymentOptions,
@@ -399,6 +400,7 @@ function DashboardApp() {
       setSelectedProducts([]);
       setSelectedStatuses([]);
       setSelectedPayments([]);
+      setSelectedAttendants([]);
       return;
     }
 
@@ -413,12 +415,14 @@ function DashboardApp() {
       setSelectedProducts(Array.isArray(activeFilters?.products) ? activeFilters.products : []);
       setSelectedStatuses(Array.isArray(activeFilters?.statuses) ? activeFilters.statuses : []);
       setSelectedPayments(Array.isArray(activeFilters?.payments) ? activeFilters.payments : []);
+      setSelectedAttendants(Array.isArray(activeFilters?.attendants) ? activeFilters.attendants : []);
     } catch {
       setSavedFilterViews([]);
       setSelectedBranches([]);
       setSelectedProducts([]);
       setSelectedStatuses([]);
       setSelectedPayments([]);
+      setSelectedAttendants([]);
     }
 
     filtersHydratedRef.current = true;
@@ -434,9 +438,10 @@ function DashboardApp() {
         products: selectedProducts,
         statuses: selectedStatuses,
         payments: selectedPayments,
+        attendants: selectedAttendants,
       })
     );
-  }, [currentUser?.id, selectedBranches, selectedProducts, selectedStatuses, selectedPayments]);
+  }, [currentUser?.id, selectedBranches, selectedProducts, selectedStatuses, selectedPayments, selectedAttendants]);
   useEffect(() => {
     if (!filtersHydratedRef.current || !currentUser?.id || typeof window === 'undefined') {
       return;
@@ -593,11 +598,12 @@ function DashboardApp() {
         return event.name.toLowerCase().includes(query) || String(event.eventTitle || '').toLowerCase().includes(query);
       })
       .filter((event) => (selectedBranches.length ? event.branch.some((item) => selectedBranches.includes(item)) : true))
-      .filter((event) => (selectedProducts.length ? event.products.some((item) => selectedProducts.includes(item)) : true))
-      .filter((event) => (selectedStatuses.length ? selectedStatuses.includes(event.status) : true))
-      .filter((event) => (selectedPayments.length ? selectedPayments.includes(event.paymentStatus) : true))
-      .sort((left, right) => sortEvents(left, right));
-  }, [events, search, selectedBranches, selectedPayments, selectedProducts, selectedStatuses, selectedWorkspaceYear]);
+        .filter((event) => (selectedProducts.length ? event.products.some((item) => selectedProducts.includes(item)) : true))
+        .filter((event) => (selectedStatuses.length ? selectedStatuses.includes(event.status) : true))
+        .filter((event) => (selectedPayments.length ? selectedPayments.includes(event.paymentStatus) : true))
+        .filter((event) => (selectedAttendants.length ? (event.attendants || []).some((item) => selectedAttendants.includes(item)) : true))
+        .sort((left, right) => sortEvents(left, right));
+  }, [events, search, selectedAttendants, selectedBranches, selectedPayments, selectedProducts, selectedStatuses, selectedWorkspaceYear]);
 
   const eventsByMonth = useMemo(() => {
     const grouped = Object.fromEntries(monthNames.map((month) => [month, []]));
@@ -1957,12 +1963,14 @@ function DashboardApp() {
     setSelectedProducts([]);
     setSelectedStatuses([]);
     setSelectedPayments([]);
+    setSelectedAttendants([]);
   };
   const activeFilterCount =
     selectedBranches.length +
     selectedProducts.length +
     selectedStatuses.length +
-    selectedPayments.length;
+    selectedPayments.length +
+    selectedAttendants.length;
   const hasActiveFilters = activeFilterCount > 0;
   const activeSavedFilterViewId = useMemo(() => {
     const sameValues = (left = [], right = []) =>
@@ -1972,10 +1980,11 @@ function DashboardApp() {
         sameValues(view.branches || [], selectedBranches) &&
         sameValues(view.products || [], selectedProducts) &&
         sameValues(view.statuses || [], selectedStatuses) &&
-        sameValues(view.payments || [], selectedPayments)
-    );
-    return match?.id || '';
-  }, [savedFilterViews, selectedBranches, selectedProducts, selectedStatuses, selectedPayments]);
+        sameValues(view.payments || [], selectedPayments) &&
+        sameValues(view.attendants || [], selectedAttendants)
+      );
+      return match?.id || '';
+  }, [savedFilterViews, selectedAttendants, selectedBranches, selectedProducts, selectedStatuses, selectedPayments]);
 
   const openSaveCustomViewModal = () => {
     if (savedFilterViews.length >= 8) {
@@ -2003,6 +2012,7 @@ function DashboardApp() {
       products: [...selectedProducts],
       statuses: [...selectedStatuses],
       payments: [...selectedPayments],
+      attendants: [...selectedAttendants],
     }].slice(0, 8));
     setSaveFilterViewModalOpen(false);
     setNewFilterViewName('');
@@ -2013,6 +2023,7 @@ function DashboardApp() {
     setSelectedProducts([...(view.products || [])]);
     setSelectedStatuses([...(view.statuses || [])]);
     setSelectedPayments([...(view.payments || [])]);
+    setSelectedAttendants([...(view.attendants || [])]);
   };
 
   const deleteSavedFilterView = (viewId) => {
@@ -2752,7 +2763,7 @@ function DashboardApp() {
       {renameDialog.isOpen ? <ModalShell title="Rename header" onClose={closeRenameDialog}><div className="simple-stack"><label className="full-span"><span>Header name</span><input className="text-input" value={renameDialog.value} onChange={(event) => setRenameDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveRenamedColumn(); } }} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeRenameDialog}>Cancel</button><button className="primary-button" type="button" onClick={saveRenamedColumn}>Save</button></div></div></ModalShell> : null}
 
       {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4>{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</section><section className="rights-section"><h4>Users</h4>{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</section></div></ModalShell> : null}
-      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup"><FilterGroup title="Branches" options={branchAbbreviations} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productAbbreviations} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></div></ModalShell> : null}
+      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={attendantOptions.map((option) => option.fullName)} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
       {exportDialog.isOpen ? <ModalShell title={exportDialog.title} onClose={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}><div className="simple-stack export-dialog"><p>Select the columns to include in this export.</p><div className="export-column-grid">{visibleColumns.map((column) => <label className="export-column-option" key={column.key}><input type="checkbox" checked={exportDialog.selectedKeys.includes(column.key)} onChange={() => toggleExportColumn(column.key)} /><span>{displayColumnLabel(column)}</span></label>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setExportDialog((current) => ({ ...current, selectedKeys: visibleColumns.map((column) => column.key) }))}>Select all</button><button className="ghost-button" type="button" onClick={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}>Cancel</button><button className="primary-button" type="button" onClick={runExport}>Export</button></div></div></ModalShell> : null}
         {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
@@ -3372,8 +3383,9 @@ function CompactTagList({ items, styles }) {
 }
 
 function FilterGroup({ title, options, selected, onToggle }) {
-  const shouldScroll = options.length > 10;
-  return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{options.map((option) => <label key={option} className="filter-option"><input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} /><span>{option}</span></label>)}</div></section>;
+  const normalizedOptions = options.map((option) => typeof option === 'string' ? { value: option, label: option } : option);
+  const shouldScroll = normalizedOptions.length > 10;
+  return <section className="filter-group"><h4>{title}</h4><div className={["filter-options", shouldScroll ? "is-scrollable" : ""].join(" ").trim()}>{normalizedOptions.map((option) => <label key={option.value} className="filter-option"><input type="checkbox" checked={selected.includes(option.value)} onChange={() => onToggle(option.value)} /><span title={option.label}>{option.label}</span></label>)}</div></section>;
 }
 
 function RegistrationForm({ onSwitchToLogin, clerkAppearance }) {
