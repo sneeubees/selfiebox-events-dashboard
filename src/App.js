@@ -1477,7 +1477,11 @@ function DashboardApp() {
       eventName: newEvent.name || 'Untitled event',
       text: 'Created event.',
     }, 500);
-    clearFilters();
+    clearFilters({ includeSearch: true });
+    setCollapsedMonths((current) => ({
+      ...current,
+      [newEvent.draftMonth || monthNames[new Date().getMonth()]]: false,
+    }));
     setShowAddModal(false);
     setEventForm({ ...eventDefaults });
     openDrawer(newEvent.id);
