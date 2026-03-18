@@ -1470,8 +1470,8 @@ function DashboardApp() {
       isOpen: true,
       title: scope === 'month' ? `Export ${month}` : `Export ${selectedWorkspaceYear}`,
       filename: scope === 'month'
-        ? `selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xls`
-        : `selfiebox-events-${selectedWorkspaceYear}.xls`,
+        ? `selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xml`
+        : `selfiebox-events-${selectedWorkspaceYear}.xml`,
       scope,
       sheets,
       selectedKeys: visibleColumns.map((column) => column.key),
@@ -3755,7 +3755,7 @@ function escapeXml(value) {
 }
 
 function downloadWorkbookFile(filename, contents) {
-  const blob = new Blob([contents], { type: 'application/vnd.ms-excel' });
+  const blob = new Blob([contents], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
