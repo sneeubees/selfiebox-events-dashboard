@@ -72,8 +72,8 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const currentUser = await requireCurrentUser(ctx);
-    if (currentUser.role !== "admin") {
-      throw new Error("Only admins can add columns.");
+    if (!["admin", "manager"].includes(currentUser.role)) {
+      throw new Error("Only admins and managers can add columns.");
     }
 
     const label = String(args.label || "").trim();
