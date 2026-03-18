@@ -104,6 +104,7 @@ function defaultOptionsByColumn() {
     products: defaultProductOptions,
     status: defaultStatusOptions,
     paymentStatus: defaultPaymentOptions,
+    accounts: defaultPaymentOptions,
     vinyl: defaultYesNoOptions,
     gsAi: defaultYesNoOptions,
     imagesSent: defaultYesNoOptions,
@@ -138,14 +139,15 @@ export const seedInitialData = mutation({
   args: {},
   handler: async (ctx) => {
     await requireCurrentUser(ctx);
-    const existing = await ctx.db.query("labelOptions").take(1);
-    if (existing.length) {
-      return { inserted: 0, alreadySeeded: true };
-    }
-
+    const existingOptions = await ctx.db.query("labelOptions").collect();
+    const existingKeys = new Set(existingOptions.map((option) => `${option.columnKey}::${option.optionKey}`));
     let inserted = 0;
     for (const [columnKey, options] of Object.entries(defaultOptionsByColumn())) {
       for (const option of options) {
+        const uniqueKey = `${columnKey}::${option.optionKey}`;
+        if (existingKeys.has(uniqueKey)) {
+          continue;
+        }
         await ctx.db.insert("labelOptions", {
           columnKey,
           optionKey: option.optionKey,
@@ -158,11 +160,12 @@ export const seedInitialData = mutation({
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
+        existingKeys.add(uniqueKey);
         inserted += 1;
       }
     }
 
-    return { inserted, alreadySeeded: false };
+    return { inserted, alreadySeeded: inserted === 0 };
   },
 });
 
@@ -194,7 +197,7 @@ export const cleanupDuplicates = mutation({
     await requireCurrentUser(ctx);
     const allOptions = await ctx.db.query("labelOptions").collect();
     const allEvents = await ctx.db.query("events").collect();
-    const columns = ["branch", "products", "status", "paymentStatus", "vinyl", "gsAi", "imagesSent", "snappic", "attendants"];
+    const columns = ["branch", "products", "status", "paymentStatus", "accounts", "vinyl", "gsAi", "imagesSent", "snappic", "attendants"];
     let removed = 0;
     let touchedEvents = 0;
 
