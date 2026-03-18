@@ -2,6 +2,7 @@ const GOOGLE_MAPS_SCRIPT_ID = 'selfiebox-google-maps-api';
 const GOOGLE_MAPS_VERSION = 'weekly';
 
 let googleMapsPromise = null;
+let googlePlacesPromise = null;
 
 export function getGoogleMapsApiKey() {
   return process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
@@ -49,6 +50,24 @@ export function loadGoogleMapsApi() {
   });
 
   return googleMapsPromise;
+}
+
+export async function loadGooglePlacesLibrary() {
+  const google = await loadGoogleMapsApi();
+  if (!google?.maps?.importLibrary) {
+    return null;
+  }
+
+  if (googlePlacesPromise) {
+    return googlePlacesPromise;
+  }
+
+  googlePlacesPromise = google.maps.importLibrary('places').catch((error) => {
+    googlePlacesPromise = null;
+    throw error;
+  });
+
+  return googlePlacesPromise;
 }
 
 export function extractPlaceResult(place, fallbackValue = '', explicitPlaceId = '') {

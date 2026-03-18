@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
-import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
+import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi, loadGooglePlacesLibrary } from './googleMaps';
 import './App.css';
 import {
   BOARD_COLUMNS,
@@ -2742,6 +2742,15 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
+    if (readOnly || !hasGoogleMapsApiKey()) {
+      return;
+    }
+    void loadGooglePlacesLibrary().catch((error) => {
+      console.error('Google Places library failed to preload', error);
+    });
+  }, [readOnly]);
+
+  useEffect(() => {
     if (!isOpen) {
       return undefined;
     }
@@ -2774,12 +2783,11 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
 
     const mountAutocomplete = async () => {
       try {
-        await loadGoogleMapsApi();
-        if (!isMounted || !autocompleteContainerRef.current || !window.google?.maps?.importLibrary) {
+        const placesLibrary = await loadGooglePlacesLibrary();
+        if (!isMounted || !autocompleteContainerRef.current) {
           return;
         }
 
-        const placesLibrary = await window.google.maps.importLibrary('places');
         const PlaceAutocompleteElement = placesLibrary?.PlaceAutocompleteElement;
         if (!PlaceAutocompleteElement || !autocompleteContainerRef.current) {
           return;
