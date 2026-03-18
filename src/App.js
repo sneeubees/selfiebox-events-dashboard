@@ -1873,6 +1873,12 @@ function DashboardApp() {
     setSelectedStatuses([]);
     setSelectedPayments([]);
   };
+  const activeFilterCount =
+    selectedBranches.length +
+    selectedProducts.length +
+    selectedStatuses.length +
+    selectedPayments.length;
+  const hasActiveFilters = activeFilterCount > 0;
 
   const openSaveCustomViewModal = () => {
     if (savedFilterViews.length >= 4) {
@@ -2532,7 +2538,19 @@ function DashboardApp() {
               <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name" />
               {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
-            <button className="ghost-button filter-button filter-open-button" type="button" onClick={() => setFiltersOpen(true)}>Filter</button>
+            <button
+              className={[
+                "ghost-button",
+                "filter-button",
+                "filter-open-button",
+                hasActiveFilters ? "is-active" : ""
+              ].join(" ").trim()}
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+            >
+              Filter
+              {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">+</span> : null}
+            </button>
             <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear filter</button>
             {savedFilterViews.map((view) => <div className="saved-filter-chip" key={view.id}><button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button><button className="saved-filter-chip-close" type="button" aria-label={`Delete ${view.name}`} onClick={() => deleteSavedFilterView(view.id)}>x</button></div>)}
           </div>
@@ -2789,8 +2807,8 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
   if (columnKey === 'branch') return <button className='cell-select-button' type='button' title={event.branch.map((item) => branchFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openBranchSelector(event.id)}><CompactTagList items={event.branch} styles={branchStyles} /></button>;
   if (columnKey === 'products') return <button className='cell-select-button' type='button' title={event.products.map((item) => productFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openProductSelector(event.id)}><CompactTagList items={event.products} styles={productStyles} /></button>;
   if (columnKey === 'status') return <button className='cell-select-button' type='button' title={event.status || ''} disabled={!canEdit} onClick={() => openStatusSelector(event.id)}><Tag value={event.status || ''} styles={statusStyles} placeholder='' /></button>;
-  if (columnKey === 'paymentStatus') return <button className='cell-select-button' type='button' title={event.paymentStatus || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('paymentStatus', event.id)}><Tag value={event.paymentStatus || ''} styles={managedSingleStyles.paymentStatus || {}} placeholder='' /></button>;
-  if (columnKey === 'accounts') return <button className='cell-select-button' type='button' title={event.accounts || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('accounts', event.id)}><Tag value={event.accounts || ''} styles={managedSingleStyles.accounts || {}} placeholder='' /></button>;
+  if (columnKey === 'paymentStatus') return <button className='cell-select-button' type='button' title={event.paymentStatus || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('paymentStatus', event.id)}><Tag value={event.paymentStatus || ''} styles={managedSingleStyles.paymentStatus || {}} placeholder='' width={112} className='managed-finance-pill' /></button>;
+  if (columnKey === 'accounts') return <button className='cell-select-button' type='button' title={event.accounts || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('accounts', event.id)}><Tag value={event.accounts || ''} styles={managedSingleStyles.accounts || {}} placeholder='' width={112} className='managed-finance-pill' /></button>;
   if (['vinyl', 'gsAi', 'imagesSent', 'snappic'].includes(columnKey)) return <button className='cell-select-button' type='button' title={event[columnKey] || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector(columnKey, event.id)}><Tag value={event[columnKey] || ''} styles={managedSingleStyles[columnKey] || {}} placeholder='' /></button>;
   if (columnKey === 'attendants') return <button className='cell-select-button' type='button' title={(event.attendants || []).join(', ')} disabled={!canEdit} onClick={() => openAttendantSelector(event.id)}><CompactNameList items={event.attendants || []} styles={attendantStyles} /></button>;
 

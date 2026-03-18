@@ -96,7 +96,10 @@ button { cursor: pointer; }
 .search-clear-button { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 20px; height: 20px; border: 0; border-radius: 999px; background: #e7ecf7; color: #54627e; font-size: 0.72rem; line-height: 1; display: inline-grid; place-items: center; }
 .search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
-.filter-open-button { margin-left: 12px; }
+.filter-open-button { position: relative; margin-left: 12px; }
+.filter-open-button.is-active { border-color: #f0c795; background: #ffe7c7; color: #8b5a18; }
+.filter-open-button.is-active:hover { border-color: #e7b97d; background: #ffdba8; color: #70450e; }
+.filter-active-badge { position: absolute; top: 2px; right: 4px; width: 14px; height: 14px; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.62rem; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
 .filter-save-button { min-width: 134px; border-color: #f0c795; background: #ffe7c7; color: #8b5a18; }
 .filter-save-button:hover { border-color: #e7b97d; background: #ffdba8; color: #70450e; }
 .saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 24px 0 0; }
@@ -215,6 +218,8 @@ button { cursor: pointer; }
 .inline-hours, .cell-hours .inline-input { text-align: center; }
 .cell-status .cell-select-button, .cell-paymentStatus .cell-select-button { justify-content: center; }
 .cell-status .tag, .cell-paymentStatus .tag { width: 112px; max-width: 112px; padding-left: 0; padding-right: 0; }
+.cell-accounts .cell-select-button { justify-content: center; }
+.cell-accounts .tag, .managed-finance-pill { width: 112px; max-width: 112px; padding-left: 0; padding-right: 0; }
 .add-inline-row { display: block; width: calc(100% - 24px); min-width: calc(100% - 24px); margin: 8px 12px; border: 1px dashed #b9c7e6; border-radius: 8px; background: #f8fbff; color: #2f5cae; padding: 8px 12px; text-align: left; }
 .totals-row .cell { border-top: 1px solid var(--line); background: #f8fafc; font-weight: 700; }
 .drawer-scrim { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.24); opacity: 0; pointer-events: none; transition: opacity 180ms ease; z-index: 20; }
