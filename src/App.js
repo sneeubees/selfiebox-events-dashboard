@@ -1934,6 +1934,18 @@ function DashboardApp() {
     setSavedFilterViews((current) => current.filter((view) => view.id !== viewId));
   };
 
+  const requestDeleteSavedFilterView = async (view) => {
+    const confirmed = await requestConfirmation({
+      title: 'Delete custom view',
+      message: `Delete "${view.name}" permanently?`,
+      confirmLabel: 'Delete',
+      tone: 'danger'
+    });
+    if (confirmed) {
+      deleteSavedFilterView(view.id);
+    }
+  };
+
 
   const openBranchManager = () => {
     setAdminMenuColumn(null);
@@ -2558,14 +2570,32 @@ function DashboardApp() {
                 hasActiveFilters ? "is-active" : ""
               ].join(" ").trim()}
               type="button"
-              onClick={() => setFiltersOpen(true)}
+              onClick={() => {
+                if (hasActiveFilters) {
+                  clearFilters();
+                  return;
+                }
+                setFiltersOpen(true);
+              }}
             >
               Filter
-              {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">+</span> : null}
+              {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">Clear</span> : null}
             </button>
-            <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear filter</button>
             <div className="saved-filter-chip-row">
-              {savedFilterViews.map((view) => <div className={["saved-filter-chip", activeSavedFilterViewId === view.id ? "is-active" : ""].join(" ").trim()} key={view.id}><button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button><button className="saved-filter-chip-close" type="button" aria-label={`Delete ${view.name}`} onClick={() => deleteSavedFilterView(view.id)}>x</button></div>)}
+              {savedFilterViews.map((view) => (
+                <div
+                  className={["saved-filter-chip", activeSavedFilterViewId === view.id ? "is-active" : ""].join(" ").trim()}
+                  key={view.id}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    void requestDeleteSavedFilterView(view);
+                  }}
+                  title="Right-click to delete"
+                >
+                  <button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button>
+                  <button className="saved-filter-chip-close" type="button" aria-label="Clear filters" onClick={clearFilters}>x</button>
+                </div>
+              ))}
             </div>
           </div>
           <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
