@@ -1879,6 +1879,18 @@ function DashboardApp() {
     selectedStatuses.length +
     selectedPayments.length;
   const hasActiveFilters = activeFilterCount > 0;
+  const activeSavedFilterViewId = useMemo(() => {
+    const sameValues = (left = [], right = []) =>
+      left.length === right.length && left.every((value, index) => value === right[index]);
+    const match = savedFilterViews.find(
+      (view) =>
+        sameValues(view.branches || [], selectedBranches) &&
+        sameValues(view.products || [], selectedProducts) &&
+        sameValues(view.statuses || [], selectedStatuses) &&
+        sameValues(view.payments || [], selectedPayments)
+    );
+    return match?.id || '';
+  }, [savedFilterViews, selectedBranches, selectedProducts, selectedStatuses, selectedPayments]);
 
   const openSaveCustomViewModal = () => {
     if (savedFilterViews.length >= 4) {
@@ -2552,7 +2564,9 @@ function DashboardApp() {
               {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">+</span> : null}
             </button>
             <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear filter</button>
-            {savedFilterViews.map((view) => <div className="saved-filter-chip" key={view.id}><button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button><button className="saved-filter-chip-close" type="button" aria-label={`Delete ${view.name}`} onClick={() => deleteSavedFilterView(view.id)}>x</button></div>)}
+            <div className="saved-filter-chip-row">
+              {savedFilterViews.map((view) => <div className={["saved-filter-chip", activeSavedFilterViewId === view.id ? "is-active" : ""].join(" ").trim()} key={view.id}><button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button><button className="saved-filter-chip-close" type="button" aria-label={`Delete ${view.name}`} onClick={() => deleteSavedFilterView(view.id)}>x</button></div>)}
+            </div>
           </div>
           <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
         </div>

@@ -89,23 +89,27 @@ button { cursor: pointer; }
 .board-shell { border-radius: 14px; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .board-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .board-activities-link { margin-left: auto; font-size: 0.78rem; }
-.filters-grid.single-row-tools { display: flex; gap: 8px; width: min(760px, 100%); }
-.search-input-wrap { position: relative; flex: 1; min-width: 0; }
-.search-wide { min-width: 380px; }
+.filters-grid.single-row-tools { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+.search-input-wrap { position: relative; flex: 0 1 380px; min-width: 260px; }
+.search-wide { min-width: 0; }
 .search-input { padding-right: 34px; }
 .search-clear-button { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); width: 20px; height: 20px; border: 0; border-radius: 999px; background: #e7ecf7; color: #54627e; font-size: 0.72rem; line-height: 1; display: inline-grid; place-items: center; }
 .search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
 .filter-open-button { position: relative; margin-left: 12px; }
-.filter-open-button.is-active { border-color: #f0c795; background: #ffe7c7; color: #8b5a18; }
-.filter-open-button.is-active:hover { border-color: #e7b97d; background: #ffdba8; color: #70450e; }
-.filter-active-badge { position: absolute; top: 2px; right: 4px; width: 14px; height: 14px; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.62rem; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
+.filter-open-button.is-active { border-color: #efb6bf; background: #ffe1e6; color: #a74d5d; }
+.filter-open-button.is-active:hover { border-color: #e59dab; background: #ffd3db; color: #913e50; }
+.filter-active-badge { position: absolute; top: 2px; right: 4px; width: 14px; height: 14px; border-radius: 999px; background: #f8c4ce; color: #a74d5d; font-size: 0.62rem; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
 .filter-save-button { min-width: 134px; border-color: #f0c795; background: #ffe7c7; color: #8b5a18; }
 .filter-save-button:hover { border-color: #e7b97d; background: #ffdba8; color: #70450e; }
-.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 24px 0 0; }
+.saved-filter-chip-row { display: flex; align-items: center; gap: 8px; margin-left: 4px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 24px 0 0; flex: 0 0 auto; }
+.saved-filter-chip.is-active { border-color: #efb6bf; background: #ffe1e6; }
 .saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #8b5a18; font-size: 0.72rem; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-filter-chip.is-active .saved-filter-chip-button { color: #a74d5d; }
 .saved-filter-chip-button:hover { color: #70450e; }
 .saved-filter-chip-close { position: absolute; top: 2px; right: 4px; width: 16px; height: 16px; border: 0; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.62rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
+.saved-filter-chip.is-active .saved-filter-chip-close { background: #f8c4ce; color: #a74d5d; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
