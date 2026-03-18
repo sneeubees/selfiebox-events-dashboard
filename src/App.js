@@ -460,6 +460,7 @@ function DashboardApp() {
   const [newColumnType, setNewColumnType] = useState('text');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
+  const [exportDialog, setExportDialog] = useState({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] });
   const [previewFile, setPreviewFile] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null);
   const [editingUserId, setEditingUserId] = useState('');
@@ -1454,44 +1455,83 @@ function DashboardApp() {
     setShowWorkspaceModal(false);
   };
 
-  const exportWorkspaceToExcel = () => {
-    if (!currentUser || currentUser.role !== 'admin') {
+  const openExportDialog = ({ scope, month = '', monthItems = [] }) => {
+    if (!currentUser || (scope === 'workspace' && currentUser.role !== 'admin')) {
       return;
     }
-    const workspaceEvents = [...events]
-      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
-      .sort(sortEvents);
 
-    const sheets = monthNames.map((month) => ({
-      name: month,
-      rows: workspaceEvents
-        .filter((event) => getEventMonth(event) === month)
-        .map((event) => visibleColumns.map((column) => formatExportValue(column.key, event, { branchFullNames, productFullNames, column }))),
-    }));
+    const sheets = scope === 'month'
+      ? [{ name: month, events: monthItems }]
+      : monthNames
+          .map((monthName) => ({ name: monthName, events: eventsByMonth[monthName] || [] }))
+          .filter((sheet) => sheet.events.length > 0);
 
-    const workbookXml = buildWorkbookXml({
+    setExportDialog({
+      isOpen: true,
+      title: scope === 'month' ? `Export ${month}` : `Export ${selectedWorkspaceYear}`,
+      filename: scope === 'month'
+        ? `selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xls`
+        : `selfiebox-events-${selectedWorkspaceYear}.xls`,
+      scope,
       sheets,
-      headers: visibleColumns.map((column) => displayColumnLabel(column)),
+      selectedKeys: visibleColumns.map((column) => column.key),
+    });
+  };
+
+  const toggleExportColumn = (columnKey) => {
+    setExportDialog((current) => ({
+      ...current,
+      selectedKeys: current.selectedKeys.includes(columnKey)
+        ? current.selectedKeys.filter((key) => key !== columnKey)
+        : [...current.selectedKeys, columnKey],
+    }));
+  };
+
+  const runExport = () => {
+    if (!exportDialog.selectedKeys.length) {
+      openNotice('Please select at least one column to export.');
+      return;
+    }
+
+    const exportColumns = visibleColumns.filter((column) => exportDialog.selectedKeys.includes(column.key));
+    const workbookXml = buildWorkbookXml({
+      sheets: exportDialog.sheets.map((sheet) => ({
+        name: sheet.name,
+        rows: sheet.events.map((event) => exportColumns.map((column) => buildExportCell(column, event, {
+          branchFullNames,
+          productFullNames,
+          branchStyles,
+          productStyles,
+          statusStyles,
+          managedSingleStyles,
+          attendantStyles,
+          customItemStyles,
+        }))),
+      })),
+      columns: exportColumns.map((column) => ({
+        key: column.key,
+        label: displayColumnLabel(column),
+        width: getRenderedColumnWidth(column),
+      })),
     });
 
-      downloadWorkbookFile(`selfiebox-events-${selectedWorkspaceYear}.xls`, workbookXml);
+    downloadWorkbookFile(exportDialog.filename, workbookXml);
+    setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] });
+  };
+
+  const exportWorkspaceToExcel = () => {
+      if (!currentUser || currentUser.role !== 'admin') {
+        return;
+      }
+      openExportDialog({ scope: 'workspace' });
     };
 
   const exportMonthToExcel = (month, monthItems) => {
-    if (!currentUser || !canAccessDashboard) {
-      return;
-    }
-
-    const workbookXml = buildWorkbookXml({
-      sheets: [{
-        name: month,
-        rows: monthItems.map((event) => visibleColumns.map((column) => formatExportValue(column.key, event, { branchFullNames, productFullNames, column }))),
-      }],
-      headers: visibleColumns.map((column) => displayColumnLabel(column)),
-    });
-
-    downloadWorkbookFile(`selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xls`, workbookXml);
-  };
+      if (!currentUser || !canAccessDashboard) {
+        return;
+      }
+      openExportDialog({ scope: 'month', month, monthItems });
+    };
 
   const handleProfileImageChange = (changeEvent, setter) => {
     const file = changeEvent.target.files?.[0];
@@ -2714,6 +2754,7 @@ function DashboardApp() {
       {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4>{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</section><section className="rights-section"><h4>Users</h4>{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</section></div></ModalShell> : null}
       {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup"><FilterGroup title="Branches" options={branchAbbreviations} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productAbbreviations} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
+      {exportDialog.isOpen ? <ModalShell title={exportDialog.title} onClose={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}><div className="simple-stack export-dialog"><p>Select the columns to include in this export.</p><div className="export-column-grid">{visibleColumns.map((column) => <label className="export-column-option" key={column.key}><input type="checkbox" checked={exportDialog.selectedKeys.includes(column.key)} onChange={() => toggleExportColumn(column.key)} /><span>{displayColumnLabel(column)}</span></label>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setExportDialog((current) => ({ ...current, selectedKeys: visibleColumns.map((column) => column.key) }))}>Select all</button><button className="ghost-button" type="button" onClick={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}>Cancel</button><button className="primary-button" type="button" onClick={runExport}>Export</button></div></div></ModalShell> : null}
         {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {branchEditorEventId && selectedBranchEvent ? <ModalShell title="Select branch" onClose={() => setBranchEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{branchOptions.map((option) => <button className={["branch-selector-item", selectedBranchEvent.branch.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleBranchOnEvent(selectedBranchEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.abbreviation}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setBranchEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
         {productManagerOpen ? <ModalShell title="Manage product items" onClose={() => setProductManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-product-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newProductFullName} onChange={(event) => { const value = event.target.value; setNewProductFullName(value); setNewProductAbbreviation((current) => (current ? current : abbreviateLabel(value))); }} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newProductAbbreviation || abbreviateLabel(newProductFullName)} onChange={(event) => setNewProductAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newProductColor} onChange={setNewProductColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addProductOption}>Add</button></div><div className="branch-preview-list is-editor">{productOptions.map((option) => <div className="branch-editor-row compact-product-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color} onChange={(value) => updateProductDraft(option.optionKey || option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color, color: getContrastColor(productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color) }} title={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName}>{productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveProductOption(option.optionKey || option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteProductOption(option.optionKey || option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
@@ -3546,6 +3587,46 @@ function formatExportValue(columnKey, event, lookups) {
   return event[columnKey] == null ? '' : String(event[columnKey]);
 }
 
+function buildExportCell(column, event, lookups) {
+  const value = formatExportValue(column.key, event, { ...lookups, column });
+  const style = getExportCellStyle(column, event, lookups);
+  return { value, style };
+}
+
+function getExportCellStyle(column, event, lookups) {
+  if (column.key === 'hours') {
+    return { align: 'Center' };
+  }
+  if (column.key === 'branch') {
+    const firstBranch = (event.branch || [])[0];
+    return firstBranch ? lookups.branchStyles[firstBranch] || null : null;
+  }
+  if (column.key === 'products') {
+    const firstProduct = (event.products || [])[0];
+    return firstProduct ? lookups.productStyles[firstProduct] || null : null;
+  }
+  if (column.key === 'status') {
+    return lookups.statusStyles[event.status] || null;
+  }
+  if (['paymentStatus', 'accounts', 'vinyl', 'gsAi', 'imagesSent', 'snappic'].includes(column.key)) {
+    return lookups.managedSingleStyles[column.key]?.[event[column.key]] || null;
+  }
+  if (column.key === 'attendants') {
+    const firstAttendant = (event.attendants || [])[0];
+    return firstAttendant ? lookups.attendantStyles[firstAttendant] || null : null;
+  }
+  if (column.isCustom) {
+    const customValue = (event.customFields || {})[column.key];
+    if (column.type === 'singleItem' && typeof customValue === 'string') {
+      return lookups.customItemStyles[column.key]?.[customValue] || null;
+    }
+    if (column.type === 'multiItem' && Array.isArray(customValue) && customValue.length) {
+      return lookups.customItemStyles[column.key]?.[customValue[0]] || null;
+    }
+  }
+  return null;
+}
+
 function isPastEvent(event) {
   const value = String(event?.date || '').trim();
   if (!value) {
@@ -3590,16 +3671,76 @@ function orderColumnsAfterPayment(columns, savedOrder) {
   return [...fixedColumns, ...ordered, ...movableColumns.filter((column) => movableByKey.has(column.key))];
 }
 
-function buildWorkbookXml({ sheets, headers }) {
+function normalizeHexColor(value, fallback = 'FFFFFF') {
+  const cleaned = String(value || '').trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return fallback;
+  }
+  return cleaned.toUpperCase();
+}
+
+function createWorkbookStyleRegistry() {
+  const styles = new Map();
+  const definitions = [];
+
+  const ensureStyle = (style) => {
+    const key = JSON.stringify(style || {});
+    if (styles.has(key)) {
+      return styles.get(key);
+    }
+    const id = `s${styles.size}`;
+    styles.set(key, id);
+    definitions.push({ id, style: style || {} });
+    return id;
+  };
+
+  const defaultStyleId = ensureStyle({});
+  const headerStyleId = ensureStyle({
+    bold: true,
+    background: 'EAF1FF',
+    color: '26427B',
+    align: 'Center',
+    border: true,
+  });
+
+  const buildXml = () => '<Styles>' + definitions.map(({ id, style }) => {
+    const font = [
+      '<Font',
+      style.bold ? ' ss:Bold="1"' : '',
+      style.color ? ` ss:Color="#${normalizeHexColor(style.color, '233142')}"` : '',
+      ' ss:FontName="Calibri" ss:Size="10"/>',
+    ].join('');
+    const interior = style.background ? `<Interior ss:Color="#${normalizeHexColor(style.background)}" ss:Pattern="Solid"/>` : '';
+    const alignment = style.align ? `<Alignment ss:Horizontal="${style.align}" ss:Vertical="Center"/>` : '<Alignment ss:Vertical="Center"/>';
+    const borders = style.border ? '<Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/></Borders>' : '';
+    return `<Style ss:ID="${id}">${alignment}${font}${interior}${borders}</Style>`;
+  }).join('') + '</Styles>';
+
+  return { ensureStyle, buildXml, defaultStyleId, headerStyleId };
+}
+
+function buildWorkbookXml({ sheets, columns }) {
+  const styleRegistry = createWorkbookStyleRegistry();
+
   const worksheetXml = sheets.map((sheet) => {
-    const rows = [headers, ...sheet.rows];
-    const rowXml = rows.map((row) => '<Row>' + row.map((value) => '<Cell><Data ss:Type="String">' + escapeXml(value) + '</Data></Cell>').join('') + '</Row>').join('');
-    return '<Worksheet ss:Name="' + escapeXml(sheet.name.slice(0, 31)) + '"><Table>' + rowXml + '</Table></Worksheet>';
+    const columnXml = columns.map((column) => `<Column ss:Width="${Math.max(50, Math.round(column.width))}"/>`).join('');
+    const headerRow = '<Row>' + columns.map((column) => `<Cell ss:StyleID="${styleRegistry.headerStyleId}"><Data ss:Type="String">${escapeXml(column.label)}</Data></Cell>`).join('') + '</Row>';
+    const bodyRows = sheet.rows.map((row) => '<Row>' + row.map((cell) => {
+      const styleId = cell.style ? styleRegistry.ensureStyle({
+        background: cell.style.background,
+        color: cell.style.color,
+        align: cell.style.align,
+        border: true,
+      }) : styleRegistry.ensureStyle({ border: true });
+      return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(cell.value)}</Data></Cell>`;
+    }).join('') + '</Row>').join('');
+    return '<Worksheet ss:Name="' + escapeXml(sheet.name.slice(0, 31)) + '"><Table>' + columnXml + headerRow + bodyRows + '</Table></Worksheet>';
   }).join('');
 
   return '<?xml version="1.0"?>' +
     '<?mso-application progid="Excel.Sheet"?>' +
     '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">' +
+    styleRegistry.buildXml() +
     worksheetXml +
     '</Workbook>';
 }
