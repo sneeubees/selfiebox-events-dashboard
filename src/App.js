@@ -299,6 +299,13 @@ function DashboardApp() {
   const [savedFilterViews, setSavedFilterViews] = useState([]);
   const [saveFilterViewModalOpen, setSaveFilterViewModalOpen] = useState(false);
   const [newFilterViewName, setNewFilterViewName] = useState('');
+  const [commissionDialog, setCommissionDialog] = useState({
+    isOpen: false,
+    month: '',
+    attendant: '',
+    period: 'all',
+    overrides: {},
+  });
   const [branchOptions, setBranchOptions] = useState(defaultBranchOptions);
   const [branchManagerOpen, setBranchManagerOpen] = useState(false);
   const [branchEditorEventId, setBranchEditorEventId] = useState(null);
@@ -620,6 +627,56 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
+  const commissionMonthEvents = useMemo(() => {
+    if (!commissionDialog.isOpen || !commissionDialog.month) {
+      return [];
+    }
+    return events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === commissionDialog.month)
+      .filter((event) => Array.isArray(event.attendants) && event.attendants.length > 0)
+      .sort((left, right) => sortEvents(left, right));
+  }, [commissionDialog.isOpen, commissionDialog.month, events, selectedWorkspaceYear]);
+  const commissionAttendantNames = useMemo(
+    () => Array.from(new Set(commissionMonthEvents.flatMap((event) => event.attendants || []))).sort((left, right) => left.localeCompare(right)),
+    [commissionMonthEvents]
+  );
+  const commissionRows = useMemo(() => {
+    if (!commissionDialog.attendant) {
+      return [];
+    }
+    return commissionMonthEvents
+      .filter((event) => (event.attendants || []).includes(commissionDialog.attendant))
+      .filter((event) => {
+        if (commissionDialog.period === 'all') {
+          return true;
+        }
+        const day = Number(String(event.date || '').split('-')[2] || 0);
+        if (!day) {
+          return false;
+        }
+        return commissionDialog.period === 'firstHalf' ? day <= 15 : day >= 16;
+      })
+      .map((event) => {
+        const automaticHoursPayable = parseCommissionHours(event.hours);
+        const automaticAmount = calculateCommissionAmount(automaticHoursPayable);
+        const override = commissionDialog.overrides[event.id] || {};
+        const hoursPayable = override.hoursPayable === '' || override.hoursPayable === undefined
+          ? automaticHoursPayable
+          : Math.max(0, Number(override.hoursPayable) || 0);
+        const amount = override.amount === '' || override.amount === undefined
+          ? automaticAmount
+          : Math.max(0, Number(override.amount) || 0);
+        return {
+          id: event.id,
+          eventName: event.eventTitle || event.name || 'Untitled event',
+          date: event.date,
+          hours: event.hours || '0',
+          hoursPayable,
+          amount,
+        };
+      });
+  }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -1575,6 +1632,69 @@ function DashboardApp() {
       }
       openExportDialog({ scope: 'month', month, monthItems });
     };
+
+  const openCommissionDialog = (month) => {
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
+      return;
+    }
+    const monthEvents = events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === month);
+    const attendantsForMonth = Array.from(new Set(monthEvents.flatMap((event) => event.attendants || []))).sort((left, right) => left.localeCompare(right));
+    setCommissionDialog({
+      isOpen: true,
+      month,
+      attendant: attendantsForMonth[0] || '',
+      period: 'all',
+      overrides: {},
+    });
+  };
+
+  const closeCommissionDialog = () => {
+    setCommissionDialog({
+      isOpen: false,
+      month: '',
+      attendant: '',
+      period: 'all',
+      overrides: {},
+    });
+  };
+
+  const updateCommissionOverride = (eventId, field, value) => {
+    setCommissionDialog((current) => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        [eventId]: {
+          ...(current.overrides[eventId] || {}),
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const exportCommissionSheet = async () => {
+    if (!commissionDialog.month || !commissionDialog.attendant) {
+      openNotice('Please choose an attendant first.');
+      return;
+    }
+    if (!commissionRows.length) {
+      openNotice('There are no commission line items for this selection.');
+      return;
+    }
+    try {
+      await exportCommissionPdf({
+        month: commissionDialog.month,
+        year: selectedWorkspaceYear,
+        period: commissionDialog.period,
+        attendant: commissionDialog.attendant,
+        rows: commissionRows,
+      });
+    } catch (error) {
+      console.error('Failed to export commission PDF', error);
+      openNotice('The commission PDF could not be created. Please try again.');
+    }
+  };
 
   const handleProfileImageChange = (changeEvent, setter) => {
     const file = changeEvent.target.files?.[0];
@@ -2771,7 +2891,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions"><button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -2806,6 +2926,7 @@ function DashboardApp() {
       {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4>{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</section><section className="rights-section"><h4>Users</h4>{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</section></div></ModalShell> : null}
       {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={attendantOptions.map((option) => option.fullName)} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
+      {commissionDialog.isOpen ? <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog}><div className="commission-sheet"><div className="commission-toolbar"><label><span>Attendant</span><select value={commissionDialog.attendant} onChange={(event) => setCommissionDialog((current) => ({ ...current, attendant: event.target.value }))}><option value="">Select attendant</option>{commissionAttendantNames.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><div className="commission-periods"><button className={["ghost-button", commissionDialog.period === 'all' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}>All events</button><button className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}>1-15</button><button className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}>16-end</button></div></div><div className="commission-subhead"><strong>SelfieBox commission sheet for:</strong><span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span><span>Attendant: {commissionDialog.attendant || '-'}</span></div><div className="commission-table-wrap"><div className="commission-table commission-table-header"><span>Event Name</span><span>Date</span><span>Hours</span><span>Hours Payable</span><span>Amount</span></div>{commissionRows.length ? commissionRows.map((row) => <div className="commission-table commission-table-row" key={row.id}><span title={row.eventName}>{row.eventName}</span><span>{formatDateDisplay(row.date || '') || '-'}</span><span>{row.hours}</span><input className="text-input commission-input" inputMode="numeric" value={row.hoursPayable} onChange={(event) => updateCommissionOverride(row.id, 'hoursPayable', event.target.value)} /><input className="text-input commission-input" inputMode="numeric" value={row.amount} onChange={(event) => updateCommissionOverride(row.id, 'amount', event.target.value)} /></div>) : <div className="empty-month">No commission rows for this selection.</div>}</div><div className="commission-signoff"><div><span>Signature</span><div className="commission-line" /></div><div><span>Date</span><div className="commission-line" /></div></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeCommissionDialog}>Close</button><button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>Export to PDF</button></div></div></ModalShell> : null}
       {exportDialog.isOpen ? <ModalShell title={exportDialog.title} onClose={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}><div className="simple-stack export-dialog"><p>Select the columns to include in this export.</p><div className="export-column-grid">{visibleColumns.map((column) => <label className="export-column-option" key={column.key}><input type="checkbox" checked={exportDialog.selectedKeys.includes(column.key)} onChange={() => toggleExportColumn(column.key)} /><span>{displayColumnLabel(column)}</span></label>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setExportDialog((current) => ({ ...current, selectedKeys: visibleColumns.map((column) => column.key) }))}>Select all</button><button className="ghost-button" type="button" onClick={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}>Cancel</button><button className="primary-button" type="button" onClick={runExport}>Export</button></div></div></ModalShell> : null}
         {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {branchEditorEventId && selectedBranchEvent ? <ModalShell title="Select branch" onClose={() => setBranchEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{branchOptions.map((option) => <button className={["branch-selector-item", selectedBranchEvent.branch.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleBranchOnEvent(selectedBranchEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.abbreviation}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setBranchEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
@@ -3817,6 +3938,125 @@ function downloadWorkbookFile(filename, contents) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function parseCommissionHours(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return 0;
+  }
+
+  const normalized = text.replace(/\u2013|\u2014/g, '-').toLowerCase();
+  const numericMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:hr|hrs|hour|hours)\b/);
+  if (numericMatch) {
+    const parsed = Number(numericMatch[1]);
+    return Number.isFinite(parsed) ? Math.max(0, Math.ceil(parsed)) : 0;
+  }
+
+  const timeRangeMatch = normalized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (timeRangeMatch) {
+    const startMinutes = Number(timeRangeMatch[1]) * 60 + Number(timeRangeMatch[2]);
+    let endMinutes = Number(timeRangeMatch[3]) * 60 + Number(timeRangeMatch[4]);
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+    const durationHours = (endMinutes - startMinutes) / 60;
+    return durationHours > 0 ? Math.ceil(durationHours) : 0;
+  }
+
+  return 0;
+}
+
+function calculateCommissionAmount(hoursPayable) {
+  const hours = Number(hoursPayable) || 0;
+  if (hours <= 0) return 0;
+  if (hours <= 2) return 500;
+  if (hours === 3) return 550;
+  if (hours === 4) return 600;
+  if (hours === 5) return 650;
+  return 1000;
+}
+
+function getCommissionPeriodLabel(month, year, period) {
+  const monthLabel = `${month} ${year}`;
+  if (period === 'firstHalf') {
+    return `1-15 ${monthLabel}`;
+  }
+  if (period === 'secondHalf') {
+    return `16-end ${monthLabel}`;
+  }
+  return `All ${monthLabel}`;
+}
+
+async function exportCommissionPdf({ month, year, period, attendant, rows }) {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const left = 44;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const colX = {
+    event: left,
+    date: 280,
+    hours: 352,
+    payable: 432,
+    amount: 510,
+  };
+  let y = 56;
+
+  const ensureSpace = (needed = 20) => {
+    if (y + needed <= pageHeight - 70) {
+      return;
+    }
+    doc.addPage();
+    y = 56;
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.text('SelfieBox commission sheet for:', left, y);
+  y += 22;
+
+  doc.setFontSize(12);
+  doc.text(getCommissionPeriodLabel(month, year, period), left, y);
+  y += 22;
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Attendant: ${attendant || '-'}`, left, y);
+  y += 24;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Event Name', colX.event, y);
+  doc.text('Date', colX.date, y);
+  doc.text('Hours', colX.hours, y);
+  doc.text('Hours Payable', colX.payable, y);
+  doc.text('Amount', colX.amount, y);
+  y += 8;
+  doc.setLineWidth(0.8);
+  doc.line(left, y, pageWidth - left, y);
+  y += 16;
+
+  doc.setFont('helvetica', 'normal');
+  rows.forEach((row) => {
+    ensureSpace(28);
+    doc.text(String(row.eventName || '-').slice(0, 32), colX.event, y);
+    doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
+    doc.text(String(row.hours || '-').slice(0, 12), colX.hours, y);
+    doc.text(String(row.hoursPayable ?? 0), colX.payable + 14, y, { align: 'right' });
+    doc.text(String(row.amount ?? 0), colX.amount + 24, y, { align: 'right' });
+    y += 18;
+  });
+
+  ensureSpace(90);
+  y += 24;
+  doc.line(left, y, left + 180, y);
+  doc.line(left + 240, y, left + 360, y);
+  y += 14;
+  doc.setFontSize(10);
+  doc.text('Signature', left, y);
+  doc.text('Date', left + 240, y);
+
+  doc.save(`selfiebox-commission-${year}-${month.toLowerCase()}-${String(attendant || 'sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`);
 }
 export default App;
 

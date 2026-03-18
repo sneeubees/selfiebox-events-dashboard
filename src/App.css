@@ -160,6 +160,8 @@ button { cursor: pointer; }
 .month-header-actions { display: inline-flex; align-items: center; gap: 8px; }
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 4px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
+.month-commission-button { background: #eef8ef; border-color: #cde6cf; color: #2b6b3b; }
+.month-commission-button:hover { background: #e1f1e3; }
 .month-section.is-dragging-month { opacity: 0.72; }
 .month-section.is-drag-target-month .month-header { background: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
 .month-toggle { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: #e8edf8; color: #355190; font-size: 1rem; font-weight: 700; }
@@ -331,6 +333,31 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-popup-actions { justify-content: flex-start; flex-wrap: nowrap; align-items: center; margin-top: 8px; }
 .filter-popup-actions .ghost-button,
 .filter-popup-actions .primary-button { min-width: 126px; white-space: nowrap; }
+.commission-sheet { display: grid; gap: 12px; }
+.commission-toolbar { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.commission-toolbar label { display: grid; gap: 6px; min-width: 220px; }
+.commission-periods { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.commission-periods .ghost-button.is-active { background: #dfe8ff; color: #23427f; }
+.commission-subhead { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
+.commission-subhead strong { color: var(--text); }
+.commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.commission-table { display: grid; grid-template-columns: minmax(0, 1.6fr) 90px 110px 120px 110px; align-items: center; }
+.commission-table > span,
+.commission-table > input { min-width: 0; }
+.commission-table-header { background: #f6f8fc; color: #52627d; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.commission-table-header span,
+.commission-table-row span,
+.commission-table-row input { padding: 9px 10px; border-right: 1px solid var(--line); }
+.commission-table-header span:last-child,
+.commission-table-row span:last-child,
+.commission-table-row input:last-child { border-right: 0; }
+.commission-table-row { border-top: 1px solid var(--line); background: #fff; }
+.commission-table-row span { font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commission-input { border-radius: 0; border: 0; background: transparent; padding: 9px 10px; height: 100%; }
+.commission-signoff { display: flex; justify-content: space-between; align-items: end; gap: 18px; padding-top: 6px; }
+.commission-signoff > div { display: grid; gap: 6px; min-width: 140px; }
+.commission-signoff span { font-size: 0.78rem; color: var(--muted); }
+.commission-line { height: 1px; background: var(--line); }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
 .filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
@@ -827,6 +854,19 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .location-pin-button,
 :root[data-theme="dark"] .modal-close-x {
   color: #c6d7ff;
+}
+:root[data-theme="dark"] .month-commission-button {
+  background: #1d3a28;
+  border-color: #2d5a3d;
+  color: #bde5c6;
+}
+:root[data-theme="dark"] .commission-table-header,
+:root[data-theme="dark"] .commission-table-row {
+  background: var(--panel);
+}
+:root[data-theme="dark"] .commission-periods .ghost-button.is-active {
+  background: #223556;
+  color: #dce8ff;
 }
 :root[data-theme="dark"] .primary-button {
   background: linear-gradient(135deg, #5d8cff, #3156a8);
