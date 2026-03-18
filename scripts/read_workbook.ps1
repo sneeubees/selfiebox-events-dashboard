@@ -6,6 +6,22 @@ param(
 $excel = $null
 $workbook = $null
 $IgnoredColumnLetters = @("M", "N", "P", "R", "S", "U", "V", "W", "X", "Y")
+$PreservedHeaders = @(
+  "snappic?",
+  "attendant/s",
+  "package only",
+  "item id (auto generated)",
+  "item id",
+  "update content"
+)
+
+function Normalize-HeaderText {
+  param(
+    [string]$Value
+  )
+
+  return ([string]$Value).Trim().ToLower()
+}
 
 function Get-ColumnLetter {
   param(
@@ -24,6 +40,26 @@ function Get-ColumnLetter {
   return $letter
 }
 
+function Should-SkipColumn {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$ColumnNumber,
+    [string]$HeaderText
+  )
+
+  $letter = Get-ColumnLetter -ColumnNumber $ColumnNumber
+  if (-not ($IgnoredColumnLetters -contains $letter)) {
+    return $false
+  }
+
+  $normalizedHeader = Normalize-HeaderText $HeaderText
+  if ($PreservedHeaders -contains $normalizedHeader) {
+    return $false
+  }
+
+  return $true
+}
+
 function Get-SheetRows {
   param(
     [Parameter(Mandatory = $true)]
@@ -38,11 +74,12 @@ function Get-SheetRows {
   $headers = @()
 
   for ($col = 1; $col -le $colCount; $col++) {
-    if ($IgnoredColumnLetters -contains (Get-ColumnLetter -ColumnNumber $col)) {
+    $headerText = [string]$Sheet.Cells.Item($HeaderRow, $col).Text
+    if (Should-SkipColumn -ColumnNumber $col -HeaderText $headerText) {
       $headers += ""
       continue
     }
-    $headers += [string]$Sheet.Cells.Item($HeaderRow, $col).Text
+    $headers += $headerText
   }
 
   $rows = @()
@@ -84,16 +121,18 @@ function Find-HeaderRow {
   for ($row = 1; $row -le $rowCount; $row++) {
     $headers = @()
     for ($col = 1; $col -le $colCount; $col++) {
-      if ($IgnoredColumnLetters -contains (Get-ColumnLetter -ColumnNumber $col)) {
+      $headerText = [string]$Sheet.Cells.Item($row, $col).Text
+      if (Should-SkipColumn -ColumnNumber $col -HeaderText $headerText) {
         $headers += ""
         continue
       }
-      $headers += [string]$Sheet.Cells.Item($row, $col).Text
+      $headers += $headerText
     }
 
     $matchesAll = $true
+    $normalizedHeaders = $headers | ForEach-Object { Normalize-HeaderText $_ }
     foreach ($expected in $ExpectedHeaders) {
-      if (-not ($headers -contains $expected)) {
+      if (-not ($normalizedHeaders -contains (Normalize-HeaderText $expected))) {
         $matchesAll = $false
         break
       }
@@ -101,6 +140,25 @@ function Find-HeaderRow {
 
     if ($matchesAll) {
       return $row
+    }
+  }
+
+  throw "Could not find expected header row."
+}
+
+function Find-FirstHeaderRow {
+  param(
+    [Parameter(Mandatory = $true)]
+    $Sheet,
+    [Parameter(Mandatory = $true)]
+    [object[]]$HeaderSets
+  )
+
+  foreach ($headerSet in $HeaderSets) {
+    try {
+      return Find-HeaderRow -Sheet $Sheet -ExpectedHeaders $headerSet
+    }
+    catch {
     }
   }
 
@@ -119,10 +177,23 @@ try {
     $sheet2 = $workbook.Worksheets.Item(2)
   }
 
-  $eventsHeaderRow = Find-HeaderRow -Sheet $sheet1 -ExpectedHeaders @("Name", "Item ID (auto generated)")
+  try {
+    $eventsHeaderRow = Find-FirstHeaderRow -Sheet $sheet1 -HeaderSets @(
+      @("Name", "Item ID (auto generated)"),
+      @("Company / Event name", "Item ID (auto generated)")
+    )
+  }
+  catch {
+    $eventsHeaderRow = 1
+  }
   $updates = @()
   if ($sheet2) {
-    $updatesHeaderRow = Find-HeaderRow -Sheet $sheet2 -ExpectedHeaders @("Item ID", "Update Content")
+    try {
+      $updatesHeaderRow = Find-HeaderRow -Sheet $sheet2 -ExpectedHeaders @("Item ID", "Update Content")
+    }
+    catch {
+      $updatesHeaderRow = 2
+    }
     $updates = Get-SheetRows -Sheet $sheet2 -HeaderRow $updatesHeaderRow
   }
 

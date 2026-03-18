@@ -11,11 +11,57 @@ function normalizeKey(value) {
   return normalizeText(value).toLowerCase();
 }
 
+function normalizeLooseKey(value) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function abbreviateLabel(value) {
   return normalizeText(value)
     .replace(/[^a-zA-Z0-9]/g, "")
     .slice(0, 7)
     .toUpperCase();
+}
+
+function levenshteinDistance(leftInput, rightInput) {
+  const left = normalizeLooseKey(leftInput);
+  const right = normalizeLooseKey(rightInput);
+  if (!left) {
+    return right.length;
+  }
+  if (!right) {
+    return left.length;
+  }
+
+  const matrix = Array.from({ length: left.length + 1 }, () => Array(right.length + 1).fill(0));
+  for (let i = 0; i <= left.length; i += 1) {
+    matrix[i][0] = i;
+  }
+  for (let j = 0; j <= right.length; j += 1) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+function similarityScore(leftInput, rightInput) {
+  const left = normalizeLooseKey(leftInput);
+  const right = normalizeLooseKey(rightInput);
+  const longest = Math.max(left.length, right.length);
+  if (!longest) {
+    return 1;
+  }
+  return 1 - (levenshteinDistance(left, right) / longest);
 }
 
 function uniqueList(values) {
@@ -57,11 +103,12 @@ async function ensureLabelOption(ctx, columnKey, rawName, orderHint) {
     return "";
   }
 
-  const existing = (await ctx.db
+  const siblings = await ctx.db
     .query("labelOptions")
     .withIndex("by_column", (q) => q.eq("columnKey", columnKey))
-    .collect())
-    .find((option) => {
+    .collect();
+
+  const existing = siblings.find((option) => {
       if (["branch", "products"].includes(columnKey)) {
         return normalizeKey(option.name) === normalizeKey(name) || normalizeKey(option.abbreviation || option.optionKey) === normalizeKey(name);
       }
@@ -74,10 +121,37 @@ async function ensureLabelOption(ctx, columnKey, rawName, orderHint) {
       : normalizeText(existing.name);
   }
 
-  const siblings = await ctx.db
-    .query("labelOptions")
-    .withIndex("by_column", (q) => q.eq("columnKey", columnKey))
-    .collect();
+  const exactLooseMatch = siblings.find((option) => {
+    const optionKeys = [option.name, option.abbreviation, option.optionKey].filter(Boolean);
+    return optionKeys.some((candidate) => normalizeLooseKey(candidate) === normalizeLooseKey(name));
+  });
+
+  if (exactLooseMatch) {
+    return ["branch", "products"].includes(columnKey)
+      ? normalizeText(exactLooseMatch.abbreviation || exactLooseMatch.optionKey || exactLooseMatch.name)
+      : normalizeText(exactLooseMatch.name);
+  }
+
+  let bestFuzzyMatch = null;
+  let bestScore = 0;
+  for (const option of siblings) {
+    const optionKeys = [option.name, option.abbreviation, option.optionKey].filter(Boolean);
+    for (const candidate of optionKeys) {
+      const score = similarityScore(candidate, name);
+      if (score > bestScore) {
+        bestScore = score;
+        bestFuzzyMatch = option;
+      }
+    }
+  }
+
+  const fuzzyThreshold = columnKey === "attendants" ? 0.72 : 0.82;
+  if (bestFuzzyMatch && bestScore >= fuzzyThreshold) {
+    return ["branch", "products"].includes(columnKey)
+      ? normalizeText(bestFuzzyMatch.abbreviation || bestFuzzyMatch.optionKey || bestFuzzyMatch.name)
+      : normalizeText(bestFuzzyMatch.name);
+  }
+
   const order = siblings.length ? Math.max(...siblings.map((option) => option.order || 0)) + 1 : (orderHint ?? 0);
   const color = columnKey === "status" || columnKey === "paymentStatus"
     ? "#d6d6d6"
@@ -119,6 +193,7 @@ export const importMonthWorkbook = mutation({
       status: v.optional(v.string()),
       location: v.optional(v.string()),
       paymentStatus: v.optional(v.string()),
+      accounts: v.optional(v.string()),
       vinyl: v.optional(v.string()),
       gsAi: v.optional(v.string()),
       imagesSent: v.optional(v.string()),
@@ -192,6 +267,7 @@ export const importMonthWorkbook = mutation({
 
       const status = await ensureLabelOption(ctx, "status", sourceEvent.status || "", 0);
       const paymentStatus = await ensureLabelOption(ctx, "paymentStatus", sourceEvent.paymentStatus || "", 0);
+      const accounts = await ensureLabelOption(ctx, "accounts", sourceEvent.accounts || "", 0);
       const vinyl = await ensureLabelOption(ctx, "vinyl", sourceEvent.vinyl || "", 0);
       const gsAi = await ensureLabelOption(ctx, "gsAi", sourceEvent.gsAi || "", 0);
       const imagesSent = await ensureLabelOption(ctx, "imagesSent", sourceEvent.imagesSent || "", 0);
@@ -210,6 +286,7 @@ export const importMonthWorkbook = mutation({
         status,
         location: normalizeText(sourceEvent.location),
         paymentStatus,
+        accounts,
         vinyl,
         gsAi,
         imagesSent,

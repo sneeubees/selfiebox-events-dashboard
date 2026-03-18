@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -61,6 +61,23 @@ export const wipeRuntimeData = mutation({
       deletedActivityEntries: activityEntries.length,
       deletedFileRecords: eventFiles.length,
       deletedStorageFiles,
+    };
+  },
+});
+
+export const runtimeCounts = query({
+  args: {},
+  handler: async (ctx) => {
+    const events = await ctx.db.query("events").collect();
+    const updates = await ctx.db.query("eventUpdates").collect();
+    const activity = await ctx.db.query("activityLog").collect();
+    const files = await ctx.db.query("eventFiles").collect();
+
+    return {
+      events: events.length,
+      updates: updates.length,
+      activity: activity.length,
+      files: files.length,
     };
   },
 });

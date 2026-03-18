@@ -119,7 +119,7 @@ function ensureRows(value) {
 function mapEvents(rows) {
   return rows.map((row) => ({
     itemId: normalizeText(row["Item ID (auto generated)"]),
-    name: normalizeText(row["Name"]),
+    name: normalizeText(row["Name"] || row["Company / Event name"]),
     date: parseDateString(row["Date"]),
     hours: normalizeText(row["Hours"]),
     branch: splitMulti(row["Branch"]),
@@ -127,6 +127,7 @@ function mapEvents(rows) {
     status: normalizeText(row["Status"]),
     location: normalizeText(row["Location"]),
     paymentStatus: normalizeText(row["Payment"] || row["Payment Status"]),
+    accounts: normalizeText(row["Accounts"]),
     vinyl: normalizeText(row["Vinyl?"]),
     gsAi: normalizeText(row["GS / AI?"]),
     imagesSent: normalizeText(row["Images sent?"]),
