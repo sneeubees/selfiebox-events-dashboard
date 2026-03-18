@@ -301,6 +301,9 @@ textarea { resize: vertical; min-height: 110px; }
 .auth-helper-text { margin: -2px 0 0; color: #6b7da3; }
 .auth-error { border-radius: 10px; padding: 10px 12px; background: #fff0f3; border: 1px solid #f1c0cb; color: #b43b52; font-size: 0.8rem; }
 .filter-popup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.filter-popup .modal-actions { justify-content: flex-start; flex-wrap: wrap; }
+.filter-popup .modal-actions .ghost-button,
+.filter-popup .modal-actions .primary-button { min-width: 126px; white-space: nowrap; }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
 .filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
