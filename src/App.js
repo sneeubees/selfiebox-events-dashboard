@@ -1455,7 +1455,7 @@ function DashboardApp() {
   };
 
   const exportWorkspaceToExcel = () => {
-    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
+    if (!currentUser || currentUser.role !== 'admin') {
       return;
     }
     const workspaceEvents = [...events]
@@ -1474,7 +1474,23 @@ function DashboardApp() {
       headers: visibleColumns.map((column) => displayColumnLabel(column)),
     });
 
-    downloadWorkbookFile(`selfiebox-events-${selectedWorkspaceYear}.xls`, workbookXml);
+      downloadWorkbookFile(`selfiebox-events-${selectedWorkspaceYear}.xls`, workbookXml);
+    };
+
+  const exportMonthToExcel = (month, monthItems) => {
+    if (!currentUser || !canAccessDashboard) {
+      return;
+    }
+
+    const workbookXml = buildWorkbookXml({
+      sheets: [{
+        name: month,
+        rows: monthItems.map((event) => visibleColumns.map((column) => formatExportValue(column.key, event, { branchFullNames, productFullNames, column }))),
+      }],
+      headers: visibleColumns.map((column) => displayColumnLabel(column)),
+    });
+
+    downloadWorkbookFile(`selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xls`, workbookXml);
   };
 
   const handleProfileImageChange = (changeEvent, setter) => {
@@ -2579,7 +2595,7 @@ function DashboardApp() {
             <select value={selectedWorkspaceYear} onChange={(event) => setSelectedWorkspaceYear(Number(event.target.value))}>{workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}</select>
             <div className="workspace-link-stack">
               {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button> : null}
-              {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
+              {currentUser.role === 'admin' ? <button className="workspace-text-button" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
             </div>
           </div>
           {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
@@ -2663,7 +2679,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions"><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions"><button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
