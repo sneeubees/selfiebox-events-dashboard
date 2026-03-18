@@ -25,6 +25,7 @@ export default defineSchema({
     designation: v.string(),
     role: v.union(v.literal("admin"), v.literal("manager"), v.literal("user")),
     profilePic: v.optional(v.string()),
+    theme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
     monthOrder: v.optional(v.array(v.string())),
     columnOrderAfterPayment: v.optional(v.array(v.string())),
     isApproved: v.boolean(),

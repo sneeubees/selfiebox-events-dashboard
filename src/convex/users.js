@@ -149,6 +149,7 @@ function toUserDto(record) {
     surname: record.surname,
     designation: record.designation,
     profilePic: record.profilePic || "",
+    theme: record.theme === "dark" ? "dark" : "light",
     monthOrder: Array.isArray(record.monthOrder) && record.monthOrder.length === monthNames.length ? record.monthOrder : monthNames,
     columnOrderAfterPayment: Array.isArray(record.columnOrderAfterPayment) ? record.columnOrderAfterPayment : [],
     role: record.role,
@@ -166,6 +167,7 @@ export const syncCurrentUser = mutation({
     surname: v.string(),
     designation: v.optional(v.string()),
     profilePic: v.optional(v.string()),
+    theme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
   },
   handler: async (ctx, args) => {
     const { identity, clerkId, user } = await getCurrentUserRecord(ctx);
@@ -174,6 +176,7 @@ export const syncCurrentUser = mutation({
     const firstName = args.firstName.trim() || identity.givenName || "User";
     const surname = args.surname.trim() || identity.familyName || "";
     const designation = args.designation?.trim() || "";
+    const theme = args.theme === "dark" ? "dark" : "light";
     const now = Date.now();
     const emailMatches = await findUsersByEmail(ctx, email);
 
@@ -188,6 +191,7 @@ export const syncCurrentUser = mutation({
         fullName: `${nextFirstName} ${nextSurname}`.trim(),
         designation: isPrimaryAdmin ? "Operations Admin" : (user.designation || designation),
         profilePic: user.profilePic || args.profilePic || "",
+        theme: user.theme === "dark" ? "dark" : theme,
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(user.columnOrderAfterPayment) ? user.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : user.role,
@@ -215,6 +219,7 @@ export const syncCurrentUser = mutation({
         fullName: `${existingByEmail.firstName || firstName} ${existingByEmail.surname || surname}`.trim(),
         designation: isPrimaryAdmin ? "Operations Admin" : (existingByEmail.designation || designation),
         profilePic: existingByEmail.profilePic || args.profilePic || "",
+        theme: existingByEmail.theme === "dark" ? "dark" : theme,
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : existingByEmail.role,
@@ -245,6 +250,7 @@ export const syncCurrentUser = mutation({
       designation: shouldBootstrapAdmin ? "Operations Admin" : (designation || "Coordinator"),
       role: shouldBootstrapAdmin ? "admin" : "user",
       profilePic: args.profilePic || "",
+      theme,
       monthOrder: monthNames,
       columnOrderAfterPayment: [],
       isApproved: shouldBootstrapAdmin,
@@ -347,6 +353,7 @@ export const updateMyProfile = mutation({
     surname: v.string(),
     designation: v.string(),
     profilePic: v.optional(v.string()),
+    theme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
   },
   handler: async (ctx, args) => {
     const { user } = await getCurrentUserRecord(ctx);
@@ -360,6 +367,7 @@ export const updateMyProfile = mutation({
       fullName: `${args.firstName.trim() || user.firstName} ${args.surname.trim() || user.surname}`.trim(),
       designation: args.designation.trim() || user.designation,
       profilePic: args.profilePic || "",
+      theme: args.theme === "dark" ? "dark" : "light",
       updatedAt: Date.now(),
     });
 
@@ -519,6 +527,7 @@ export const bootstrapPrimaryAdmin = mutation({
         designation: "Operations Admin",
         role: "admin",
         profilePic: args.profilePic || existingByClerkId.profilePic || "",
+        theme: existingByClerkId.theme === "dark" ? "dark" : "light",
         monthOrder: Array.isArray(existingByClerkId.monthOrder) && existingByClerkId.monthOrder.length === monthNames.length ? existingByClerkId.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByClerkId.columnOrderAfterPayment) ? existingByClerkId.columnOrderAfterPayment : [],
         isApproved: true,
@@ -549,6 +558,7 @@ export const bootstrapPrimaryAdmin = mutation({
         designation: "Operations Admin",
         role: "admin",
         profilePic: args.profilePic || existingByEmail.profilePic || "",
+        theme: existingByEmail.theme === "dark" ? "dark" : "light",
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
         isApproved: true,
@@ -573,6 +583,7 @@ export const bootstrapPrimaryAdmin = mutation({
       designation: "Operations Admin",
       role: "admin",
       profilePic: args.profilePic || "",
+      theme: "light",
       monthOrder: monthNames,
       columnOrderAfterPayment: [],
       isApproved: true,

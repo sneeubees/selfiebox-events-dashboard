@@ -11,8 +11,18 @@
   --board-columns: 220px 82px 110px 100px 136px 132px 230px 104px 80px 86px 102px 92px 120px 98px 104px 48px;
   --board-width: 1844px;
 }
+:root[data-theme="dark"] {
+  --bg: #0f1625;
+  --panel: #162033;
+  --panel-alt: #111a2b;
+  --line: #2a3956;
+  --text: #e7eefc;
+  --muted: #9fb0cf;
+  --blue: #5d8cff;
+  --shadow: 0 16px 36px rgba(2, 8, 23, 0.42);
+}
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; transition: background 160ms ease, color 160ms ease; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 .app-shell { height: 100vh; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
@@ -723,3 +733,117 @@ textarea { resize: vertical; min-height: 110px; }
 .app-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 8px 12px 4px; font-size: 0.72rem; color: var(--muted); }
 .app-footer span:last-child { text-align: right; }
 @media (max-width: 760px) { .app-footer { flex-direction: column; align-items: flex-start; gap: 4px; } .app-footer span:last-child { text-align: left; } }
+
+:root[data-theme="dark"] .topbar-kicker,
+:root[data-theme="dark"] .auth-brand {
+  color: #f0c56b;
+}
+:root[data-theme="dark"] .workspace-text-button,
+:root[data-theme="dark"] .saved-filter-chip-button,
+:root[data-theme="dark"] .search-clear-button,
+:root[data-theme="dark"] .profile-upload-button,
+:root[data-theme="dark"] .month-export-button,
+:root[data-theme="dark"] .location-pin-button,
+:root[data-theme="dark"] .modal-close-x,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .workspace-select-wrap select,
+:root[data-theme="dark"] .filters-grid select,
+:root[data-theme="dark"] .text-input,
+:root[data-theme="dark"] .auth-form input,
+:root[data-theme="dark"] .modal-form select,
+:root[data-theme="dark"] .modal-form input,
+:root[data-theme="dark"] textarea {
+  background: #1a2740;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .profile-pill,
+:root[data-theme="dark"] .user-list-card,
+:root[data-theme="dark"] .rights-row,
+:root[data-theme="dark"] .activity-item,
+:root[data-theme="dark"] .file-card,
+:root[data-theme="dark"] .filter-group,
+:root[data-theme="dark"] .board-header,
+:root[data-theme="dark"] .board-header .cell,
+:root[data-theme="dark"] .month-section,
+:root[data-theme="dark"] .month-header,
+:root[data-theme="dark"] .cell,
+:root[data-theme="dark"] .board-entry .cell-name,
+:root[data-theme="dark"] .calendar-popover,
+:root[data-theme="dark"] .color-swatch-popover,
+:root[data-theme="dark"] .autocomplete-popover,
+:root[data-theme="dark"] .admin-menu {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .board-surface,
+:root[data-theme="dark"] .event-drawer,
+:root[data-theme="dark"] .auth-shell {
+  background: var(--bg);
+}
+:root[data-theme="dark"] .auth-shell {
+  background: radial-gradient(circle at top left, #1a2640 0%, #131d31 32%, #0f1625 72%, #0c1320 100%);
+}
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .profile-hero {
+  background: linear-gradient(180deg, #19243a 0%, #121b2b 100%);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .profile-avatar-shell,
+:root[data-theme="dark"] .drawer-tabs,
+:root[data-theme="dark"] .auth-tabs,
+:root[data-theme="dark"] .saved-filter-chip,
+:root[data-theme="dark"] .filter-open-button,
+:root[data-theme="dark"] .tag-empty,
+:root[data-theme="dark"] .compact-name-pill,
+:root[data-theme="dark"] .row-creator-avatar,
+:root[data-theme="dark"] .extra-pill,
+:root[data-theme="dark"] .calendar-day,
+:root[data-theme="dark"] .location-field-popover {
+  background: #1b2942;
+  color: var(--text);
+}
+:root[data-theme="dark"] .board-entry.is-alt-day .cell,
+:root[data-theme="dark"] .board-entry.is-alt-day .cell-name {
+  background: #131f33;
+}
+:root[data-theme="dark"] .board-entry:hover .cell,
+:root[data-theme="dark"] .board-entry:hover .cell-name {
+  background: #1a2840;
+}
+:root[data-theme="dark"] .board-entry.is-active .cell,
+:root[data-theme="dark"] .board-entry.is-active .cell-name,
+:root[data-theme="dark"] .month-header:hover,
+:root[data-theme="dark"] .board-header .cell.is-drag-target,
+:root[data-theme="dark"] .month-section.is-drag-target-month .month-header {
+  background: #223556;
+}
+:root[data-theme="dark"] .workspace-text-button,
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .profile-upload-button,
+:root[data-theme="dark"] .saved-filter-chip-button,
+:root[data-theme="dark"] .month-export-button,
+:root[data-theme="dark"] .location-pin-button,
+:root[data-theme="dark"] .modal-close-x {
+  color: #c6d7ff;
+}
+:root[data-theme="dark"] .primary-button {
+  background: linear-gradient(135deg, #5d8cff, #3156a8);
+  box-shadow: 0 12px 24px rgba(8, 15, 32, 0.34);
+}
+:root[data-theme="dark"] .locked-input {
+  background: #122038 !important;
+  color: #96a9cc !important;
+}
+:root[data-theme="dark"] .drawer-meta,
+:root[data-theme="dark"] .map-preview-address,
+:root[data-theme="dark"] .inline-event-title,
+:root[data-theme="dark"] .user-list-copy span,
+:root[data-theme="dark"] .profile-hero-copy span,
+:root[data-theme="dark"] .workspace-prefix,
+:root[data-theme="dark"] .empty-month,
+:root[data-theme="dark"] .saved-filter-chip-label,
+:root[data-theme="dark"] .calendar-weekdays span {
+  color: var(--muted);
+}
