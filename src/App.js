@@ -2769,6 +2769,8 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     }
 
     let isMounted = true;
+    let mountTimeoutId = null;
+    let focusTimeoutId = null;
 
     const mountAutocomplete = async () => {
       try {
@@ -2819,18 +2821,26 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
           autocompleteContainerRef.current.appendChild(autocompleteElementRef.current);
         }
 
-        window.setTimeout(() => {
+        focusTimeoutId = window.setTimeout(() => {
           autocompleteElementRef.current?.focus?.();
-        }, 0);
+        }, 30);
       } catch (error) {
         console.error('Google Maps autocomplete failed to load', error);
       }
     };
 
-    void mountAutocomplete();
+    mountTimeoutId = window.setTimeout(() => {
+      void mountAutocomplete();
+    }, 30);
 
     return () => {
       isMounted = false;
+      if (mountTimeoutId != null) {
+        window.clearTimeout(mountTimeoutId);
+      }
+      if (focusTimeoutId != null) {
+        window.clearTimeout(focusTimeoutId);
+      }
     };
   }, [compact, isOpen, onPlaceSelect, placeholder, readOnly, value]);
 
@@ -2843,27 +2853,52 @@ function LocationMapPreview({ location }) {
   useEffect(() => {
     let isActive = true;
     let marker = null;
+    let map = null;
+    let initTimeoutId = null;
+    let resizeTimeoutId = null;
 
     void loadGoogleMapsApi().then(() => {
       if (!isActive || !mapRef.current || !window.google?.maps || typeof location?.locationLat !== 'number' || typeof location?.locationLng !== 'number') {
         return;
       }
 
-      const center = { lat: location.locationLat, lng: location.locationLng };
-      const map = new window.google.maps.Map(mapRef.current, {
-        center,
-        zoom: 15,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      });
-      marker = new window.google.maps.Marker({ position: center, map });
+      initTimeoutId = window.setTimeout(() => {
+        if (!isActive || !mapRef.current) {
+          return;
+        }
+
+        const center = { lat: location.locationLat, lng: location.locationLng };
+        map = new window.google.maps.Map(mapRef.current, {
+          center,
+          zoom: 15,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        marker = new window.google.maps.Marker({ position: center, map });
+
+        resizeTimeoutId = window.setTimeout(() => {
+          if (!isActive || !map) {
+            return;
+          }
+          if (window.google?.maps?.event?.trigger) {
+            window.google.maps.event.trigger(map, 'resize');
+          }
+          map.setCenter(center);
+        }, 60);
+      }, 30);
     }).catch((error) => {
       console.error('Google Maps preview failed to load', error);
     });
 
     return () => {
       isActive = false;
+      if (initTimeoutId != null) {
+        window.clearTimeout(initTimeoutId);
+      }
+      if (resizeTimeoutId != null) {
+        window.clearTimeout(resizeTimeoutId);
+      }
       if (marker?.setMap) {
         marker.setMap(null);
       }
