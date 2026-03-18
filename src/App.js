@@ -2118,6 +2118,9 @@ function DashboardApp() {
     const nextFullName = draft?.fullName?.trim();
     const nextColor = draft?.color || '#d9edf8';
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
+    const existingOption = productOptions.find((option) => (option.optionKey || option.abbreviation) === productKey);
+    const draftKeyAfterSave = existingOption?.optionKey || nextAbbreviation;
+    const previousStoredValue = existingOption?.abbreviation || productKey;
     if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 7) {
       openNotice('Please enter a full name and an abbreviation of 7 characters or less.');
       return;
@@ -2134,25 +2137,25 @@ function DashboardApp() {
     }
     persistLabelOption('products', productKey, nextFullName, nextAbbreviation, nextColor, productOptions.findIndex((option) => (option.optionKey || option.abbreviation) === productKey));
       setProductOptions((current) => current.map((option) => ((option.optionKey || option.abbreviation) === productKey ? { ...option, abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } : option)));
-    if (nextAbbreviation !== productKey) {
+    if (nextAbbreviation !== previousStoredValue) {
       replaceEvents((current) => current.map((event) => ({
         ...event,
-        products: Array.from(new Set(event.products.map((item) => (item === (productOptions.find((option) => (option.optionKey || option.abbreviation) === productKey)?.abbreviation || productKey) ? nextAbbreviation : item)))),
+        products: Array.from(new Set(event.products.map((item) => (item === previousStoredValue ? nextAbbreviation : item)))),
       })));
-      setSelectedProducts((current) => current.map((item) => (item === (productOptions.find((option) => (option.optionKey || option.abbreviation) === productKey)?.abbreviation || productKey) ? nextAbbreviation : item)));
+      setSelectedProducts((current) => current.map((item) => (item === previousStoredValue ? nextAbbreviation : item)));
       setEventForm((current) => ({
         ...current,
-        products: current.products.map((item) => (item === (productOptions.find((option) => (option.optionKey || option.abbreviation) === productKey)?.abbreviation || productKey) ? nextAbbreviation : item)),
+        products: current.products.map((item) => (item === previousStoredValue ? nextAbbreviation : item)),
       }));
-      setProductDrafts((current) => {
-        const nextDrafts = { ...current };
-        delete nextDrafts[productKey];
-        nextDrafts[nextAbbreviation] = { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor };
-        return nextDrafts;
-      });
-      return;
     }
-    setProductDrafts((current) => ({ ...current, [productKey]: { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } }));
+    setProductDrafts((current) => {
+      const nextDrafts = { ...current };
+      if (draftKeyAfterSave !== productKey) {
+        delete nextDrafts[productKey];
+      }
+      nextDrafts[draftKeyAfterSave] = { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor };
+      return nextDrafts;
+    });
   };
 
   const deleteProductOption = async (productKey) => {
