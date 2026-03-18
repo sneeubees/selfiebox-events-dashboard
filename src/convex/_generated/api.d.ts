@@ -16,6 +16,7 @@ import type * as events from "../events.js";
 import type * as files from "../files.js";
 import type * as imports from "../imports.js";
 import type * as labels from "../labels.js";
+import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as permissions from "../permissions.js";
 import type * as staticColumnLabels from "../staticColumnLabels.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   files: typeof files;
   imports: typeof imports;
   labels: typeof labels;
+  maintenance: typeof maintenance;
   notifications: typeof notifications;
   permissions: typeof permissions;
   staticColumnLabels: typeof staticColumnLabels;
