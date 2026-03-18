@@ -190,7 +190,8 @@ function parseNumericCellValue(value) {
 
   const normalized = input
     .replace(/\s+/g, '')
-    .replace(/,/g, '')
+    .replace(/\./g, '')
+    .replace(/,/g, '.')
     .replace(/[^0-9.-]/g, '');
 
   if (!normalized || normalized === '-' || normalized === '.' || normalized === '-.') {
