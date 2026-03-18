@@ -1246,6 +1246,35 @@ function DashboardApp() {
     setLocationPreview(null);
   };
 
+  const shareLocationPreview = async () => {
+    if (!locationPreview) {
+      return;
+    }
+    const url = buildGoogleMapsExternalUrl(locationPreview);
+    const shareData = {
+      title: locationPreview.title || 'Location',
+      text: locationPreview.address || locationPreview.title || 'Location',
+      url,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        openNotice('Google Maps link copied to clipboard.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Failed to share location preview', error);
+        openNotice('Unable to share this location right now.');
+      }
+    }
+  };
+
   const duplicateEvent = async (eventId) => {
     const shouldDuplicate = await requestConfirmation({ title: 'Duplicate event', message: 'Duplicate this event?', confirmLabel: 'Duplicate' });
     if (!shouldDuplicate) {
@@ -2662,7 +2691,7 @@ function DashboardApp() {
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={previewFile.url} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
 
-      {locationPreview ? <div className="modal-scrim" onClick={closeLocationPreview}><div className="modal-panel map-preview-panel" role="dialog" aria-modal="true" aria-label={locationPreview.title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><h3>{locationPreview.title}</h3><p className="map-preview-address" title={locationPreview.address}>{locationPreview.address}</p></div></div><LocationMapPreview location={locationPreview} /><div className="modal-actions"><a className="ghost-button file-preview-link" href={buildGoogleMapsExternalUrl(locationPreview)} target="_blank" rel="noreferrer">Open in Google Maps</a></div></div></div> : null}
+      {locationPreview ? <div className="modal-scrim" onClick={closeLocationPreview}><div className="modal-panel map-preview-panel" role="dialog" aria-modal="true" aria-label={locationPreview.title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><h3>{locationPreview.title}</h3><p className="map-preview-address" title={locationPreview.address}>{locationPreview.address}</p></div></div><LocationMapPreview location={locationPreview} /><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => void shareLocationPreview()}>Share</button><a className="ghost-button file-preview-link" href={buildGoogleMapsExternalUrl(locationPreview)} target="_blank" rel="noreferrer">Open in Google Maps</a></div></div></div> : null}
 
       {renameDialog.isOpen ? <ModalShell title="Rename header" onClose={closeRenameDialog}><div className="simple-stack"><label className="full-span"><span>Header name</span><input className="text-input" value={renameDialog.value} onChange={(event) => setRenameDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveRenamedColumn(); } }} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeRenameDialog}>Cancel</button><button className="primary-button" type="button" onClick={saveRenamedColumn}>Save</button></div></div></ModalShell> : null}
 
