@@ -487,6 +487,7 @@ function DashboardApp() {
   }, {}), [allColumnPermissions]);
   const effectiveColumnRights = useMemo(() => Object.fromEntries(allColumns.map((column) => [column.key, currentUser?.role === 'admin' ? { canView: true, canEdit: true } : (currentColumnRights?.[column.key] || { canView: true, canEdit: true })])), [allColumns, currentColumnRights, currentUser]);
   const canManageRows = effectiveColumnRights.name?.canEdit ?? true;
+  const canConfigureBoard = ['admin', 'manager'].includes(currentUser?.role || '');
   const workspaceYears = useMemo(() => {
     if (workspaceRecords === undefined) {
       return [2026, 2027];
@@ -1618,7 +1619,7 @@ function DashboardApp() {
     setDragOverColumnKey('');
   };
   const renameColumn = (columnKey) => {
-    if (currentUser?.role !== 'admin') {
+    if (!canConfigureBoard) {
       return;
     }
     setAdminMenuColumn(null);
@@ -1651,6 +1652,9 @@ function DashboardApp() {
 
   const handleAddCustomColumn = async (submitEvent) => {
     submitEvent?.preventDefault?.();
+    if (!canConfigureBoard) {
+      return;
+    }
     const trimmedName = newColumnName.trim();
     if (!trimmedName) {
       window.alert('Please enter a column name.');
@@ -2506,16 +2510,16 @@ function DashboardApp() {
           <div className="board-row board-header" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }} onClick={() => setAdminMenuColumn(null)}>
             {visibleColumns.map((column) => (
               <div className={`cell cell-${column.key} ${draggedColumnKey === column.key ? 'is-dragging-column' : ''} ${dragOverColumnKey === column.key ? 'is-drag-target' : ''}`} key={column.key} draggable={allColumns.findIndex((entry) => entry.key === column.key) > allColumns.findIndex((entry) => entry.key === 'paymentStatus')} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined} onDragStart={() => startColumnDrag(column.key)} onDragOver={(event) => handleColumnDragOver(event, column.key)} onDrop={() => void handleColumnDrop(column.key)} onDragEnd={endColumnDrag} onContextMenu={(event) => {
-                if (currentUser.role !== 'admin') return;
+                if (!canConfigureBoard) return;
                 event.preventDefault();
                 setAdminMenuColumn(column.key);
                 setAdminMenuPosition({ top: event.clientY + 4, left: event.clientX + 4 });
               }}>
                 <div className="column-header-label">{displayColumnLabel(column)}</div>
-                {adminMenuColumn === column.key ? <div className="admin-menu" style={{ top: adminMenuPosition.top, left: adminMenuPosition.left }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => renameColumn(column.key)}>Rename header</button><button type="button" onClick={() => openRightsManager(column.key)}>Manage rights</button>{column.key === 'branch' ? <button type="button" onClick={openBranchManager}>Add/Edit item</button> : null}{column.key === 'products' ? <button type="button" onClick={openProductManager}>Add/Edit item</button> : null}{column.key === 'status' ? <button type="button" onClick={openStatusManager}>Add/Edit item</button> : null}{['paymentStatus', 'vinyl', 'gsAi', 'imagesSent', 'snappic'].includes(column.key) ? <button type="button" onClick={() => openManagedSingleManager(column.key)}>Add/Edit item</button> : null}{column.key === 'attendants' ? <button type="button" onClick={openAttendantManager}>Add/Edit item</button> : null}{customColumns.some((customColumn) => customColumn.key === column.key && ['singleItem', 'multiItem'].includes(customColumn.type)) ? <button type="button" onClick={() => openCustomOptionManager(column.key)}>Add/Edit item</button> : null}{column.isCustom ? <button type="button" onClick={() => deleteCustomColumn(column.key)}>Delete column</button> : null}</div> : null}
+                {adminMenuColumn === column.key ? <div className="admin-menu" style={{ top: adminMenuPosition.top, left: adminMenuPosition.left }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}><button type="button" onClick={() => renameColumn(column.key)}>Rename header</button>{currentUser.role === 'admin' ? <button type="button" onClick={() => openRightsManager(column.key)}>Manage rights</button> : null}{column.key === 'branch' ? <button type="button" onClick={openBranchManager}>Add/Edit item</button> : null}{column.key === 'products' ? <button type="button" onClick={openProductManager}>Add/Edit item</button> : null}{column.key === 'status' ? <button type="button" onClick={openStatusManager}>Add/Edit item</button> : null}{['paymentStatus', 'vinyl', 'gsAi', 'imagesSent', 'snappic'].includes(column.key) ? <button type="button" onClick={() => openManagedSingleManager(column.key)}>Add/Edit item</button> : null}{column.key === 'attendants' ? <button type="button" onClick={openAttendantManager}>Add/Edit item</button> : null}{customColumns.some((customColumn) => customColumn.key === column.key && ['singleItem', 'multiItem'].includes(customColumn.type)) ? <button type="button" onClick={() => openCustomOptionManager(column.key)}>Add/Edit item</button> : null}{column.isCustom && currentUser.role === 'admin' ? <button type="button" onClick={() => deleteCustomColumn(column.key)}>Delete column</button> : null}</div> : null}
               </div>
             ))}
-            {currentUser.role === 'admin' ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
+            {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
           </div>
 
           {orderedMonths.map((month) => {
