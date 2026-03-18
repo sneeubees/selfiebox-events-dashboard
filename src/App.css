@@ -226,7 +226,7 @@ button { cursor: pointer; }
 .cell-status .cell-select-button, .cell-paymentStatus .cell-select-button { justify-content: center; }
 .cell-status .tag, .cell-paymentStatus .tag { width: 112px; max-width: 112px; padding-left: 0; padding-right: 0; }
 .cell-accounts .cell-select-button { justify-content: center; }
-.cell-accounts .tag, .managed-finance-pill { width: 112px; max-width: 112px; padding-left: 0; padding-right: 0; }
+.cell-accounts .tag, .managed-finance-pill { width: 90px; max-width: 90px; padding-left: 0; padding-right: 0; }
 .add-inline-row { display: block; width: calc(100% - 24px); min-width: calc(100% - 24px); margin: 8px 12px; border: 1px dashed #b9c7e6; border-radius: 8px; background: #f8fbff; color: #2f5cae; padding: 8px 12px; text-align: left; }
 .totals-row .cell { border-top: 1px solid var(--line); background: #f8fafc; font-weight: 700; }
 .drawer-scrim { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.24); opacity: 0; pointer-events: none; transition: opacity 180ms ease; z-index: 20; }
