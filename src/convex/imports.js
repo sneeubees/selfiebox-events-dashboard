@@ -279,6 +279,7 @@ export const importMonthWorkbook = mutation({
       };
       if (normalizeText(sourceEvent.exclJc)) {
         nextCustomFields.exclJc = normalizeText(sourceEvent.exclJc);
+        nextCustomFields.custom_excl_jc = normalizeText(sourceEvent.exclJc);
       }
 
       const payload = {
