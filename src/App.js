@@ -405,7 +405,7 @@ function DashboardApp() {
     try {
       const savedViewsRaw = window.localStorage.getItem(getSavedFilterViewsStorageKey(currentUser.id));
       const savedViewsParsed = savedViewsRaw ? JSON.parse(savedViewsRaw) : [];
-      setSavedFilterViews(Array.isArray(savedViewsParsed) ? savedViewsParsed.slice(0, 4) : []);
+      setSavedFilterViews(Array.isArray(savedViewsParsed) ? savedViewsParsed.slice(0, 8) : []);
 
       const activeFiltersRaw = window.localStorage.getItem(getActiveFilterStateStorageKey(currentUser.id));
       const activeFilters = activeFiltersRaw ? JSON.parse(activeFiltersRaw) : null;
@@ -441,7 +441,7 @@ function DashboardApp() {
     if (!filtersHydratedRef.current || !currentUser?.id || typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(getSavedFilterViewsStorageKey(currentUser.id), JSON.stringify(savedFilterViews.slice(0, 4)));
+    window.localStorage.setItem(getSavedFilterViewsStorageKey(currentUser.id), JSON.stringify(savedFilterViews.slice(0, 8)));
   }, [currentUser?.id, savedFilterViews]);
   useEffect(() => {
     setColumnOrderAfterPaymentDraft(currentUser?.columnOrderAfterPayment || []);
@@ -1922,8 +1922,8 @@ function DashboardApp() {
   }, [savedFilterViews, selectedBranches, selectedProducts, selectedStatuses, selectedPayments]);
 
   const openSaveCustomViewModal = () => {
-    if (savedFilterViews.length >= 4) {
-      openNotice('You can save up to 4 custom views.');
+    if (savedFilterViews.length >= 8) {
+      openNotice('You can save up to 8 custom views.');
       return;
     }
     setNewFilterViewName('');
@@ -1947,7 +1947,7 @@ function DashboardApp() {
       products: [...selectedProducts],
       statuses: [...selectedStatuses],
       payments: [...selectedPayments],
-    }].slice(0, 4));
+    }].slice(0, 8));
     setSaveFilterViewModalOpen(false);
     setNewFilterViewName('');
   };
