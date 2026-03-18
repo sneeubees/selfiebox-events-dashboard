@@ -65,24 +65,25 @@ const CUSTOM_COLUMN_TYPE_OPTIONS = [
 const eventDefaults = {
   name: '',
   eventTitle: '',
-  date: '2026-03-01',
+  date: '',
+  draftMonth: '',
   hours: '',
-  branch: ['GP'],
+  branch: [],
   products: [],
-  status: 'Quote Sent',
+  status: '',
   location: '',
   locationPlaceId: '',
   locationLat: null,
   locationLng: null,
-  paymentStatus: '50%',
-  accounts: '50%',
+  paymentStatus: '',
+  accounts: '',
   quoteNumber: '',
   invoiceNumber: '',
   exVatAuto: '',
-  vinyl: 'No',
-  gsAi: 'No',
-  imagesSent: 'No',
-  snappic: 'No',
+  vinyl: '',
+  gsAi: '',
+  imagesSent: '',
+  snappic: '',
   attendants: [],
   exVat: '',
   packageOnly: '',
@@ -1431,35 +1432,52 @@ function DashboardApp() {
 
   const handleAddEvent = (submitEvent) => {
     submitEvent.preventDefault();
+    const fallbackDraftMonth =
+      eventForm.draftMonth ||
+      orderedMonths.find((month) => !collapsedMonths[month]) ||
+      monthNames[new Date().getMonth()];
     const newEvent = {
       ...eventDefaults,
       id: `evt-${String(events.length + 1).padStart(3, '0')}`,
       name: eventForm.name,
+      eventTitle: eventForm.eventTitle || '',
       date: eventForm.date,
+      draftMonth: eventForm.date ? monthNames[new Date(eventForm.date).getMonth()] : fallbackDraftMonth,
+      workspaceYear: eventForm.date ? new Date(eventForm.date).getFullYear() : selectedWorkspaceYear,
       hours: eventForm.hours,
-      branch: [eventForm.branch[0] || 'GP'],
-      products: eventForm.products[0] ? [eventForm.products[0]] : [],
+      branch: [...(eventForm.branch || [])],
+      products: [...(eventForm.products || [])],
       status: eventForm.status,
       location: eventForm.location,
+      locationPlaceId: eventForm.locationPlaceId || '',
+      locationLat: typeof eventForm.locationLat === 'number' ? eventForm.locationLat : null,
+      locationLng: typeof eventForm.locationLng === 'number' ? eventForm.locationLng : null,
       paymentStatus: eventForm.paymentStatus,
       accounts: eventForm.accounts,
+      quoteNumber: eventForm.quoteNumber || '',
+      invoiceNumber: eventForm.invoiceNumber || '',
+      exVatAuto: eventForm.exVatAuto || '',
       vinyl: eventForm.vinyl,
       gsAi: eventForm.gsAi,
       imagesSent: eventForm.imagesSent,
       snappic: eventForm.snappic,
-      attendants: eventForm.attendants,
+      attendants: [...(eventForm.attendants || [])],
       exVat: eventForm.exVat,
       packageOnly: eventForm.packageOnly,
+      notes: eventForm.notes || '',
       customFields: buildDefaultCustomFields(),
+      updates: [],
+      files: [],
       activity: [],
     };
     replaceEvents((current) => [newEvent, ...current]);
     queueActivityLog({
-      workspaceYear: new Date(newEvent.date).getFullYear(),
+      workspaceYear: newEvent.workspaceYear || selectedWorkspaceYear,
       eventKey: newEvent.id,
       eventName: newEvent.name || 'Untitled event',
       text: 'Created event.',
     }, 500);
+    clearFilters();
     setShowAddModal(false);
     setEventForm({ ...eventDefaults });
     openDrawer(newEvent.id);
