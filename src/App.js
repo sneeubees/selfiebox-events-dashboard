@@ -2581,22 +2581,27 @@ function DashboardApp() {
               Filter
               {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">Clear</span> : null}
             </button>
-            <div className="saved-filter-chip-row">
-              {savedFilterViews.map((view) => (
-                <div
-                  className={["saved-filter-chip", activeSavedFilterViewId === view.id ? "is-active" : ""].join(" ").trim()}
-                  key={view.id}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    void requestDeleteSavedFilterView(view);
-                  }}
-                  title="Right-click to delete"
-                >
-                  <button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button>
-                  <button className="saved-filter-chip-close" type="button" aria-label="Clear filters" onClick={clearFilters}>x</button>
+            {savedFilterViews.length ? (
+              <div className="saved-filter-chip-stack">
+                <div className="saved-filter-chip-label">Saved Filters</div>
+                <div className="saved-filter-chip-row">
+                  {savedFilterViews.map((view) => (
+                    <div
+                      className={["saved-filter-chip", activeSavedFilterViewId === view.id ? "is-active" : ""].join(" ").trim()}
+                      key={view.id}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        void requestDeleteSavedFilterView(view);
+                      }}
+                      title="Right-click to delete"
+                    >
+                      <button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button>
+                      <button className="saved-filter-chip-close" type="button" aria-label="Clear filters" onClick={clearFilters}>x</button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : null}
           </div>
           <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
         </div>
