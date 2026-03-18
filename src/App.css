@@ -97,11 +97,13 @@ button { cursor: pointer; }
 .search-clear-button:hover { background: #d8e1f5; color: #32466f; }
 .filter-button { min-width: 92px; }
 .filter-open-button { margin-left: 12px; }
-.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #d5def1; border-radius: 999px; background: #eef3ff; padding: 0 24px 0 0; }
-.saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #33508b; font-size: 0.72rem; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.saved-filter-chip-button:hover { color: #223d74; }
-.saved-filter-chip-close { position: absolute; top: 2px; right: 4px; width: 16px; height: 16px; border: 0; border-radius: 999px; background: #d9e4fb; color: #4b628f; font-size: 0.62rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
-.saved-filter-chip-close:hover { background: #c7d7fb; color: #243e75; }
+.filter-save-button { min-width: 134px; border-color: #f0c795; background: #ffe7c7; color: #8b5a18; }
+.filter-save-button:hover { border-color: #e7b97d; background: #ffdba8; color: #70450e; }
+.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 132px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 24px 0 0; }
+.saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #8b5a18; font-size: 0.72rem; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-filter-chip-button:hover { color: #70450e; }
+.saved-filter-chip-close { position: absolute; top: 2px; right: 4px; width: 16px; height: 16px; border: 0; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.62rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; }
+.saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: sticky; top: 0; z-index: 20; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
@@ -176,7 +178,7 @@ button { cursor: pointer; }
 .autocomplete-option:hover { background: #edf3ff; color: #274784; }
 .tag { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 4px 8px; border-radius: 8px; font-size: 0.72rem; font-weight: 700; text-align: center; }
 .tag-empty { background: #eef1f5; color: #60708b; }
-.empty-cell-value { color: #60708b; font-size: 0.68rem; }
+.empty-cell-value { display: inline-block; min-height: 1px; width: 100%; }
 .compact-tag-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .compact-tag-slot { position: relative; display: inline-flex; min-width: 0; }
 .compact-tag-slot .tag { max-width: 52px; min-height: 22px; padding: 3px 7px; font-size: 0.66rem; }
@@ -301,9 +303,10 @@ textarea { resize: vertical; min-height: 110px; }
 .auth-helper-text { margin: -2px 0 0; color: #6b7da3; }
 .auth-error { border-radius: 10px; padding: 10px 12px; background: #fff0f3; border: 1px solid #f1c0cb; color: #b43b52; font-size: 0.8rem; }
 .filter-popup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.filter-popup .modal-actions { justify-content: flex-start; flex-wrap: wrap; }
+.filter-popup .modal-actions { justify-content: flex-start; flex-wrap: nowrap; align-items: center; }
 .filter-popup .modal-actions .ghost-button,
 .filter-popup .modal-actions .primary-button { min-width: 126px; white-space: nowrap; }
+.filter-popup-actions { grid-column: 1 / -1; }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
 .filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
