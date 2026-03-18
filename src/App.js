@@ -2534,7 +2534,6 @@ function DashboardApp() {
             </div>
             <button className="ghost-button filter-button filter-open-button" type="button" onClick={() => setFiltersOpen(true)}>Filter</button>
             <button className="ghost-button filter-button" type="button" onClick={clearFilters}>Clear filter</button>
-            <button className="ghost-button filter-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button>
             {savedFilterViews.map((view) => <div className="saved-filter-chip" key={view.id}><button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button><button className="saved-filter-chip-close" type="button" aria-label={`Delete ${view.name}`} onClick={() => deleteSavedFilterView(view.id)}>x</button></div>)}
           </div>
           <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
@@ -2560,7 +2559,7 @@ function DashboardApp() {
             const totals = monthItems.reduce((accumulator, event) => ({ exVat: accumulator.exVat + Number(event.exVat || 0), packageOnly: accumulator.packageOnly + Number(event.packageOnly || 0) }), { exVat: 0, packageOnly: 0 });
             const upcomingCount = monthItems.filter((event) => event.status === 'In Progress').length;
             const completedCount = monthItems.filter((event) => event.status === 'Event Completed').length;
-            const fullyPaidCount = monthItems.filter((event) => event.status === 'Event Completed' && event.paymentStatus === '100%').length;
+              const fullyPaidCount = monthItems.filter((event) => event.accounts === '100%').length;
             return (
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>

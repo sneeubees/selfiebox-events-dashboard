@@ -177,7 +177,7 @@ button { cursor: pointer; }
 .autocomplete-option { width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text); padding: 6px 8px; text-align: left; font-size: 0.78rem; }
 .autocomplete-option:hover { background: #edf3ff; color: #274784; }
 .tag { display: inline-flex; align-items: center; justify-content: center; min-height: 26px; padding: 4px 8px; border-radius: 8px; font-size: 0.72rem; font-weight: 700; text-align: center; }
-.tag-empty { background: #eef1f5; color: #60708b; }
+.tag-empty { background: transparent; color: transparent; border-color: transparent; box-shadow: none; }
 .empty-cell-value { display: inline-block; min-height: 1px; width: 100%; }
 .compact-tag-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .compact-tag-slot { position: relative; display: inline-flex; min-width: 0; }
