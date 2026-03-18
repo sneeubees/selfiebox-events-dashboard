@@ -178,6 +178,29 @@ const currencyFormatter = new Intl.NumberFormat('en-ZA', {
   maximumFractionDigits: 0,
 });
 
+function parseNumericCellValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const input = String(value ?? '').trim();
+  if (!input) {
+    return 0;
+  }
+
+  const normalized = input
+    .replace(/\s+/g, '')
+    .replace(/,/g, '')
+    .replace(/[^0-9.-]/g, '');
+
+  if (!normalized || normalized === '-' || normalized === '.' || normalized === '-.') {
+    return 0;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function getColumnWidth(column) {
   if (column.isCustom) {
     return 84;
@@ -2883,7 +2906,19 @@ function DashboardApp() {
 
           {orderedMonths.map((month) => {
             const monthItems = eventsByMonth[month] || [];
-            const totals = monthItems.reduce((accumulator, event) => ({ exVat: accumulator.exVat + Number(event.exVat || 0), packageOnly: accumulator.packageOnly + Number(event.packageOnly || 0) }), { exVat: 0, packageOnly: 0 });
+            const totalsByColumn = visibleColumns.reduce((accumulator, column) => {
+              if (column.type !== 'number') {
+                return accumulator;
+              }
+
+              const total = monthItems.reduce((sum, event) => {
+                const rawValue = column.isCustom ? (event.customFields || {})[column.key] : event[column.key];
+                return sum + parseNumericCellValue(rawValue);
+              }, 0);
+
+              accumulator[column.key] = total;
+              return accumulator;
+            }, {});
             const upcomingCount = monthItems.filter((event) => event.status === 'In Progress').length;
             const completedCount = monthItems.filter((event) => event.status === 'Event Completed').length;
               const fullyPaidCount = monthItems.filter((event) => event.accounts === '100%').length;
@@ -2897,7 +2932,7 @@ function DashboardApp() {
                   <>
 {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Duplicate" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>D</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows}>+ Add Event</button>
-                    <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.key === 'exVat' ? currencyFormatter.format(totals.exVat) : column.key === 'packageOnly' ? currencyFormatter.format(totals.packageOnly) : ''}</div>)}<div className="cell cell-actions" /></div>
+                    <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
                 ) : null}
               </section>
