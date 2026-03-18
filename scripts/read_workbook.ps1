@@ -5,7 +5,7 @@ param(
 
 $excel = $null
 $workbook = $null
-$IgnoredColumnLetters = @("M", "N", "P", "R", "S", "U", "V", "W", "X", "Y")
+$IgnoredColumnLetters = @()
 $PreservedHeaders = @(
   "snappic?",
   "attendant/s",

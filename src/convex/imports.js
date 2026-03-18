@@ -201,6 +201,7 @@ export const importMonthWorkbook = mutation({
       attendants: v.array(v.string()),
       exVat: v.optional(v.union(v.number(), v.string())),
       packageOnly: v.optional(v.string()),
+      exclJc: v.optional(v.string()),
     })),
     updates: v.array(v.object({
       itemId: v.string(),
@@ -273,6 +274,13 @@ export const importMonthWorkbook = mutation({
       const imagesSent = await ensureLabelOption(ctx, "imagesSent", sourceEvent.imagesSent || "", 0);
       const snappic = await ensureLabelOption(ctx, "snappic", sourceEvent.snappic || "", 0);
 
+      const nextCustomFields = {
+        ...(existingEvent?.customFields || {}),
+      };
+      if (normalizeText(sourceEvent.exclJc)) {
+        nextCustomFields.exclJc = normalizeText(sourceEvent.exclJc);
+      }
+
       const payload = {
         eventKey,
         workspaceYear: args.workspaceYear,
@@ -294,6 +302,7 @@ export const importMonthWorkbook = mutation({
         attendants: uniqueList(attendants),
         exVat: sourceEvent.exVat ?? "",
         packageOnly: normalizeText(sourceEvent.packageOnly),
+        customFields: nextCustomFields,
         updatedAt: Date.now(),
       };
 
@@ -307,7 +316,6 @@ export const importMonthWorkbook = mutation({
         eventId = await ctx.db.insert("events", {
           ...payload,
           notes: "",
-          customFields: {},
           updates: [],
           files: [],
           activity: [],

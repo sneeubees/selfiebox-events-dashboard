@@ -133,8 +133,9 @@ function mapEvents(rows) {
     imagesSent: normalizeText(row["Images sent?"]),
     snappic: normalizeText(row["Snappic?"]),
     attendants: splitMulti(row["Attendant/s"]),
-    exVat: normalizeText(row["Ex. vat"]),
-    packageOnly: normalizeText(row["Package Only"]),
+    exVat: normalizeText(row["Ex. vat"] || row["Ex. Vat"] || row["Ex. VAT"]),
+    packageOnly: normalizeText(row["Package Only"] || row["Package Only Total"]),
+    exclJc: normalizeText(row["Excl JC"]),
   })).filter((event) => event.itemId && event.name);
 }
 
