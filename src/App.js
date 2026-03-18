@@ -1991,12 +1991,15 @@ function DashboardApp() {
     setter((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
   };
 
-  const clearFilters = () => {
+  const clearFilters = ({ includeSearch = false } = {}) => {
     setSelectedBranches([]);
     setSelectedProducts([]);
     setSelectedStatuses([]);
     setSelectedPayments([]);
     setSelectedAttendants([]);
+    if (includeSearch) {
+      setSearch('');
+    }
   };
   const activeFilterCount =
     selectedBranches.length +
@@ -2704,7 +2707,7 @@ function DashboardApp() {
               type="button"
               onClick={() => {
                 if (hasActiveFilters) {
-                  clearFilters();
+    clearFilters({ includeSearch: true });
                   return;
                 }
                 setFiltersOpen(true);
