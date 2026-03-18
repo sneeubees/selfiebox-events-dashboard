@@ -876,6 +876,12 @@ textarea { resize: vertical; min-height: 110px; }
   background: #122038 !important;
   color: #96a9cc !important;
 }
+:root[data-theme="dark"] .inline-input:hover,
+:root[data-theme="dark"] .inline-input:focus {
+  background: #1a2740;
+  color: var(--text);
+  border-color: #4e6ea9;
+}
 :root[data-theme="dark"] .drawer-meta,
 :root[data-theme="dark"] .map-preview-address,
 :root[data-theme="dark"] .inline-event-title,
