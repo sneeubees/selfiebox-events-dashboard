@@ -39,6 +39,7 @@ const defaultYesNoOptions = [
 const defaultAttendantOptions = Array.from(new Set(seedEvents.flatMap((event) => event.attendants || []))).map((fullName, index) => ({
   optionKey: fullName,
   name: fullName,
+  branchKey: "",
   color: "#dfe7f6",
   order: index,
 }));
@@ -57,6 +58,7 @@ function toLabelDto(record) {
     optionKey: record.optionKey,
     name: record.name,
     abbreviation: record.abbreviation || "",
+    branchKey: record.branchKey || "",
     color: record.color,
     order: record.order,
   };
@@ -149,6 +151,7 @@ export const seedInitialData = mutation({
           optionKey: option.optionKey,
           name: option.name,
           abbreviation: option.abbreviation || "",
+          branchKey: option.branchKey || "",
           color: option.color,
           order: option.order,
           isActive: true,
@@ -282,6 +285,7 @@ export const upsert = mutation({
     optionKey: v.string(),
     name: v.string(),
     abbreviation: v.optional(v.string()),
+    branchKey: v.optional(v.string()),
     color: v.string(),
     order: v.number(),
   },
@@ -314,6 +318,7 @@ export const upsert = mutation({
       optionKey: args.optionKey,
       name: args.name,
       abbreviation: args.abbreviation || "",
+      branchKey: args.branchKey || "",
       color: args.color,
       order: args.order,
       isActive: true,
