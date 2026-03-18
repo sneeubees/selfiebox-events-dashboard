@@ -276,6 +276,34 @@ export const remove = mutation({
   },
 });
 
+export const backfillAccountsFromPayment = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const currentUser = await requireCurrentUser(ctx);
+    if (currentUser.role !== "admin") {
+      throw new Error("Only admins can backfill accounts.");
+    }
+
+    const events = await ctx.db.query("events").collect();
+    let updated = 0;
+
+    for (const event of events) {
+      const nextAccounts = event.paymentStatus || "";
+      if ((event.accounts || "") === nextAccounts) {
+        continue;
+      }
+
+      await ctx.db.patch(event._id, {
+        accounts: nextAccounts,
+        updatedAt: Date.now(),
+      });
+      updated += 1;
+    }
+
+    return { updated };
+  },
+});
+
 export const setDocumentNumberFromUpload = internalMutation({
   args: {
     eventKey: v.string(),
