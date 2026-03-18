@@ -1470,8 +1470,8 @@ function DashboardApp() {
       isOpen: true,
       title: scope === 'month' ? `Export ${month}` : `Export ${selectedWorkspaceYear}`,
       filename: scope === 'month'
-        ? `selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xml`
-        : `selfiebox-events-${selectedWorkspaceYear}.xml`,
+        ? `selfiebox-events-${selectedWorkspaceYear}-${month.toLowerCase()}.xlsx`
+        : `selfiebox-events-${selectedWorkspaceYear}.xlsx`,
       scope,
       sheets,
       selectedKeys: visibleColumns.map((column) => column.key),
@@ -1487,14 +1487,14 @@ function DashboardApp() {
     }));
   };
 
-  const runExport = () => {
+  const runExport = async () => {
     if (!exportDialog.selectedKeys.length) {
       openNotice('Please select at least one column to export.');
       return;
     }
 
     const exportColumns = visibleColumns.filter((column) => exportDialog.selectedKeys.includes(column.key));
-    const workbookXml = buildWorkbookXml({
+    const workbookBuffer = await buildWorkbookXlsxBuffer({
       sheets: exportDialog.sheets.map((sheet) => ({
         name: sheet.name,
         rows: sheet.events.map((event) => exportColumns.map((column) => buildExportCell(column, event, {
@@ -1515,7 +1515,7 @@ function DashboardApp() {
       })),
     });
 
-    downloadWorkbookFile(exportDialog.filename, workbookXml);
+    downloadWorkbookFile(exportDialog.filename, workbookBuffer);
     setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] });
   };
 
@@ -3679,83 +3679,83 @@ function normalizeHexColor(value, fallback = 'FFFFFF') {
   return cleaned.toUpperCase();
 }
 
-function createWorkbookStyleRegistry() {
-  const styles = new Map();
-  const definitions = [];
+async function buildWorkbookXlsxBuffer({ sheets, columns }) {
+  const ExcelJSModule = await import('exceljs');
+  const ExcelJS = ExcelJSModule.default || ExcelJSModule;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'SelfieBox Events Platform';
+  workbook.created = new Date();
 
-  const ensureStyle = (style) => {
-    const key = JSON.stringify(style || {});
-    if (styles.has(key)) {
-      return styles.get(key);
-    }
-    const id = `s${styles.size}`;
-    styles.set(key, id);
-    definitions.push({ id, style: style || {} });
-    return id;
-  };
+  sheets.forEach((sheet) => {
+    const worksheet = workbook.addWorksheet(sheet.name.slice(0, 31));
+    worksheet.columns = columns.map((column) => ({
+      header: column.label,
+      key: column.key,
+      width: Math.max(10, Math.round(column.width / 7.2)),
+    }));
 
-  const defaultStyleId = ensureStyle({});
-  const headerStyleId = ensureStyle({
-    bold: true,
-    background: 'EAF1FF',
-    color: '26427B',
-    align: 'Center',
-    border: true,
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 22;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FF26427B' }, name: 'Calibri', size: 10 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF1FF' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+        left: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+        bottom: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+        right: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+      };
+    });
+
+    sheet.rows.forEach((row) => {
+      const worksheetRow = worksheet.addRow(row.map((cell) => cell.value));
+      worksheetRow.height = 20;
+      row.forEach((cell, index) => {
+        const worksheetCell = worksheetRow.getCell(index + 1);
+        worksheetCell.alignment = {
+          vertical: 'middle',
+          horizontal: cell.style?.align?.toLowerCase() === 'center' ? 'center' : 'left',
+          wrapText: true,
+        };
+        worksheetCell.border = {
+          top: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+          left: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+          bottom: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+          right: { style: 'thin', color: { argb: 'FFD6DEEB' } },
+        };
+        if (cell.style?.background) {
+          worksheetCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: `FF${normalizeHexColor(cell.style.background)}` },
+          };
+        }
+        if (cell.style?.color) {
+          worksheetCell.font = {
+            color: { argb: `FF${normalizeHexColor(cell.style.color, '233142')}` },
+            name: 'Calibri',
+            size: 10,
+            bold: true,
+          };
+        } else {
+          worksheetCell.font = { name: 'Calibri', size: 10 };
+        }
+      });
+    });
+
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: Math.max(1, sheet.rows.length + 1), column: columns.length },
+    };
   });
 
-  const buildXml = () => '<Styles>' + definitions.map(({ id, style }) => {
-    const font = [
-      '<Font',
-      style.bold ? ' ss:Bold="1"' : '',
-      style.color ? ` ss:Color="#${normalizeHexColor(style.color, '233142')}"` : '',
-      ' ss:FontName="Calibri" ss:Size="10"/>',
-    ].join('');
-    const interior = style.background ? `<Interior ss:Color="#${normalizeHexColor(style.background)}" ss:Pattern="Solid"/>` : '';
-    const alignment = style.align ? `<Alignment ss:Horizontal="${style.align}" ss:Vertical="Center"/>` : '<Alignment ss:Vertical="Center"/>';
-    const borders = style.border ? '<Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6DEEB"/></Borders>' : '';
-    return `<Style ss:ID="${id}">${alignment}${font}${interior}${borders}</Style>`;
-  }).join('') + '</Styles>';
-
-  return { ensureStyle, buildXml, defaultStyleId, headerStyleId };
-}
-
-function buildWorkbookXml({ sheets, columns }) {
-  const styleRegistry = createWorkbookStyleRegistry();
-
-  const worksheetXml = sheets.map((sheet) => {
-    const columnXml = columns.map((column) => `<Column ss:Width="${Math.max(50, Math.round(column.width))}"/>`).join('');
-    const headerRow = '<Row>' + columns.map((column) => `<Cell ss:StyleID="${styleRegistry.headerStyleId}"><Data ss:Type="String">${escapeXml(column.label)}</Data></Cell>`).join('') + '</Row>';
-    const bodyRows = sheet.rows.map((row) => '<Row>' + row.map((cell) => {
-      const styleId = cell.style ? styleRegistry.ensureStyle({
-        background: cell.style.background,
-        color: cell.style.color,
-        align: cell.style.align,
-        border: true,
-      }) : styleRegistry.ensureStyle({ border: true });
-      return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(cell.value)}</Data></Cell>`;
-    }).join('') + '</Row>').join('');
-    return '<Worksheet ss:Name="' + escapeXml(sheet.name.slice(0, 31)) + '"><Table>' + columnXml + headerRow + bodyRows + '</Table></Worksheet>';
-  }).join('');
-
-  return '<?xml version="1.0"?>' +
-    '<?mso-application progid="Excel.Sheet"?>' +
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">' +
-    styleRegistry.buildXml() +
-    worksheetXml +
-    '</Workbook>';
-}
-
-function escapeXml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return workbook.xlsx.writeBuffer();
 }
 
 function downloadWorkbookFile(filename, contents) {
-  const blob = new Blob([contents], { type: 'application/xml' });
+  const blob = new Blob([contents], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
