@@ -4,12 +4,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "./convex/_generated/api";
 import {
   BOOKING_CUSTOMER_TYPE_OPTIONS,
-  BOOKING_DURATION_OPTIONS,
-  BOOKING_OPTIONAL_EXTRA_OPTIONS,
-  BOOKING_PRODUCT_OPTIONS,
-  BOOKING_REGION_OPTIONS,
-  BOOKING_TERMS_TEXT,
+  BOOKING_TERMS_CONTENT,
+  BOOKING_TERMS_TITLE,
   createEmptyBookingForm,
+  getOptionalExtrasForProducts,
 } from "./bookingConstants";
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGooglePlacesLibrary } from "./googleMaps";
 
@@ -19,6 +17,66 @@ export function getBookingTokenFromPath(pathname) {
     return "";
   }
   return normalized.replace(/^\/+|\/+$/g, "");
+}
+
+function buildClerkAppearance() {
+  return {
+    elements: {
+      cardBox: "clerk-cardbox",
+      card: "clerk-card",
+      headerTitle: "clerk-header-title",
+      headerSubtitle: "clerk-header-subtitle",
+      socialButtonsBlockButton: "clerk-social-button",
+      socialButtonsBlockButtonText: "clerk-social-button-text",
+      formButtonPrimary: "clerk-primary-button",
+      footerActionLink: "clerk-footer-link",
+      formFieldInput: "clerk-input",
+      formFieldLabel: "clerk-label",
+    },
+  };
+}
+
+function formatTimeOffset(value, minutesDelta) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return "";
+  }
+  const totalMinutes = Number(match[1]) * 60 + Number(match[2]) + minutesDelta;
+  const wrapped = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hours = Math.floor(wrapped / 60);
+  const minutes = wrapped % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function buildSubmitPayload(form, pageState) {
+  const base = createEmptyBookingForm();
+  const next = { ...base, ...(form || {}) };
+
+  return {
+    product: String(next.product || (pageState?.productNames || []).join(", ")),
+    customerType: String(next.customerType || ""),
+    eventName: String(next.eventName || ""),
+    companyName: String(pageState?.eventName || next.companyName || ""),
+    contactPerson: String(next.contactPerson || ""),
+    cell: String(next.cell || ""),
+    email: String(next.email || ""),
+    eventDate: String(next.eventDate || pageState?.eventDate || ""),
+    region: String(next.region || pageState?.regionName || ""),
+    address: String(next.address || ""),
+    addressPlaceId: String(next.addressPlaceId || ""),
+    addressLat: typeof next.addressLat === "number" ? next.addressLat : null,
+    addressLng: typeof next.addressLng === "number" ? next.addressLng : null,
+    pointOfContactName: String(next.pointOfContactName || ""),
+    pointOfContactNumber: String(next.pointOfContactNumber || ""),
+    setupTime: String(next.setupTime || ""),
+    eventStartTime: String(next.eventStartTime || ""),
+    eventFinishTime: String(next.eventFinishTime || ""),
+    durationHours: "",
+    optionalExtras: Array.isArray(next.optionalExtras) ? next.optionalExtras.map((value) => String(value || "")) : [],
+    designYourself: String(next.designYourself || ""),
+    notes: String(next.notes || ""),
+    acceptedTerms: Boolean(next.acceptedTerms),
+  };
 }
 
 function BookingAddressInput({ value, onChange, onPlaceSelect }) {
@@ -133,59 +191,49 @@ function BookingAddressInput({ value, onChange, onPlaceSelect }) {
   );
 }
 
-function BookingFormField({ label, children }) {
+function BookingFormField({ label, helper, tooltip, className = "", children }) {
   return (
-    <label className="booking-form-field">
-      <span>{label}</span>
+    <label className={`booking-form-field ${className}`.trim()}>
+      <span>
+        {label}
+        {helper ? <small>{helper}</small> : null}
+        {tooltip ? <button className="booking-help-dot" type="button" title={tooltip}>?</button> : null}
+      </span>
       {children}
     </label>
   );
 }
 
-function buildClerkAppearance() {
-  return {
-    elements: {
-      cardBox: "clerk-cardbox",
-      card: "clerk-card",
-      headerTitle: "clerk-header-title",
-      headerSubtitle: "clerk-header-subtitle",
-      socialButtonsBlockButton: "clerk-social-button",
-      socialButtonsBlockButtonText: "clerk-social-button-text",
-      formButtonPrimary: "clerk-primary-button",
-      footerActionLink: "clerk-footer-link",
-      formFieldInput: "clerk-input",
-      formFieldLabel: "clerk-label",
-    },
-  };
+function BookingStaticField({ label, value }) {
+  return (
+    <div className="booking-static-field">
+      <span>{label}</span>
+      <strong>{value || "-"}</strong>
+    </div>
+  );
 }
 
-function buildSubmitPayload(form) {
-  const base = createEmptyBookingForm();
-  const next = { ...base, ...(form || {}) };
-
-  return {
-    product: String(next.product || ""),
-    customerType: String(next.customerType || ""),
-    companyName: String(next.companyName || ""),
-    contactPerson: String(next.contactPerson || ""),
-    cell: String(next.cell || ""),
-    email: String(next.email || ""),
-    eventDate: String(next.eventDate || ""),
-    region: String(next.region || ""),
-    address: String(next.address || ""),
-    addressPlaceId: String(next.addressPlaceId || ""),
-    addressLat: typeof next.addressLat === "number" ? next.addressLat : null,
-    addressLng: typeof next.addressLng === "number" ? next.addressLng : null,
-    pointOfContactName: String(next.pointOfContactName || ""),
-    pointOfContactNumber: String(next.pointOfContactNumber || ""),
-    eventStartTime: String(next.eventStartTime || ""),
-    eventFinishTime: String(next.eventFinishTime || ""),
-    durationHours: String(next.durationHours || ""),
-    optionalExtras: Array.isArray(next.optionalExtras) ? next.optionalExtras.map((value) => String(value || "")) : [],
-    designYourself: String(next.designYourself || ""),
-    notes: String(next.notes || ""),
-    acceptedTerms: Boolean(next.acceptedTerms),
-  };
+function TermsModal({ onClose }) {
+  return (
+    <div className="modal-scrim" onClick={onClose}>
+      <div className="modal-panel booking-terms-modal" role="dialog" aria-modal="true" aria-label={BOOKING_TERMS_TITLE} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{BOOKING_TERMS_TITLE}</h3>
+          <button className="modal-close-x" type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="booking-terms-modal-body">
+          {BOOKING_TERMS_CONTENT.map((section) => (
+            <section key={section.title} className="booking-terms-section">
+              <h4>{section.title}</h4>
+              {section.body.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function BookingPage({ token }) {
@@ -197,6 +245,8 @@ export default function BookingPage({ token }) {
   const [pageState, setPageState] = useState({ status: "loading" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formNotice, setFormNotice] = useState("");
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [setupTouched, setSetupTouched] = useState(false);
   const loadKeyRef = useRef("");
   const clerkAppearance = useMemo(() => buildClerkAppearance(), []);
 
@@ -221,7 +271,30 @@ export default function BookingPage({ token }) {
         }
         setPageState(result);
         if (result?.status === "ok") {
-          setForm({ ...createEmptyBookingForm(), ...(result.formData || {}) });
+          const nextForm = { ...createEmptyBookingForm(), ...(result.formData || {}) };
+          if (!nextForm.eventName) {
+            nextForm.eventName = result.eventTitle || "";
+          }
+          if (!nextForm.companyName) {
+            nextForm.companyName = result.eventName || "";
+          }
+          if (!nextForm.product) {
+            nextForm.product = (result.productNames || []).join(", ");
+          }
+          if (!nextForm.region) {
+            nextForm.region = result.regionName || "";
+          }
+          if (!nextForm.eventDate) {
+            nextForm.eventDate = result.eventDate || "";
+          }
+          if (!nextForm.setupTime && nextForm.eventStartTime) {
+            nextForm.setupTime = formatTimeOffset(nextForm.eventStartTime, -60);
+          }
+          setSetupTouched(
+            Boolean(nextForm.setupTime) &&
+            nextForm.setupTime !== formatTimeOffset(nextForm.eventStartTime, -60)
+          );
+          setForm(nextForm);
         }
       })
       .catch((error) => {
@@ -236,8 +309,20 @@ export default function BookingPage({ token }) {
     };
   }, [currentUser?.id, isLoaded, isSignedIn, openPublicLink, token]);
 
+  const selectedProducts = useMemo(() => pageState.productNames || [], [pageState.productNames]);
+  const optionalExtrasOptions = useMemo(() => getOptionalExtrasForProducts(selectedProducts), [selectedProducts]);
+
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setFormNotice("");
+  };
+
+  const updateStartTime = (value) => {
+    setForm((current) => ({
+      ...current,
+      eventStartTime: value,
+      setupTime: setupTouched ? current.setupTime : formatTimeOffset(value, -60),
+    }));
     setFormNotice("");
   };
 
@@ -260,11 +345,19 @@ export default function BookingPage({ token }) {
       const result = await submitPublicForm({
         token,
         baseUrl: window.location.origin,
-        formData: buildSubmitPayload(form),
+        formData: buildSubmitPayload(form, pageState),
       });
       setPageState(result);
       if (result?.status === "ok") {
-        setForm({ ...createEmptyBookingForm(), ...(result.formData || {}) });
+        setForm((current) => ({
+          ...createEmptyBookingForm(),
+          ...(result.formData || {}),
+          companyName: result.eventName || "",
+          eventName: result.formData?.eventName || "",
+          product: (result.productNames || []).join(", "),
+          region: result.regionName || result.formData?.region || "",
+          eventDate: result.eventDate || result.formData?.eventDate || "",
+        }));
         setFormNotice("Booking form submitted successfully.");
       }
     } catch (error) {
@@ -334,20 +427,9 @@ export default function BookingPage({ token }) {
         <div className="auth-brand">SelfieBox Events Platform</div>
         <h1>Booking Form</h1>
         <p className="booking-page-meta">{pageState.eventName}</p>
+        <p className="booking-page-products">{selectedProducts.join(", ")}</p>
         <div className="booking-form-grid">
-          <BookingFormField label="Product">
-            <select value={form.product} onChange={(event) => updateField("product", event.target.value)}>
-              <option value="">Select product</option>
-              {BOOKING_PRODUCT_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </BookingFormField>
-
-          <div className="booking-form-field booking-radio-group">
-            <span>Booking Type</span>
+          <div className="booking-form-field full-span booking-radio-inline">
             <div className="booking-choice-row">
               {BOOKING_CUSTOMER_TYPE_OPTIONS.map((option) => (
                 <label key={option} className="booking-inline-choice">
@@ -363,8 +445,8 @@ export default function BookingPage({ token }) {
             </div>
           </div>
 
-          <BookingFormField label="Company Name">
-            <input className="text-input" value={form.companyName} onChange={(event) => updateField("companyName", event.target.value)} />
+          <BookingFormField label="Event Name">
+            <input className="text-input" value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Contact person">
             <input className="text-input" value={form.contactPerson} onChange={(event) => updateField("contactPerson", event.target.value)} />
@@ -375,20 +457,11 @@ export default function BookingPage({ token }) {
           <BookingFormField label="Email">
             <input className="text-input" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
           </BookingFormField>
-          <BookingFormField label="Date of event">
-            <input className="text-input" type="date" value={form.eventDate} onChange={(event) => updateField("eventDate", event.target.value)} />
-          </BookingFormField>
-          <BookingFormField label="Region">
-            <select value={form.region} onChange={(event) => updateField("region", event.target.value)}>
-              <option value="">Select region</option>
-              {BOOKING_REGION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </BookingFormField>
-          <BookingFormField label="Address (Google Maps)">
+
+          <BookingStaticField label="Date of event" value={form.eventDate || pageState.eventDate} />
+          <BookingStaticField label="Region" value={form.region || pageState.regionName} />
+
+          <BookingFormField label="Address" className="full-span">
             <BookingAddressInput
               value={form.address}
               onChange={(nextValue) => updateField("address", nextValue)}
@@ -403,43 +476,51 @@ export default function BookingPage({ token }) {
               }
             />
           </BookingFormField>
-          <BookingFormField label="Point of contact on the day - Name">
+
+          <BookingFormField label="POC Name:" tooltip="Point of Contact">
             <input className="text-input" value={form.pointOfContactName} onChange={(event) => updateField("pointOfContactName", event.target.value)} />
           </BookingFormField>
-          <BookingFormField label="Point of Contact on the day - Contact Number">
+          <BookingFormField label="POC Contact #">
             <input className="text-input" value={form.pointOfContactNumber} onChange={(event) => updateField("pointOfContactNumber", event.target.value)} />
           </BookingFormField>
-          <BookingFormField label="Event start time">
-            <input className="text-input" type="time" value={form.eventStartTime} onChange={(event) => updateField("eventStartTime", event.target.value)} />
-          </BookingFormField>
-          <BookingFormField label="Event finish time">
-            <input className="text-input" type="time" value={form.eventFinishTime} onChange={(event) => updateField("eventFinishTime", event.target.value)} />
-          </BookingFormField>
-          <BookingFormField label="Or Duration">
-            <select value={form.durationHours} onChange={(event) => updateField("durationHours", event.target.value)}>
-              <option value="">Select duration</option>
-              {BOOKING_DURATION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option} Hours
-                </option>
-              ))}
-            </select>
-          </BookingFormField>
+
+          <div className="booking-time-row full-span">
+            <BookingFormField label="Event start time">
+              <input className="text-input" type="time" value={form.eventStartTime} onChange={(event) => updateStartTime(event.target.value)} />
+            </BookingFormField>
+            <BookingFormField
+              label="Setup time"
+              tooltip="Setup time is one hour before the event start and is free and not part of your quoted times"
+            >
+              <input
+                className="text-input"
+                type="time"
+                value={form.setupTime}
+                onChange={(event) => {
+                  setSetupTouched(true);
+                  updateField("setupTime", event.target.value);
+                }}
+              />
+            </BookingFormField>
+            <BookingFormField label="Event finish time">
+              <input className="text-input" type="time" value={form.eventFinishTime} onChange={(event) => updateField("eventFinishTime", event.target.value)} />
+            </BookingFormField>
+          </div>
 
           <div className="booking-form-field full-span">
             <span>Optional Extras</span>
             <div className="booking-extras-grid">
-              {BOOKING_OPTIONAL_EXTRA_OPTIONS.map((option) => (
+              {optionalExtrasOptions.length ? optionalExtrasOptions.map((option) => (
                 <label key={option} className="booking-inline-choice">
                   <input type="checkbox" checked={(form.optionalExtras || []).includes(option)} onChange={() => toggleExtra(option)} />
                   <span>{option}</span>
                 </label>
-              ))}
+              )) : <div className="booking-empty-state">No optional extras for the selected product mix.</div>}
             </div>
           </div>
 
           <div className="booking-form-field booking-radio-group full-span">
-            <span>Design Yourself</span>
+            <span>Design yourself</span>
             <div className="booking-choice-row">
               {["Yes", "No"].map((option) => (
                 <label key={option} className="booking-inline-choice">
@@ -455,13 +536,24 @@ export default function BookingPage({ token }) {
             </div>
           </div>
 
-          <BookingFormField label="Notes / Special Instructions">
+          <BookingFormField
+            label="Notes / Special Instructions"
+            helper="Venue access instructions - Specific dress code requests etc."
+            className="full-span"
+          >
             <textarea rows={5} value={form.notes} onChange={(event) => updateField("notes", event.target.value)} />
           </BookingFormField>
 
           <div className="booking-form-field full-span booking-terms-card">
             <span>Ts and Cs</span>
-            <p>{BOOKING_TERMS_TEXT}</p>
+            <p>
+              By submitting this booking form, you confirm that the details supplied are correct and may be used by SelfieBox to plan,
+              coordinate, and deliver the event. Final bookings remain subject to availability, travel requirements, setup constraints,
+              and{" "}
+              <button className="booking-inline-link" type="button" onClick={() => setTermsOpen(true)}>
+                standard terms and conditions
+              </button>.
+            </p>
             <label className="booking-inline-choice booking-terms-accept">
               <input type="checkbox" checked={form.acceptedTerms} onChange={(event) => updateField("acceptedTerms", event.target.checked)} />
               <span>I accept the SelfieBox terms and conditions.</span>
@@ -477,6 +569,7 @@ export default function BookingPage({ token }) {
           </button>
         </div>
       </div>
+      {termsOpen ? <TermsModal onClose={() => setTermsOpen(false)} /> : null}
     </div>
   );
 }

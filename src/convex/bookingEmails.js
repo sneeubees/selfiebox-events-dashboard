@@ -59,6 +59,7 @@ function buildBookingPdf(payload) {
   addLine("Product", payload.formData.product);
   addLine("Booking Type", payload.formData.customerType);
   addLine("Company Name", payload.formData.companyName);
+  addLine("Event Name", payload.formData.eventName);
   addLine("Contact Person", payload.formData.contactPerson);
   addLine("Cell", payload.formData.cell);
   addLine("Email", payload.formData.email);
@@ -67,9 +68,9 @@ function buildBookingPdf(payload) {
   addLine("Address", payload.formData.address);
   addLine("Point of Contact", payload.formData.pointOfContactName);
   addLine("Point of Contact Number", payload.formData.pointOfContactNumber);
+  addLine("Setup Time", payload.formData.setupTime || "-");
   addLine("Event Start Time", payload.formData.eventStartTime || "-");
   addLine("Event Finish Time", payload.formData.eventFinishTime || "-");
-  addLine("Duration", payload.formData.durationHours ? `${payload.formData.durationHours} Hours` : "-");
   addLine("Optional Extras", payload.formData.optionalExtras.length ? payload.formData.optionalExtras.join(", ") : "-");
   addLine("Design Yourself", payload.formData.designYourself || "-");
   addLine("Notes / Special Instructions", payload.formData.notes || "-");
@@ -117,6 +118,7 @@ export const sendBookingSubmissionEmail = internalAction({
         <h2 style="margin-bottom: 12px;">SelfieBox booking form received</h2>
         <p>Thank you for completing your booking form.</p>
         <p><strong>Booking:</strong> ${payload.eventName}</p>
+        <p><strong>Event name:</strong> ${payload.formData.eventName || "-"}</p>
         <p><strong>Contact person:</strong> ${payload.formData.contactPerson}</p>
         <p><strong>Email:</strong> ${payload.formData.email}</p>
         <p><strong>Date:</strong> ${payload.formData.eventDate || "-"}</p>
@@ -129,6 +131,7 @@ export const sendBookingSubmissionEmail = internalAction({
       "SelfieBox booking form received",
       "",
       `Booking: ${payload.eventName}`,
+      `Event name: ${payload.formData.eventName || "-"}`,
       `Contact person: ${payload.formData.contactPerson}`,
       `Email: ${payload.formData.email}`,
       `Date: ${payload.formData.eventDate || "-"}`,
@@ -168,4 +171,3 @@ export const sendBookingSubmissionEmail = internalAction({
     return { sent: true, id: json?.id || null };
   },
 });
-

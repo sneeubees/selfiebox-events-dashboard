@@ -18,7 +18,8 @@ const eventFile = v.object({
 const bookingFormData = v.object({
   product: v.string(),
   customerType: v.string(),
-  companyName: v.string(),
+  eventName: v.optional(v.string()),
+  companyName: v.optional(v.string()),
   contactPerson: v.string(),
   cell: v.string(),
   email: v.string(),
@@ -30,6 +31,7 @@ const bookingFormData = v.object({
   addressLng: v.optional(v.union(v.number(), v.null())),
   pointOfContactName: v.string(),
   pointOfContactNumber: v.string(),
+  setupTime: v.optional(v.string()),
   eventStartTime: v.string(),
   eventFinishTime: v.string(),
   durationHours: v.string(),

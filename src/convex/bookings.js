@@ -26,6 +26,38 @@ function normalizePhone(value) {
   return String(value ?? "").trim();
 }
 
+function parseTimeValue(value) {
+  const text = normalizeString(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+function formatMinutesAsTime(totalMinutes) {
+  if (!Number.isFinite(totalMinutes)) {
+    return "";
+  }
+  const wrapped = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hours = Math.floor(wrapped / 60);
+  const minutes = wrapped % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function getSetupTimeFromStart(startTime) {
+  const minutes = parseTimeValue(startTime);
+  if (minutes == null) {
+    return "";
+  }
+  return formatMinutesAsTime(minutes - 60);
+}
+
 function parseDurationHours(hoursValue) {
   const text = normalizeString(hoursValue).toLowerCase();
   if (!text) {
@@ -62,44 +94,68 @@ function parseDurationHours(hoursValue) {
   return "";
 }
 
-function inferRegionFromBranch(branches) {
-  const first = Array.isArray(branches) ? String(branches[0] || "").trim().toUpperCase() : "";
-  const map = {
-    GP: "Gauteng",
-    CT: "Cape Town",
-    KZN: "KwaZulu-Natal",
-    FS: "Free-State",
-    NW: "North West",
-    PE: "Port Elizabeth",
-    LIM: "Limpopo",
-    LP: "Limpopo",
+function parseEventTimeRange(hoursValue) {
+  const text = normalizeString(hoursValue);
+  const match = text.match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return { start: "", finish: "" };
+  }
+  return {
+    start: `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`,
+    finish: `${String(Number(match[3])).padStart(2, "0")}:${match[4]}`,
   };
-  return map[first] || "";
 }
 
-function inferProduct(products) {
-  const list = Array.isArray(products) ? products.map((value) => String(value || "").toLowerCase()) : [];
-  if (list.some((value) => value.includes("360") || value.includes("spin"))) return "Spin Booth";
-  if (list.some((value) => value.includes("print"))) return "Print Booth";
-  if (list.some((value) => value.includes("video"))) return "Video Booth";
-  if (list.some((value) => value.includes("mosaic"))) return "Mosaic";
-  if (list.some((value) => value.includes("sketch"))) return "SketchBot";
-  return "";
+async function getLabelDisplayMap(ctx, columnKey) {
+  const rows = await ctx.db
+    .query("labelOptions")
+    .withIndex("by_column", (q) => q.eq("columnKey", columnKey))
+    .collect();
+  const map = new Map();
+  rows.forEach((row) => {
+    const name = normalizeString(row.name || row.abbreviation || row.optionKey);
+    if (row.abbreviation) {
+      map.set(normalizeString(row.abbreviation), name);
+    }
+    if (row.optionKey) {
+      map.set(normalizeString(row.optionKey), name);
+    }
+    if (name) {
+      map.set(name, name);
+    }
+  });
+  return map;
 }
 
-function buildInitialFormData(eventRecord) {
+function resolveDisplayValues(values, displayMap) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => {
+      const normalized = normalizeString(value);
+      return displayMap.get(normalized) || normalized;
+    })
+    .filter(Boolean);
+}
+
+async function buildInitialFormData(ctx, eventRecord) {
+  const branchDisplayMap = await getLabelDisplayMap(ctx, "branch");
+  const productDisplayMap = await getLabelDisplayMap(ctx, "products");
+  const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
+  const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
+  const timeRange = parseEventTimeRange(eventRecord.hours);
   return {
     ...createEmptyBookingForm(),
-    product: inferProduct(eventRecord.products),
+    product: productNames.join(", "),
+    eventName: normalizeString(eventRecord.eventTitle),
     companyName: normalizeString(eventRecord.name),
     eventDate: normalizeString(eventRecord.date),
-    region: inferRegionFromBranch(eventRecord.branch),
+    region: branchNames.join(", "),
     address: normalizeString(eventRecord.location),
     addressPlaceId: normalizeString(eventRecord.locationPlaceId),
     addressLat: typeof eventRecord.locationLat === "number" ? eventRecord.locationLat : null,
     addressLng: typeof eventRecord.locationLng === "number" ? eventRecord.locationLng : null,
-    eventStartTime: "",
-    eventFinishTime: "",
+    setupTime: getSetupTimeFromStart(timeRange.start),
+    eventStartTime: timeRange.start,
+    eventFinishTime: timeRange.finish,
     durationHours: parseDurationHours(eventRecord.hours),
   };
 }
@@ -233,6 +289,7 @@ function sanitizeFormData(formData) {
     ...(formData || {}),
     product: normalizeString(formData?.product),
     customerType: normalizeString(formData?.customerType),
+    eventName: normalizeString(formData?.eventName || formData?.companyName),
     companyName: normalizeString(formData?.companyName),
     contactPerson: normalizeString(formData?.contactPerson),
     cell: normalizePhone(formData?.cell),
@@ -245,6 +302,7 @@ function sanitizeFormData(formData) {
     addressLng: typeof formData?.addressLng === "number" ? formData.addressLng : null,
     pointOfContactName: normalizeString(formData?.pointOfContactName),
     pointOfContactNumber: normalizePhone(formData?.pointOfContactNumber),
+    setupTime: normalizeString(formData?.setupTime),
     eventStartTime: normalizeString(formData?.eventStartTime),
     eventFinishTime: normalizeString(formData?.eventFinishTime),
     durationHours: normalizeString(formData?.durationHours),
@@ -261,7 +319,7 @@ function sanitizeFormData(formData) {
 function validateFormData(formData) {
   if (!formData.product) return "Please select a product.";
   if (!formData.customerType) return "Please choose Corporate or Private.";
-  if (!formData.companyName) return "Please enter the company name.";
+  if (!formData.eventName) return "Please enter the event name.";
   if (!formData.contactPerson) return "Please enter a contact person.";
   if (!formData.cell) return "Please enter a contact cell number.";
   if (!formData.email || !formData.email.includes("@")) return "Please enter a valid email address.";
@@ -270,20 +328,25 @@ function validateFormData(formData) {
   if (!formData.address) return "Please enter the event address.";
   if (!formData.pointOfContactName) return "Please enter the point of contact for the day.";
   if (!formData.pointOfContactNumber) return "Please enter the point of contact number.";
-  if (!formData.durationHours && (!formData.eventStartTime || !formData.eventFinishTime)) {
-    return "Please enter the event start and finish time, or choose a duration.";
-  }
+  if (!formData.eventStartTime || !formData.eventFinishTime) return "Please enter the event start and finish time.";
   if (!formData.acceptedTerms) return "Please accept the terms and conditions before submitting.";
   return "";
 }
 
-function buildPublicBookingDto(eventRecord, bookingRecord, access, viewerRole = "public") {
+async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, viewerRole = "public") {
   const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+  const branchDisplayMap = await getLabelDisplayMap(ctx, "branch");
+  const productDisplayMap = await getLabelDisplayMap(ctx, "products");
+  const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
+  const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
   return {
     status: "ok",
     access,
     viewerRole,
-    eventName: eventRecord.eventTitle || eventRecord.name || "SelfieBox booking",
+    eventName: eventRecord.name || "SelfieBox booking",
+    eventTitle: normalizeString(eventRecord.eventTitle),
+    productNames,
+    regionName: branchNames.join(", "),
     eventDate: eventRecord.date || bookingRecord.formData.eventDate || "",
     token: bookingRecord.token,
     formData: bookingRecord.formData,
@@ -327,7 +390,7 @@ export const generateForEvent = mutation({
       eventId: eventRecord._id,
       eventKey: eventRecord.eventKey,
       token,
-      formData: buildInitialFormData(eventRecord),
+      formData: await buildInitialFormData(ctx, eventRecord),
       createdByUserId: currentUser._id,
       publicAccessCount: 0,
       createdAt: now,
@@ -357,7 +420,7 @@ export const openPublicLink = mutation({
 
     const approvedUser = await getApprovedCurrentUser(ctx);
     if (approvedUser) {
-      return buildPublicBookingDto(eventRecord, bookingRecord, "registered", approvedUser.role);
+      return await buildPublicBookingDto(ctx, eventRecord, bookingRecord, "registered", approvedUser.role);
     }
 
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
@@ -375,7 +438,7 @@ export const openPublicLink = mutation({
       nextRecord = await ctx.db.get(bookingRecord._id);
     }
 
-    return buildPublicBookingDto(eventRecord, nextRecord, "public");
+    return await buildPublicBookingDto(ctx, eventRecord, nextRecord, "public");
   },
 });
 
@@ -386,6 +449,7 @@ export const submitPublicForm = mutation({
     formData: v.object({
       product: v.optional(v.string()),
       customerType: v.optional(v.string()),
+      eventName: v.optional(v.string()),
       companyName: v.optional(v.string()),
       contactPerson: v.optional(v.string()),
       cell: v.optional(v.string()),
@@ -398,6 +462,7 @@ export const submitPublicForm = mutation({
       addressLng: v.optional(v.union(v.number(), v.null())),
       pointOfContactName: v.optional(v.string()),
       pointOfContactNumber: v.optional(v.string()),
+      setupTime: v.optional(v.string()),
       eventStartTime: v.optional(v.string()),
       eventFinishTime: v.optional(v.string()),
       durationHours: v.optional(v.string()),
@@ -450,7 +515,13 @@ export const submitPublicForm = mutation({
       baseUrl: normalizeString(args.baseUrl),
     });
 
-    return buildPublicBookingDto(eventRecord, await ctx.db.get(bookingRecord._id), approvedUser ? "registered" : "public", approvedUser?.role || "public");
+    return await buildPublicBookingDto(
+      ctx,
+      eventRecord,
+      await ctx.db.get(bookingRecord._id),
+      approvedUser ? "registered" : "public",
+      approvedUser?.role || "public"
+    );
   },
 });
 
@@ -473,7 +544,7 @@ export const getSubmissionEmailPayload = internalQuery({
     return {
       bookingId: String(bookingRecord._id),
       token: bookingRecord.token,
-      eventName: eventRecord.eventTitle || eventRecord.name || "SelfieBox booking",
+      eventName: eventRecord.name || "SelfieBox booking",
       linkUrl: `${normalizeString(args.baseUrl) || "https://events.selfiebox.co.za"}/${bookingRecord.token}`,
       formData: bookingRecord.formData,
       submittedAt: bookingRecord.submittedAt || null,
