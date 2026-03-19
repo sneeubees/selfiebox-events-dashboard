@@ -275,6 +275,9 @@ button { cursor: pointer; }
 .activity-item p { margin: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; color: var(--text); }
 .file-card { display: grid; }
 .file-card-main { display: grid; gap: 6px; min-width: 0; }
+.file-upload-dropzone { border-style: dashed; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
+.file-upload-dropzone.is-drag-over { border-color: #7fa2ec; background: #eef4ff; box-shadow: inset 0 0 0 1px #9fb8f1; }
+.file-drop-hint { margin: 0; font-size: 0.72rem; color: var(--muted); }
 .file-name, .file-name-link, .file-name-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-name-link, .file-name-button { color: inherit; text-decoration: none; }
 .file-name-button { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; cursor: pointer; }
@@ -903,6 +906,11 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .drawer-card h4,
 :root[data-theme="dark"] .modal-header h3 {
   color: #eef4ff;
+}
+:root[data-theme="dark"] .file-upload-dropzone.is-drag-over {
+  background: #223556;
+  border-color: #5677b9;
+  box-shadow: inset 0 0 0 1px #6d8fd6;
 }
 :root[data-theme="dark"] .drawer-tabs .is-active {
   background: #243a5f;
