@@ -1,8 +1,7 @@
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { createEmptyBookingForm } from "../bookingConstants";
-import { buildBookingPdfArrayBuffer, sanitizeBookingFilenamePart } from "./bookingPdf";
 
 function parseIsoDate(value) {
   const text = String(value || "").trim();
@@ -396,12 +395,18 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
 async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) {
   const rawBaseUrl = normalizeString(baseUrl) || process.env.APP_BASE_URL || "";
   const trimmedBaseUrl = rawBaseUrl.replace(/\/+$/, "");
+  const submittedBy = bookingRecord.submittedByUserId
+    ? await ctx.db.get(bookingRecord.submittedByUserId)
+    : null;
   return {
     bookingId: bookingRecord._id,
+    eventId: bookingRecord.eventId,
     eventName: eventRecord.name || "SelfieBox booking",
     formData: bookingRecord.formData,
     submittedAt: bookingRecord.submittedAt || bookingRecord.updatedAt || bookingRecord.createdAt,
     sourceIp: bookingRecord.lastSubmittedIp || "",
+    submittedByUserId: bookingRecord.submittedByUserId || null,
+    submittedByLabel: submittedBy?.fullName || submittedBy?.email || "",
     linkUrl: trimmedBaseUrl ? `${trimmedBaseUrl}/${bookingRecord.token}` : bookingRecord.token,
   };
 }
@@ -553,31 +558,6 @@ export const submitPublicForm = mutation({
       lastSubmittedIp: normalizedIp || undefined,
       updatedAt: now,
     });
-    const refreshedBookingRecord = await ctx.db.get(bookingRecord._id);
-    const submissionPayload = await buildSubmissionPayload(
-      ctx,
-      refreshedBookingRecord,
-      eventRecord,
-      normalizeString(args.baseUrl)
-    );
-    const pdfBytes = buildBookingPdfArrayBuffer(submissionPayload);
-    const storageId = await ctx.storage.store(new Blob([pdfBytes], { type: "application/pdf" }));
-    const snapshotFileName = `${sanitizeBookingFilenamePart(eventRecord.name || formData.eventName)}-booking-${new Date(now)
-      .toISOString()
-      .replace(/[:.]/g, "-")}.pdf`;
-
-    await ctx.db.insert("bookingSnapshots", {
-      bookingId: bookingRecord._id,
-      eventId: eventRecord._id,
-      storageId,
-      fileName: snapshotFileName,
-      sourceIp: normalizedIp || undefined,
-      submittedAt: now,
-      createdByUserId: approvedUser?._id,
-      createdByLabel: approvedUser?.fullName || formData.contactPerson || "Booking form",
-      createdAt: now,
-    });
-
     await ctx.db.patch(eventRecord._id, {
       eventTitle: formData.eventName,
       location: formData.address,
@@ -601,6 +581,7 @@ export const submitPublicForm = mutation({
       baseUrl: normalizeString(args.baseUrl),
     });
 
+    const refreshedBookingRecord = await ctx.db.get(bookingRecord._id);
     return await buildPublicBookingDto(
       ctx,
       await ctx.db.get(eventRecord._id),
@@ -608,6 +589,33 @@ export const submitPublicForm = mutation({
       approvedUser ? "registered" : "public",
       approvedUser?.role || "public"
     );
+  },
+});
+
+export const saveBookingSnapshot = internalMutation({
+  args: {
+    bookingId: v.id("eventBookings"),
+    eventId: v.id("events"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    sourceIp: v.optional(v.string()),
+    submittedAt: v.number(),
+    createdByUserId: v.optional(v.id("users")),
+    createdByLabel: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("bookingSnapshots", {
+      bookingId: args.bookingId,
+      eventId: args.eventId,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      sourceIp: args.sourceIp,
+      submittedAt: args.submittedAt,
+      createdByUserId: args.createdByUserId,
+      createdByLabel: args.createdByLabel,
+      createdAt: Date.now(),
+    });
+    return { ok: true };
   },
 });
 

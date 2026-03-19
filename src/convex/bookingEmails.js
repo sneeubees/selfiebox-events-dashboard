@@ -16,6 +16,24 @@ export const sendBookingSubmissionEmail = internalAction({
       return { sent: false, reason: "missing_payload" };
     }
 
+    const pdfBuffer = buildBookingPdfBase64(payload);
+    const storageId = await ctx.storage.store(
+      new Blob([Buffer.from(pdfBuffer, "base64")], { type: "application/pdf" })
+    );
+    const fileName = `${sanitizeBookingFilenamePart(payload.eventName)}-booking-${new Date(payload.submittedAt || Date.now())
+      .toISOString()
+      .replace(/[:.]/g, "-")}.pdf`;
+    await ctx.runMutation(internal.bookings.saveBookingSnapshot, {
+      bookingId: payload.bookingId,
+      eventId: payload.eventId,
+      storageId,
+      fileName,
+      sourceIp: payload.sourceIp || undefined,
+      submittedAt: payload.submittedAt || Date.now(),
+      createdByUserId: payload.submittedByUserId || undefined,
+      createdByLabel: payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
+    });
+
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL;
     if (!resendApiKey || !fromEmail) {
@@ -23,7 +41,7 @@ export const sendBookingSubmissionEmail = internalAction({
       return { sent: false, reason: "missing_email_config" };
     }
 
-    const pdfBase64 = buildBookingPdfBase64(payload);
+    const pdfBase64 = pdfBuffer;
     const subject = `Booking form received - ${payload.eventName}`;
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2a44;">
