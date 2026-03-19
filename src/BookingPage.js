@@ -159,6 +159,35 @@ function buildClerkAppearance() {
   };
 }
 
+function buildSubmitPayload(form) {
+  const base = createEmptyBookingForm();
+  const next = { ...base, ...(form || {}) };
+
+  return {
+    product: String(next.product || ""),
+    customerType: String(next.customerType || ""),
+    companyName: String(next.companyName || ""),
+    contactPerson: String(next.contactPerson || ""),
+    cell: String(next.cell || ""),
+    email: String(next.email || ""),
+    eventDate: String(next.eventDate || ""),
+    region: String(next.region || ""),
+    address: String(next.address || ""),
+    addressPlaceId: String(next.addressPlaceId || ""),
+    addressLat: typeof next.addressLat === "number" ? next.addressLat : null,
+    addressLng: typeof next.addressLng === "number" ? next.addressLng : null,
+    pointOfContactName: String(next.pointOfContactName || ""),
+    pointOfContactNumber: String(next.pointOfContactNumber || ""),
+    eventStartTime: String(next.eventStartTime || ""),
+    eventFinishTime: String(next.eventFinishTime || ""),
+    durationHours: String(next.durationHours || ""),
+    optionalExtras: Array.isArray(next.optionalExtras) ? next.optionalExtras.map((value) => String(value || "")) : [],
+    designYourself: String(next.designYourself || ""),
+    notes: String(next.notes || ""),
+    acceptedTerms: Boolean(next.acceptedTerms),
+  };
+}
+
 export default function BookingPage({ token }) {
   const { isLoaded, isSignedIn } = useUser();
   const currentUser = useQuery(api.users.current, isSignedIn ? {} : "skip");
@@ -231,7 +260,7 @@ export default function BookingPage({ token }) {
       const result = await submitPublicForm({
         token,
         baseUrl: window.location.origin,
-        formData: form,
+        formData: buildSubmitPayload(form),
       });
       setPageState(result);
       if (result?.status === "ok") {
