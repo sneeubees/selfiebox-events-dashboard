@@ -3209,7 +3209,7 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
     if (customColumn.type === 'number') return <input className="inline-input inline-number" value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value)} />;
     if (customColumn.type === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === columnKey ? <DateInlineEditor value={String(customValue || dateEditor.value || '')} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, columnKey)} /> : <button className='cell-select-button date-cell-button' type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openDateEditor(event, columnKey)}><span>{formatDateDisplay(String(customValue || '')) || 'Pick date'}</span></button>;
     if (customColumn.type === 'singleItem') return <button className='cell-select-button custom-single-select-button' style={customColumnWidths[columnKey] ? { width: customColumnWidths[columnKey], minWidth: customColumnWidths[columnKey] } : undefined} type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CustomSingleTag value={String(customValue || '')} styles={customItemStyles[columnKey] || {}} width={customColumnWidths[columnKey]} placeholder='' /></button>;
-    if (customColumn.type === 'multiItem') return <button className='cell-select-button' type='button' title={(Array.isArray(customValue) ? customValue : []).join(', ')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CompactTagList items={Array.isArray(customValue) ? customValue : []} styles={customItemStyles[columnKey] || {}} /></button>;
+    if (customColumn.type === 'multiItem') return <button className='cell-select-button' type='button' title={(Array.isArray(customValue) ? customValue : []).join(', ')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CompactTagList items={Array.isArray(customValue) ? customValue : []} styles={customItemStyles[columnKey] || {}} wide /></button>;
   }
 
   return <span title={String(event[columnKey] || '')}>{event[columnKey] || ''}</span>;
@@ -3573,11 +3573,11 @@ function CompactNameList({ items, styles = {} }) {
   return <div className="compact-name-wrap"><div className="compact-tag-slot"><span className="compact-name-pill" style={styles[firstItem] || undefined} title={firstItem}>{truncateName(firstItem)}</span>{overflowCount > 0 ? <span className="extra-pill extra-pill-corner">+{overflowCount}</span> : null}</div></div>;
 }
 
-function CompactTagList({ items, styles }) {
+function CompactTagList({ items, styles, wide = false }) {
   if (!items || items.length === 0) return <span className="empty-cell-value" />;
   const visibleItems = items.slice(0, 2);
   const overflowCount = items.length - visibleItems.length;
-  return <div className="compact-tag-wrap">{visibleItems.map((item, index) => <div className="compact-tag-slot" key={String(item) + '-' + index}><Tag value={item} styles={styles} />{index === 1 && overflowCount > 0 ? <span className="extra-pill extra-pill-corner">+{overflowCount}</span> : null}</div>)}</div>;
+  return <div className={`compact-tag-wrap${wide ? ' is-wide' : ''}`}>{visibleItems.map((item, index) => <div className="compact-tag-slot" key={String(item) + '-' + index}><Tag value={item} styles={styles} />{index === 1 && overflowCount > 0 ? <span className="extra-pill extra-pill-corner">+{overflowCount}</span> : null}</div>)}</div>;
 }
 
 function FilterGroup({ title, options, selected, onToggle }) {

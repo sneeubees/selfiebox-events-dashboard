@@ -206,6 +206,9 @@ button { cursor: pointer; }
 .compact-tag-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .compact-tag-slot { position: relative; display: inline-flex; min-width: 0; }
 .compact-tag-slot .tag { max-width: 52px; min-height: 22px; padding: 3px 7px; font-size: 0.66rem; }
+.compact-tag-wrap.is-wide { width: 100%; justify-content: center; }
+.compact-tag-wrap.is-wide .compact-tag-slot { flex: 1 1 auto; }
+.compact-tag-wrap.is-wide .compact-tag-slot .tag { width: 100%; max-width: none; }
 .cell-products .compact-tag-slot .tag { font-size: 0.58rem; }
 .extra-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; background: #eef1f5; color: #445066; font-size: 0.58rem; font-weight: 700; }
 .extra-pill-corner { position: absolute; top: -5px; right: -6px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 0.52rem; line-height: 1; box-shadow: 0 0 0 1px #fff; }
