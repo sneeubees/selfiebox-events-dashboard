@@ -73,9 +73,10 @@ button { cursor: pointer; }
 .profile-edit-grid span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #61708b; }
 .locked-input { background: #f5f7fb !important; color: #66758f !important; }
 .manage-users-button { white-space: nowrap; }
-.users-modal { display: grid; gap: 10px; }
+.users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
 .rights-section { display: grid; gap: 10px; }
+.rights-section .rights-scroll { display: grid; gap: 10px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
 .rights-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .rights-subject { display: grid; gap: 2px; min-width: 0; }
 .rights-subject small { color: var(--muted); }
