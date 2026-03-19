@@ -17,8 +17,12 @@ function normalizeExtractedText(value) {
     .trim();
 }
 
+function stripReferenceValues(value) {
+  return normalizeExtractedText(value).replace(/\breference\s*:\s*[^\n]+/gi, "REFERENCE:");
+}
+
 function detectDocumentType(name, text) {
-  const haystack = `${name || ""}\n${text || ""}`.toLowerCase();
+  const haystack = `${name || ""}\n${stripReferenceValues(text || "")}`.toLowerCase();
   const hasInvoice = /\btax invoice\b|\binvoice\b|inv[-_ ]?\d{3,}|\bi\d{5,}\b/.test(haystack);
   const hasQuote = /\bquotation\b|\bquote\b|q\d{4,}/.test(haystack);
 
@@ -47,7 +51,7 @@ function detectDocumentType(name, text) {
 }
 
 function extractKnownDocument(text, fileName) {
-  const normalized = normalizeExtractedText(text);
+  const normalized = stripReferenceValues(text);
   const quotePatterns = [
     /\b(?:quotation|quote)\s*(?:number|no\.?|#|nr)?\s*[:\-]?\s*(Q\d{4,})\b/i,
     /\bnumber\s*[:\-]?\s*(Q\d{4,})\b/i,
@@ -83,7 +87,7 @@ function extractKnownDocument(text, fileName) {
 }
 
 function extractDocumentNumber(text, fileName, type) {
-  const normalized = normalizeExtractedText(text);
+  const normalized = stripReferenceValues(text);
   const patterns = type === "invoice"
     ? [
         /\b(?:tax invoice|invoice)\s*(?:number|no\.?|#|nr)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\/\-]{2,})/i,
