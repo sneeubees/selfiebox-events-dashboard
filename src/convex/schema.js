@@ -15,6 +15,30 @@ const eventFile = v.object({
   size: v.string(),
 });
 
+const bookingFormData = v.object({
+  product: v.string(),
+  customerType: v.string(),
+  companyName: v.string(),
+  contactPerson: v.string(),
+  cell: v.string(),
+  email: v.string(),
+  eventDate: v.string(),
+  region: v.string(),
+  address: v.string(),
+  addressPlaceId: v.optional(v.string()),
+  addressLat: v.optional(v.union(v.number(), v.null())),
+  addressLng: v.optional(v.union(v.number(), v.null())),
+  pointOfContactName: v.string(),
+  pointOfContactNumber: v.string(),
+  eventStartTime: v.string(),
+  eventFinishTime: v.string(),
+  durationHours: v.string(),
+  optionalExtras: v.array(v.string()),
+  designYourself: v.string(),
+  notes: v.string(),
+  acceptedTerms: v.boolean(),
+});
+
 export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
@@ -123,9 +147,24 @@ export default defineSchema({
     legacyEntryId: v.optional(v.string()),
     actorUserId: v.optional(v.id("users")),
     createdAt: v.number(),
-  })
+    })
     .index("by_workspace_year", ["workspaceYear"])
     .index("by_event", ["eventId"]),
+  eventBookings: defineTable({
+    eventId: v.id("events"),
+    eventKey: v.string(),
+    token: v.string(),
+    formData: bookingFormData,
+    createdByUserId: v.optional(v.id("users")),
+    submittedByUserId: v.optional(v.id("users")),
+    publicAccessCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_key", ["eventKey"])
+    .index("by_token", ["token"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

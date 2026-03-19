@@ -1,0 +1,483 @@
+import { v } from "convex/values";
+import { internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { createEmptyBookingForm } from "../bookingConstants";
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+function parseIsoDate(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const exact = /^\d{4}-\d{2}-\d{2}$/.test(text)
+    ? new Date(`${text}T23:59:59`)
+    : new Date(text);
+  const timestamp = exact.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function normalizeString(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizePhone(value) {
+  return String(value ?? "").trim();
+}
+
+function parseDurationHours(hoursValue) {
+  const text = normalizeString(hoursValue).toLowerCase();
+  if (!text) {
+    return "";
+  }
+
+  const exactHours = text.match(/(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)/i);
+  if (exactHours) {
+    const hours = Math.round(Number(exactHours[1]));
+    return Number.isFinite(hours) && hours >= 2 && hours <= 10 ? String(hours) : "";
+  }
+
+  const rangeMatch = text.match(/(\d{1,2})[:h]?(\d{2})?\s*[-–]\s*(\d{1,2})[:h]?(\d{2})?/i);
+  if (rangeMatch) {
+    const startHour = Number(rangeMatch[1]);
+    const startMinute = Number(rangeMatch[2] || 0);
+    const endHour = Number(rangeMatch[3]);
+    const endMinute = Number(rangeMatch[4] || 0);
+    if ([startHour, startMinute, endHour, endMinute].every((value) => Number.isFinite(value))) {
+      let duration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+      if (duration <= 0) {
+        duration += 24 * 60;
+      }
+      const roundedHours = Math.ceil(duration / 60);
+      return roundedHours >= 2 && roundedHours <= 10 ? String(roundedHours) : "";
+    }
+  }
+
+  const numeric = Number(text);
+  if (Number.isFinite(numeric) && numeric >= 2 && numeric <= 10) {
+    return String(Math.round(numeric));
+  }
+
+  return "";
+}
+
+function inferRegionFromBranch(branches) {
+  const first = Array.isArray(branches) ? String(branches[0] || "").trim().toUpperCase() : "";
+  const map = {
+    GP: "Gauteng",
+    CT: "Cape Town",
+    KZN: "KwaZulu-Natal",
+    FS: "Free-State",
+    NW: "North West",
+    PE: "Port Elizabeth",
+    LIM: "Limpopo",
+    LP: "Limpopo",
+  };
+  return map[first] || "";
+}
+
+function inferProduct(products) {
+  const list = Array.isArray(products) ? products.map((value) => String(value || "").toLowerCase()) : [];
+  if (list.some((value) => value.includes("360") || value.includes("spin"))) return "Spin Booth";
+  if (list.some((value) => value.includes("print"))) return "Print Booth";
+  if (list.some((value) => value.includes("video"))) return "Video Booth";
+  if (list.some((value) => value.includes("mosaic"))) return "Mosaic";
+  if (list.some((value) => value.includes("sketch"))) return "SketchBot";
+  return "";
+}
+
+function buildInitialFormData(eventRecord) {
+  return {
+    ...createEmptyBookingForm(),
+    product: inferProduct(eventRecord.products),
+    companyName: normalizeString(eventRecord.name),
+    eventDate: normalizeString(eventRecord.date),
+    region: inferRegionFromBranch(eventRecord.branch),
+    address: normalizeString(eventRecord.location),
+    addressPlaceId: normalizeString(eventRecord.locationPlaceId),
+    addressLat: typeof eventRecord.locationLat === "number" ? eventRecord.locationLat : null,
+    addressLng: typeof eventRecord.locationLng === "number" ? eventRecord.locationLng : null,
+    eventStartTime: "",
+    eventFinishTime: "",
+    durationHours: parseDurationHours(eventRecord.hours),
+  };
+}
+
+function getBookingDateTimestamp(eventRecord, bookingRecord) {
+  return parseIsoDate(bookingRecord?.formData?.eventDate || eventRecord?.date);
+}
+
+function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
+  const eventTimestamp = getBookingDateTimestamp(eventRecord, bookingRecord);
+  if (!eventTimestamp) {
+    return {
+      mode: "public",
+      anonymousAllowed: true,
+      remainingPublicClicks: null,
+      cutoffTimestamp: null,
+    };
+  }
+
+  const cutoffTimestamp = eventTimestamp - THREE_DAYS_MS;
+  const createdWithinThreeDays = bookingRecord.createdAt >= cutoffTimestamp;
+
+  if (createdWithinThreeDays) {
+    const remainingPublicClicks = Math.max(0, 2 - Number(bookingRecord.publicAccessCount || 0));
+    return {
+      mode: "limited",
+      anonymousAllowed: remainingPublicClicks > 0,
+      remainingPublicClicks,
+      cutoffTimestamp,
+    };
+  }
+
+  if (now < cutoffTimestamp) {
+    return {
+      mode: "public",
+      anonymousAllowed: true,
+      remainingPublicClicks: null,
+      cutoffTimestamp,
+    };
+  }
+
+  return {
+    mode: "registered_only",
+    anonymousAllowed: false,
+    remainingPublicClicks: 0,
+    cutoffTimestamp,
+  };
+}
+
+function buildDrawerBookingDto(eventRecord, bookingRecord) {
+  if (!bookingRecord) {
+    return null;
+  }
+
+  const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+  return {
+    id: String(bookingRecord._id),
+    token: bookingRecord.token,
+    formData: bookingRecord.formData,
+    createdAt: bookingRecord.createdAt,
+    updatedAt: bookingRecord.updatedAt,
+    submittedAt: bookingRecord.submittedAt || null,
+    publicAccessCount: bookingRecord.publicAccessCount || 0,
+    publicMode: policy.mode,
+    remainingPublicClicks: policy.remainingPublicClicks,
+    cutoffTimestamp: policy.cutoffTimestamp,
+  };
+}
+
+async function getApprovedCurrentUser(ctx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    return null;
+  }
+
+  const clerkId = identity.subject ?? identity.tokenIdentifier;
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
+    .unique();
+
+  if (!user || !user.isApproved || !user.isActive) {
+    return null;
+  }
+
+  return user;
+}
+
+async function requireCurrentUser(ctx) {
+  const user = await getApprovedCurrentUser(ctx);
+  if (!user) {
+    throw new Error("Not authenticated");
+  }
+  return user;
+}
+
+async function findEventByKey(ctx, eventKey) {
+  return ctx.db
+    .query("events")
+    .withIndex("by_event_key", (q) => q.eq("eventKey", eventKey))
+    .unique();
+}
+
+async function findBookingByEventId(ctx, eventId) {
+  return ctx.db
+    .query("eventBookings")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .unique();
+}
+
+async function generateUniqueToken(ctx) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    const existing = await ctx.db
+      .query("eventBookings")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    if (!existing) {
+      return token;
+    }
+  }
+  throw new Error("Unable to create a unique booking link right now.");
+}
+
+function sanitizeFormData(formData) {
+  const base = createEmptyBookingForm();
+  const next = {
+    ...base,
+    ...(formData || {}),
+    product: normalizeString(formData?.product),
+    customerType: normalizeString(formData?.customerType),
+    companyName: normalizeString(formData?.companyName),
+    contactPerson: normalizeString(formData?.contactPerson),
+    cell: normalizePhone(formData?.cell),
+    email: normalizeString(formData?.email).toLowerCase(),
+    eventDate: normalizeString(formData?.eventDate),
+    region: normalizeString(formData?.region),
+    address: normalizeString(formData?.address),
+    addressPlaceId: normalizeString(formData?.addressPlaceId),
+    addressLat: typeof formData?.addressLat === "number" ? formData.addressLat : null,
+    addressLng: typeof formData?.addressLng === "number" ? formData.addressLng : null,
+    pointOfContactName: normalizeString(formData?.pointOfContactName),
+    pointOfContactNumber: normalizePhone(formData?.pointOfContactNumber),
+    eventStartTime: normalizeString(formData?.eventStartTime),
+    eventFinishTime: normalizeString(formData?.eventFinishTime),
+    durationHours: normalizeString(formData?.durationHours),
+    optionalExtras: Array.isArray(formData?.optionalExtras)
+      ? Array.from(new Set(formData.optionalExtras.map((value) => normalizeString(value)).filter(Boolean)))
+      : [],
+    designYourself: normalizeString(formData?.designYourself),
+    notes: normalizeString(formData?.notes),
+    acceptedTerms: Boolean(formData?.acceptedTerms),
+  };
+  return next;
+}
+
+function validateFormData(formData) {
+  if (!formData.product) return "Please select a product.";
+  if (!formData.customerType) return "Please choose Corporate or Private.";
+  if (!formData.companyName) return "Please enter the company name.";
+  if (!formData.contactPerson) return "Please enter a contact person.";
+  if (!formData.cell) return "Please enter a contact cell number.";
+  if (!formData.email || !formData.email.includes("@")) return "Please enter a valid email address.";
+  if (!formData.eventDate) return "Please enter the event date.";
+  if (!formData.region) return "Please select a region.";
+  if (!formData.address) return "Please enter the event address.";
+  if (!formData.pointOfContactName) return "Please enter the point of contact for the day.";
+  if (!formData.pointOfContactNumber) return "Please enter the point of contact number.";
+  if (!formData.durationHours && (!formData.eventStartTime || !formData.eventFinishTime)) {
+    return "Please enter the event start and finish time, or choose a duration.";
+  }
+  if (!formData.acceptedTerms) return "Please accept the terms and conditions before submitting.";
+  return "";
+}
+
+function buildPublicBookingDto(eventRecord, bookingRecord, access, viewerRole = "public") {
+  const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+  return {
+    status: "ok",
+    access,
+    viewerRole,
+    eventName: eventRecord.eventTitle || eventRecord.name || "SelfieBox booking",
+    eventDate: eventRecord.date || bookingRecord.formData.eventDate || "",
+    token: bookingRecord.token,
+    formData: bookingRecord.formData,
+    submittedAt: bookingRecord.submittedAt || null,
+    publicMode: policy.mode,
+    remainingPublicClicks: policy.remainingPublicClicks,
+  };
+}
+
+export const getForEvent = query({
+  args: { eventKey: v.string() },
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    const eventRecord = await findEventByKey(ctx, args.eventKey);
+    if (!eventRecord) {
+      return null;
+    }
+
+    const bookingRecord = await findBookingByEventId(ctx, eventRecord._id);
+    return buildDrawerBookingDto(eventRecord, bookingRecord);
+  },
+});
+
+export const generateForEvent = mutation({
+  args: { eventKey: v.string() },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCurrentUser(ctx);
+    const eventRecord = await findEventByKey(ctx, args.eventKey);
+    if (!eventRecord) {
+      throw new Error("Event not found.");
+    }
+
+    const existing = await findBookingByEventId(ctx, eventRecord._id);
+    if (existing) {
+      return buildDrawerBookingDto(eventRecord, existing);
+    }
+
+    const token = await generateUniqueToken(ctx);
+    const now = Date.now();
+    const bookingId = await ctx.db.insert("eventBookings", {
+      eventId: eventRecord._id,
+      eventKey: eventRecord.eventKey,
+      token,
+      formData: buildInitialFormData(eventRecord),
+      createdByUserId: currentUser._id,
+      publicAccessCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return buildDrawerBookingDto(eventRecord, await ctx.db.get(bookingId));
+  },
+});
+
+export const openPublicLink = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const bookingRecord = await ctx.db
+      .query("eventBookings")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .unique();
+
+    if (!bookingRecord) {
+      return { status: "not_found" };
+    }
+
+    const eventRecord = await ctx.db.get(bookingRecord.eventId);
+    if (!eventRecord) {
+      return { status: "not_found" };
+    }
+
+    const approvedUser = await getApprovedCurrentUser(ctx);
+    if (approvedUser) {
+      return buildPublicBookingDto(eventRecord, bookingRecord, "registered", approvedUser.role);
+    }
+
+    const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+    if (!policy.anonymousAllowed) {
+      return { status: policy.mode === "limited" ? "public_limit_reached" : "requires_auth" };
+    }
+
+    let nextRecord = bookingRecord;
+    if (policy.mode === "limited") {
+      const nextCount = Number(bookingRecord.publicAccessCount || 0) + 1;
+      await ctx.db.patch(bookingRecord._id, {
+        publicAccessCount: nextCount,
+        updatedAt: Date.now(),
+      });
+      nextRecord = await ctx.db.get(bookingRecord._id);
+    }
+
+    return buildPublicBookingDto(eventRecord, nextRecord, "public");
+  },
+});
+
+export const submitPublicForm = mutation({
+  args: {
+    token: v.string(),
+    baseUrl: v.optional(v.string()),
+    formData: v.object({
+      product: v.string(),
+      customerType: v.string(),
+      companyName: v.string(),
+      contactPerson: v.string(),
+      cell: v.string(),
+      email: v.string(),
+      eventDate: v.string(),
+      region: v.string(),
+      address: v.string(),
+      addressPlaceId: v.optional(v.string()),
+      addressLat: v.optional(v.union(v.number(), v.null())),
+      addressLng: v.optional(v.union(v.number(), v.null())),
+      pointOfContactName: v.string(),
+      pointOfContactNumber: v.string(),
+      eventStartTime: v.string(),
+      eventFinishTime: v.string(),
+      durationHours: v.string(),
+      optionalExtras: v.array(v.string()),
+      designYourself: v.string(),
+      notes: v.string(),
+      acceptedTerms: v.boolean(),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const bookingRecord = await ctx.db
+      .query("eventBookings")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .unique();
+
+    if (!bookingRecord) {
+      throw new Error("Booking link not found.");
+    }
+
+    const eventRecord = await ctx.db.get(bookingRecord.eventId);
+    if (!eventRecord) {
+      throw new Error("The related event could not be found.");
+    }
+
+    const approvedUser = await getApprovedCurrentUser(ctx);
+    const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+    if (!approvedUser && policy.mode === "registered_only") {
+      throw new Error("This booking link now requires a registered platform user.");
+    }
+    if (!approvedUser && policy.mode === "limited" && Number(bookingRecord.publicAccessCount || 0) > 2) {
+      throw new Error("This booking link has reached its public access limit.");
+    }
+
+    const formData = sanitizeFormData(args.formData);
+    const validationMessage = validateFormData(formData);
+    if (validationMessage) {
+      throw new Error(validationMessage);
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(bookingRecord._id, {
+      formData,
+      submittedAt: now,
+      submittedByUserId: approvedUser?._id,
+      updatedAt: now,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.bookingEmails.sendBookingSubmissionEmail, {
+      bookingId: bookingRecord._id,
+      baseUrl: normalizeString(args.baseUrl),
+    });
+
+    return buildPublicBookingDto(eventRecord, await ctx.db.get(bookingRecord._id), approvedUser ? "registered" : "public", approvedUser?.role || "public");
+  },
+});
+
+export const getSubmissionEmailPayload = internalQuery({
+  args: {
+    bookingId: v.id("eventBookings"),
+    baseUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const bookingRecord = await ctx.db.get(args.bookingId);
+    if (!bookingRecord) {
+      return null;
+    }
+
+    const eventRecord = await ctx.db.get(bookingRecord.eventId);
+    if (!eventRecord) {
+      return null;
+    }
+
+    return {
+      bookingId: String(bookingRecord._id),
+      token: bookingRecord.token,
+      eventName: eventRecord.eventTitle || eventRecord.name || "SelfieBox booking",
+      linkUrl: `${normalizeString(args.baseUrl) || "https://events.selfiebox.co.za"}/${bookingRecord.token}`,
+      formData: bookingRecord.formData,
+      submittedAt: bookingRecord.submittedAt || null,
+    };
+  },
+});
+

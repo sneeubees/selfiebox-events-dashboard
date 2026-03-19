@@ -4,6 +4,7 @@ import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi, loadGooglePlacesLibrary } from './googleMaps';
+import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import {
   BOARD_COLUMNS,
@@ -316,6 +317,7 @@ function DashboardApp() {
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
+  const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
   const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -487,6 +489,7 @@ function DashboardApp() {
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
   const [draftUpdate, setDraftUpdate] = useState('');
@@ -651,6 +654,7 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
+  const selectedEventBooking = useMemo(() => eventBookingRecord || null, [eventBookingRecord]);
   const commissionMonthEvents = useMemo(() => {
     if (!commissionDialog.isOpen || !commissionDialog.month) {
       return [];
@@ -741,6 +745,57 @@ function DashboardApp() {
 
   const closeNotice = () => {
     setNoticeDialog({ isOpen: false, title: '', message: '' });
+  };
+
+  const buildBookingLinkUrl = (token) => {
+    if (!token || typeof window === 'undefined') {
+      return '';
+    }
+    return `${window.location.origin}/${token}`;
+  };
+
+  const copyBookingLink = async (token) => {
+    const url = buildBookingLinkUrl(token);
+    if (!url) {
+      openNotice('Generate the booking link first.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      openNotice('Booking link copied to clipboard.');
+    } catch (error) {
+      console.error('Failed to copy booking link', error);
+      openNotice('The booking link could not be copied right now.');
+    }
+  };
+
+  const openBookingLink = (token) => {
+    const url = buildBookingLinkUrl(token);
+    if (!url) {
+      openNotice('Generate the booking link first.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const generateBookingLink = async () => {
+    if (!selectedEvent) {
+      return;
+    }
+
+    try {
+      const result = await generateBookingLinkMutation({ eventKey: selectedEvent.id });
+      if (result?.token) {
+        setDrawerTab('booking');
+        openNotice('Booking link is ready for this event.');
+      } else {
+        openNotice('The booking link could not be generated.');
+      }
+    } catch (error) {
+      console.error('Failed to generate booking link', error);
+      openNotice(error?.message || 'The booking link could not be generated.');
+    }
   };
 
   const closeRenameDialog = () => {
@@ -2966,7 +3021,7 @@ function DashboardApp() {
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
       <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'activity', label: 'Activity Log' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop a file here</p><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Activity Log' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop a file here</p><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions"><button className="primary-button" type="button" onClick={() => void generateBookingLink()}>Generate Booking Link</button>{selectedEventBooking?.token ? <button className="ghost-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : null}{selectedEventBooking?.token ? <button className="ghost-button" type="button" onClick={() => void copyBookingLink(selectedEventBooking.token)}>Copy link</button> : null}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} /></label><div className="booking-link-meta"><span>Public access mode: {selectedEventBooking.publicMode === 'limited' ? '2 public clicks' : selectedEventBooking.publicMode === 'registered_only' ? 'Registered users only' : 'Public until 3 days before event'}</span>{selectedEventBooking.remainingPublicClicks != null ? <span>Public clicks remaining: {selectedEventBooking.remainingPublicClicks}</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {new Date(selectedEventBooking.submittedAt).toLocaleString()}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">No booking link generated yet.</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
       </aside>
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={previewFile.url} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
@@ -3930,7 +3985,12 @@ function LoadingShell() {
 }
 
 function App() {
+  const bookingToken = getBookingTokenFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
   const [authMode, setAuthMode] = useState('login');
+
+  if (bookingToken) {
+    return <BookingPage token={bookingToken} />;
+  }
 
   return (
     <>
@@ -3944,6 +4004,46 @@ function App() {
         <DashboardApp />
       </Authenticated>
     </>
+  );
+}
+
+function BookingDrawerSummary({ booking }) {
+  const formData = booking?.formData || {};
+  const rows = [
+    ['Product', formData.product],
+    ['Booking Type', formData.customerType],
+    ['Company Name', formData.companyName],
+    ['Contact Person', formData.contactPerson],
+    ['Cell', formData.cell],
+    ['Email', formData.email],
+    ['Date of Event', formData.eventDate],
+    ['Region', formData.region],
+    ['Address', formData.address],
+    ['Point of Contact', formData.pointOfContactName],
+    ['Point of Contact Number', formData.pointOfContactNumber],
+    ['Event Start Time', formData.eventStartTime],
+    ['Event Finish Time', formData.eventFinishTime],
+    ['Duration', formData.durationHours ? `${formData.durationHours} Hours` : ''],
+    ['Optional Extras', Array.isArray(formData.optionalExtras) ? formData.optionalExtras.join(', ') : ''],
+    ['Design Yourself', formData.designYourself],
+    ['Notes / Special Instructions', formData.notes],
+    ['Ts and Cs', formData.acceptedTerms ? 'Accepted' : 'Pending'],
+  ];
+
+  const visibleRows = rows.filter(([, value]) => String(value || '').trim());
+  if (!visibleRows.length) {
+    return <div className="empty-month">No booking details submitted yet.</div>;
+  }
+
+  return (
+    <div className="booking-summary-grid">
+      {visibleRows.map(([label, value]) => (
+        <div className="booking-summary-row" key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
   );
 }
 
