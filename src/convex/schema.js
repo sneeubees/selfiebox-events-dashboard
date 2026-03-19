@@ -153,20 +153,34 @@ export default defineSchema({
     .index("by_workspace_year", ["workspaceYear"])
     .index("by_event", ["eventId"]),
   eventBookings: defineTable({
-    eventId: v.id("events"),
-    eventKey: v.string(),
-    token: v.string(),
+      eventId: v.id("events"),
+      eventKey: v.string(),
+      token: v.string(),
     formData: bookingFormData,
     createdByUserId: v.optional(v.id("users")),
     submittedByUserId: v.optional(v.id("users")),
-    publicAccessCount: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    submittedAt: v.optional(v.number()),
-  })
-    .index("by_event", ["eventId"])
-    .index("by_event_key", ["eventKey"])
-    .index("by_token", ["token"]),
+      publicAccessCount: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      submittedAt: v.optional(v.number()),
+      lastSubmittedIp: v.optional(v.string()),
+    })
+      .index("by_event", ["eventId"])
+      .index("by_event_key", ["eventKey"])
+      .index("by_token", ["token"]),
+  bookingSnapshots: defineTable({
+      bookingId: v.id("eventBookings"),
+      eventId: v.id("events"),
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      sourceIp: v.optional(v.string()),
+      submittedAt: v.number(),
+      createdByUserId: v.optional(v.id("users")),
+      createdByLabel: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_booking", ["bookingId"])
+      .index("by_event", ["eventId"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

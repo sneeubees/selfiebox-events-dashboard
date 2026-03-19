@@ -271,11 +271,16 @@ button { cursor: pointer; }
 .booking-link-actions { flex-wrap: wrap; justify-content: flex-start; }
 .booking-link-summary { display: grid; gap: 10px; margin-top: 12px; }
 .booking-link-summary label { display: grid; gap: 6px; font-size: 0.76rem; color: var(--muted); font-weight: 600; }
+.booking-link-input { cursor: copy; }
 .booking-link-meta { display: grid; gap: 4px; font-size: 0.76rem; color: var(--muted); }
 .booking-summary-grid { display: grid; gap: 10px; }
 .booking-summary-row { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8f9fb; }
 .booking-summary-row span { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .booking-summary-row strong { font-size: 0.84rem; line-height: 1.35; color: var(--text); font-weight: 600; }
+.booking-summary-submissions { gap: 8px; }
+.booking-submission-list { display: grid; gap: 6px; }
+.booking-submission-link { color: var(--accent); font-size: 0.8rem; text-decoration: none; overflow-wrap: anywhere; }
+.booking-submission-link:hover { text-decoration: underline; }
 .activity-item, .file-card { display: flex; justify-content: space-between; gap: 8px; padding: 5px 7px; border-radius: 10px; background: #f8f9fb; border: 1px solid var(--line); }
 .activity-item { align-items: flex-start; }
 .activity-item-body { min-width: 0; display: grid; gap: 2px; }
@@ -1006,4 +1011,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .booking-summary-row {
   background: #162033;
+}
+:root[data-theme="dark"] .booking-submission-link {
+  color: #8db6ff;
 }

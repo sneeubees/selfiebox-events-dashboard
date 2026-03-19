@@ -79,6 +79,19 @@ function buildSubmitPayload(form, pageState) {
   };
 }
 
+async function getPublicIpAddress() {
+  try {
+    const response = await fetch("https://api.ipify.org?format=json");
+    if (!response.ok) {
+      return "";
+    }
+    const payload = await response.json();
+    return String(payload?.ip || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
   const wrapperRef = useRef(null);
   const autocompleteContainerRef = useRef(null);
@@ -144,7 +157,7 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
           return;
         }
         const parsed = await extractPlaceResult(nextPlace);
-        onChange(parsed.address);
+        onChange(parsed.location || "");
         onPlaceSelect(parsed);
         setIsOpen(false);
       };
@@ -344,9 +357,11 @@ export default function BookingPage({ token }) {
     setIsSubmitting(true);
     setFormNotice("");
     try {
+      const clientIp = await getPublicIpAddress();
       const result = await submitPublicForm({
         token,
         baseUrl: window.location.origin,
+        clientIp,
         formData: buildSubmitPayload(form, pageState),
       });
       setPageState(result);
@@ -489,9 +504,6 @@ export default function BookingPage({ token }) {
           </BookingFormField>
 
           <div className="booking-time-row full-span">
-            <BookingFormField label="Event start time">
-              <input className="text-input" type="time" value={form.eventStartTime} readOnly={isLocked} onChange={(event) => updateStartTime(event.target.value)} />
-            </BookingFormField>
             <BookingFormField
               label="Setup time"
               tooltip="Setup time is one hour before the event start and is free and not part of your quoted times"
@@ -506,6 +518,9 @@ export default function BookingPage({ token }) {
                   updateField("setupTime", event.target.value);
                 }}
               />
+            </BookingFormField>
+            <BookingFormField label="Event start time">
+              <input className="text-input" type="time" value={form.eventStartTime} readOnly={isLocked} onChange={(event) => updateStartTime(event.target.value)} />
             </BookingFormField>
             <BookingFormField label="Event finish time">
               <input className="text-input" type="time" value={form.eventFinishTime} readOnly={isLocked} onChange={(event) => updateField("eventFinishTime", event.target.value)} />

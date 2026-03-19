@@ -3,95 +3,7 @@
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { jsPDF } from "jspdf";
-import { BOOKING_TERMS_TEXT } from "../bookingConstants";
-
-function formatDateTime(timestamp) {
-  if (!timestamp) {
-    return "";
-  }
-  return new Date(timestamp).toISOString().slice(0, 16).replace("T", " ");
-}
-
-function sanitizeFilenamePart(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase() || "booking";
-}
-
-function buildBookingPdf(payload) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const left = 48;
-  const right = pageWidth - 48;
-  let y = 54;
-
-  const addLine = (label, value) => {
-    doc.setFont("helvetica", "bold");
-    doc.text(`${label}:`, left, y);
-    doc.setFont("helvetica", "normal");
-    const wrapped = doc.splitTextToSize(String(value || "-"), right - left - 120);
-    doc.text(wrapped, left + 120, y);
-    y += Math.max(22, wrapped.length * 16);
-    if (y > 740) {
-      doc.addPage();
-      y = 54;
-    }
-  };
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.text("SelfieBox Booking Form", left, y);
-  y += 28;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Submitted: ${formatDateTime(payload.submittedAt) || "Pending"}`, left, y);
-  y += 16;
-  doc.text(`Booking link: ${payload.linkUrl}`, left, y, { maxWidth: right - left });
-  y += 26;
-
-  doc.setDrawColor(210, 217, 228);
-  doc.line(left, y, right, y);
-  y += 24;
-
-  addLine("Product", payload.formData.product);
-  addLine("Booking Type", payload.formData.customerType);
-  addLine("Company Name", payload.formData.companyName);
-  addLine("Event Name", payload.formData.eventName);
-  addLine("Contact Person", payload.formData.contactPerson);
-  addLine("Cell", payload.formData.cell);
-  addLine("Email", payload.formData.email);
-  addLine("Date of Event", payload.formData.eventDate);
-  addLine("Region", payload.formData.region);
-  addLine("Address", payload.formData.address);
-  addLine("Point of Contact", payload.formData.pointOfContactName);
-  addLine("Point of Contact Number", payload.formData.pointOfContactNumber);
-  addLine("Setup Time", payload.formData.setupTime || "-");
-  addLine("Event Start Time", payload.formData.eventStartTime || "-");
-  addLine("Event Finish Time", payload.formData.eventFinishTime || "-");
-  addLine("Optional Extras", payload.formData.optionalExtras.length ? payload.formData.optionalExtras.join(", ") : "-");
-  addLine("Design Yourself", payload.formData.designYourself || "-");
-  addLine("Notes / Special Instructions", payload.formData.notes || "-");
-  addLine("Terms Accepted", payload.formData.acceptedTerms ? "Yes" : "No");
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Terms and Conditions", left, y);
-  y += 18;
-  doc.setFont("helvetica", "normal");
-  const termsLines = doc.splitTextToSize(BOOKING_TERMS_TEXT, right - left);
-  doc.text(termsLines, left, y);
-  y += termsLines.length * 14 + 26;
-
-  doc.setDrawColor(180, 180, 180);
-  doc.line(left, y + 24, left + 180, y + 24);
-  doc.line(left + 240, y + 24, left + 420, y + 24);
-  doc.text("Signature", left, y + 40);
-  doc.text("Date", left + 240, y + 40);
-
-  return Buffer.from(doc.output("arraybuffer")).toString("base64");
-}
+import { buildBookingPdfBase64, sanitizeBookingFilenamePart } from "./bookingPdf";
 
 export const sendBookingSubmissionEmail = internalAction({
   args: {
@@ -111,7 +23,7 @@ export const sendBookingSubmissionEmail = internalAction({
       return { sent: false, reason: "missing_email_config" };
     }
 
-    const pdfBase64 = buildBookingPdf(payload);
+    const pdfBase64 = buildBookingPdfBase64(payload);
     const subject = `Booking form received - ${payload.eventName}`;
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2a44;">
@@ -155,7 +67,7 @@ export const sendBookingSubmissionEmail = internalAction({
         text,
         attachments: [
           {
-            filename: `${sanitizeFilenamePart(payload.eventName)}-booking-form.pdf`,
+            filename: `${sanitizeBookingFilenamePart(payload.eventName)}-booking-form.pdf`,
             content: pdfBase64,
           },
         ],
