@@ -148,7 +148,8 @@ button { cursor: pointer; }
 .add-column-trigger { border: 0; background: #eef2ff; color: #2f5cae; font-weight: 700; font-size: 1rem; }
 .add-column-trigger:hover { background: #dfe7ff; }
 .admin-menu { position: fixed; z-index: 9999; display: grid; gap: 6px; min-width: 170px; padding: 8px; border-radius: 10px; background: #fff; border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18); }
-.admin-menu button { border: 0; background: transparent; text-align: left; }
+.admin-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 6px 8px; border-radius: 8px; }
+.admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-header { width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; background: #fff; text-align: left; transition: background 140ms ease; box-sizing: border-box; }
 .month-header:hover { background: #eef6ff; }
@@ -836,9 +837,13 @@ textarea { resize: vertical; min-height: 110px; }
   background: #1b2942;
   color: var(--text);
 }
+:root[data-theme="dark"] .board-entry .cell,
+:root[data-theme="dark"] .board-entry .cell-name {
+  background: #162033;
+}
 :root[data-theme="dark"] .board-entry.is-alt-day .cell,
 :root[data-theme="dark"] .board-entry.is-alt-day .cell-name {
-  background: #131f33;
+  background: #1d2940;
 }
 :root[data-theme="dark"] .board-entry:hover .cell,
 :root[data-theme="dark"] .board-entry:hover .cell-name {
@@ -881,11 +886,26 @@ textarea { resize: vertical; min-height: 110px; }
   background: #122038 !important;
   color: #96a9cc !important;
 }
+:root[data-theme="dark"] .admin-menu button {
+  color: #dce8ff;
+}
+:root[data-theme="dark"] .admin-menu button:hover {
+  background: #223556;
+}
 :root[data-theme="dark"] .inline-input:hover,
 :root[data-theme="dark"] .inline-input:focus {
   background: #1a2740;
   color: var(--text);
   border-color: #4e6ea9;
+}
+:root[data-theme="dark"] .drawer-header h3,
+:root[data-theme="dark"] .drawer-card h4,
+:root[data-theme="dark"] .modal-header h3 {
+  color: #eef4ff;
+}
+:root[data-theme="dark"] .drawer-tabs .is-active {
+  background: #243a5f;
+  color: #eef4ff;
 }
 :root[data-theme="dark"] .drawer-meta,
 :root[data-theme="dark"] .map-preview-address,

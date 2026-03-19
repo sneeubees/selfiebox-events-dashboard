@@ -603,7 +603,6 @@ function DashboardApp() {
   const managedSingleStyles = useMemo(() => Object.fromEntries(Object.entries(managedSingleOptions).map(([columnKey, options]) => [columnKey, Object.fromEntries(options.map((option) => [option.name, { background: option.color, color: getContrastColor(option.color) }]))])), [managedSingleOptions]);
   const selectedManagedSingleEvent = useMemo(() => events.find((event) => event.id === managedSingleEditor.eventId) || null, [managedSingleEditor.eventId, events]);
   const selectedCustomOptionEvent = useMemo(() => events.find((event) => event.id === customOptionEditor.eventId) || null, [customOptionEditor.eventId, events]);
-  const attendantNames = useMemo(() => attendantOptions.map((option) => option.fullName), [attendantOptions]);
   const attendantStyles = useMemo(() => Object.fromEntries(attendantOptions.map((option) => {
     const branchStyle = branchStyles[option.branchKey];
     return [
@@ -2974,7 +2973,7 @@ function DashboardApp() {
       {managedSingleEditor.columnKey && selectedManagedSingleEvent ? <ModalShell title={`Select ${columnTitle(managedSingleEditor.columnKey)}`} onClose={() => setManagedSingleEditor({ columnKey: '', eventId: '' })}><div className="branch-manager"><div className="branch-selector-list">{(managedSingleOptions[managedSingleEditor.columnKey] || []).map((option) => <button className={["branch-selector-item", selectedManagedSingleEvent[managedSingleEditor.columnKey] === option.name ? "is-selected" : ""].join(" ").trim()} key={option.name} type="button" onClick={() => selectManagedSingleValue(managedSingleEditor.columnKey, selectedManagedSingleEvent.id, option.name)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.name}</span></button>)}</div></div></ModalShell> : null}{customOptionManagerKey ? <ModalShell title={`Manage ${displayColumnLabel(customColumns.find((column) => column.key === customOptionManagerKey) || { label: customOptionManagerKey, isCustom: true })} items`} onClose={() => setCustomOptionManagerKey('')} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-status-manager-form"><input className="text-input compact-text-input" maxLength={40} placeholder="Name" value={newCustomOptionName} onChange={(event) => setNewCustomOptionName(event.target.value.slice(0, 40))} /><ColorSwatchPicker value={newCustomOptionColor} onChange={setNewCustomOptionColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addCustomOption}>Add</button></div><div className="branch-preview-list is-editor">{(customItemOptionsByColumn[customOptionManagerKey] || []).map((option) => <div className="branch-editor-row compact-status-editor-row" key={option.optionKey}><input className="text-input compact-text-input" maxLength={40} value={((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.name) ?? option.name} onChange={(event) => updateCustomOptionDraft(customOptionManagerKey, option.optionKey, 'name', event.target.value)} /><ColorSwatchPicker value={((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color} onChange={(value) => updateCustomOptionDraft(customOptionManagerKey, option.optionKey, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: ((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color, color: getContrastColor(((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color) }}>{((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.name) ?? option.name}</span><button className="ghost-button compact-manager-button" type="button" onClick={() => saveCustomOption(customOptionManagerKey, option.optionKey)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteCustomOption(customOptionManagerKey, option.optionKey)}>Delete</button></div>)}</div></div></ModalShell> : null}{customOptionEditor.columnKey && selectedCustomOptionEvent ? <ModalShell title={`Select ${displayColumnLabel(customColumns.find((column) => column.key === customOptionEditor.columnKey) || { label: customOptionEditor.columnKey, isCustom: true })}`} onClose={() => setCustomOptionEditor({ columnKey: '', eventId: '' })}><div className="branch-manager"><div className="branch-selector-list">{(customItemOptionsByColumn[customOptionEditor.columnKey] || []).map((option) => <button className={["branch-selector-item", customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? (((selectedCustomOptionEvent.customFields || {})[customOptionEditor.columnKey] || []).includes(option.name) ? "is-selected" : "") : (((selectedCustomOptionEvent.customFields || {})[customOptionEditor.columnKey] === option.name) ? "is-selected" : "")].join(" ").trim()} key={option.optionKey} type="button" onClick={() => customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? toggleCustomMultiValue(customOptionEditor.columnKey, selectedCustomOptionEvent.id, option.name) : selectCustomSingleValue(customOptionEditor.columnKey, selectedCustomOptionEvent.id, option.name)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.name}</span></button>)}</div>{customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? <div className="modal-actions"><button className="primary-button" type="button" onClick={() => setCustomOptionEditor({ columnKey: '', eventId: '' })}>Done</button></div> : null}</div></ModalShell> : null}
       {attendantManagerOpen ? <ModalShell title="Manage attendant items" onClose={() => setAttendantManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-attendant-manager-form"><input className="text-input compact-text-input" maxLength={100} placeholder="Full name" value={newAttendantName} onChange={(event) => setNewAttendantName(event.target.value.slice(0, 100))} /><select value={newAttendantBranch} onChange={(event) => setNewAttendantBranch(event.target.value)}><option value="">Branch</option>{branchOptions.map((option) => <option key={option.abbreviation} value={option.abbreviation}>{option.abbreviation}</option>)}</select><button className="primary-button compact-manager-button" type="button" onClick={addAttendantOption}>Add</button></div><div className="branch-preview-list is-editor">{attendantOptions.map((option) => <div className="branch-editor-row compact-attendant-editor-row" key={option.fullName}><input className="text-input compact-text-input" maxLength={100} value={attendantDrafts[option.fullName]?.fullName ?? option.fullName} onChange={(event) => updateAttendantDraft(option.fullName, 'fullName', event.target.value)} /><select value={attendantDrafts[option.fullName]?.branchKey ?? option.branchKey ?? ''} onChange={(event) => updateAttendantDraft(option.fullName, 'branchKey', event.target.value)}><option value="">Branch</option>{branchOptions.map((branchOption) => <option key={branchOption.abbreviation} value={branchOption.abbreviation}>{branchOption.abbreviation}</option>)}</select><span className="attendant-preview-chip" style={attendantStyles[attendantDrafts[option.fullName]?.fullName ?? option.fullName] || branchStyles[attendantDrafts[option.fullName]?.branchKey ?? option.branchKey ?? ''] || undefined} title={attendantDrafts[option.fullName]?.fullName ?? option.fullName}>{truncateName(attendantDrafts[option.fullName]?.fullName ?? option.fullName)}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveAttendantOption(option.fullName)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteAttendantOption(option.fullName)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {attendantEditorEventId && selectedAttendantEvent ? <ModalShell title="Select attendant/s" onClose={() => setAttendantEditorEventId('')}><div className="branch-manager"><div className="branch-selector-list">{filteredAttendantOptions.map((option) => <button className={["branch-selector-item", (selectedAttendantEvent.attendants || []).includes(option.fullName) ? "is-selected" : ""].join(" ").trim()} key={option.fullName} type="button" title={option.fullName} onClick={() => toggleAttendantOnEvent(selectedAttendantEvent.id, option.fullName)}><span className="attendant-selector-name" style={attendantStyles[option.fullName] || undefined}>{truncateName(option.fullName)}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setAttendantEditorEventId('')}>Done</button></div></div></ModalShell> : null}
-      {showAddColumnModal ? <ModalShell title="Add new column" onClose={() => setShowAddColumnModal(false)} closeOnScrimClick={false}><form className="simple-stack" onSubmit={handleAddCustomColumn}><label><span>Column name</span><input className="text-input" value={newColumnName} onChange={(event) => setNewColumnName(event.target.value)} autoFocus /></label><label><span>Column type</span><select value={newColumnType} onChange={(event) => setNewColumnType(event.target.value)}>{CUSTOM_COLUMN_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddColumnModal(false)}>Cancel</button><button className="primary-button" type="submit">Add column</button></div></form></ModalShell> : null}{showAddModal ? <ModalShell title="Add new event" onClose={() => setShowAddModal(false)} closeOnScrimClick={false}><form className="modal-form" onSubmit={handleAddEvent}>{renderEventFields(eventForm, setEventForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, getManagedOptionNames(managedSingleOptions, 'paymentStatus'), getManagedOptionNames(managedSingleOptions, 'accounts'), getManagedOptionNames(managedSingleOptions, 'vinyl'), attendantNames, openLocationPreview, mainNameSuggestions, hoursSuggestions)}<div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddModal(false)}>Cancel</button><button className="primary-button" type="submit">Save event</button></div></form></ModalShell> : null}
+        {showAddColumnModal ? <ModalShell title="Add new column" onClose={() => setShowAddColumnModal(false)} closeOnScrimClick={false}><form className="simple-stack" onSubmit={handleAddCustomColumn}><label><span>Column name</span><input className="text-input" value={newColumnName} onChange={(event) => setNewColumnName(event.target.value)} autoFocus /></label><label><span>Column type</span><select value={newColumnType} onChange={(event) => setNewColumnType(event.target.value)}>{CUSTOM_COLUMN_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddColumnModal(false)}>Cancel</button><button className="primary-button" type="submit">Add column</button></div></form></ModalShell> : null}{showAddModal ? <ModalShell title="Add new event" onClose={() => setShowAddModal(false)} closeOnScrimClick={false}><form className="modal-form" onSubmit={handleAddEvent}>{renderEventFields(eventForm, setEventForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, getManagedOptionNames(managedSingleOptions, 'paymentStatus'), getManagedOptionNames(managedSingleOptions, 'accounts'), getManagedOptionNames(managedSingleOptions, 'vinyl'), attendantOptions, openLocationPreview, mainNameSuggestions, hoursSuggestions)}<div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddModal(false)}>Cancel</button><button className="primary-button" type="submit">Save event</button></div></form></ModalShell> : null}
       {showProfileModal ? <ModalShell title="Profile" onClose={() => setShowProfileModal(false)} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{profileForm.profilePic ? <img className="profile-avatar-image" src={profileForm.profilePic} alt="Profile" /> : <div className="profile-avatar-fallback">{`${profileForm.firstName?.[0] || currentUser.firstName?.[0] || ''}${profileForm.surname?.[0] || currentUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{profileForm.firstName || currentUser.firstName} {profileForm.surname || currentUser.surname}</strong><span>{profileForm.designation || currentUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{profileForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setProfileForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={profileForm.firstName} onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={profileForm.surname} onChange={(event) => setProfileForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={profileForm.designation} onChange={(event) => setProfileForm((current) => ({ ...current, designation: event.target.value }))} /></label><label><span>Email</span><input className="text-input locked-input" value={profileForm.email} readOnly /></label><label><span>Role</span><input className="text-input locked-input" value={profileForm.role} readOnly /></label><label className="full-span"><span>Theme</span><select className="text-input" value={profileForm.theme} onChange={(event) => setProfileForm((current) => ({ ...current, theme: event.target.value === 'dark' ? 'dark' : 'light' }))}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => { setShowProfileModal(false); void signOut(); }}>Logout</button><button className="ghost-button" type="button" onClick={() => setShowProfileModal(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveProfile}>Save profile</button></div></div></ModalShell> : null}
       {showUsersModal ? <ModalShell title="Manage users" onClose={() => setShowUsersModal(false)}><div className="users-modal">{users.map((user) => <button className="user-list-card" type="button" key={user.id} onClick={() => openUserEditor(user.id)}><div className="user-list-avatar">{`${user.firstName?.[0] || ''}${user.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div><div className="user-list-copy"><strong>{user.firstName} {user.surname}</strong><span>{user.email}</span></div><div className="user-list-meta"><span className={`role-pill role-${user.role}`}>{formatRole(user.role)}</span><small>{user.isApproved ? 'Approved' : 'Pending'}</small></div></button>)}</div></ModalShell> : null}
       {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
@@ -3182,8 +3181,228 @@ function LocationMapPreview({ location }) {
   return <div className="map-preview-canvas" ref={mapRef} />;
 }
 
-function renderEventFields(form, setForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, paymentNames, accountNames, yesNoNames, attendantNames, openLocationPreview, mainNameSuggestions, hoursSuggestions) {
-  return <><label><span>Name / Item</span><AutocompleteTextInput className="text-input" required value={form.name} suggestions={mainNameSuggestions} minMenuWidth={320} onChange={(nextValue) => setForm((current) => ({ ...current, name: nextValue }))} /></label><label><span>Event name</span><input className="text-input" placeholder="Event Name" value={form.eventTitle || ''} onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))} /></label><label><span>Date</span><input className="text-input" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Hours</span><AutocompleteTextInput className="text-input" value={form.hours} suggestions={hoursSuggestions} minMenuWidth={160} onChange={(nextValue) => setForm((current) => ({ ...current, hours: nextValue }))} /></label><label><span>Branch</span><select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>{branchAbbreviations.map((option) => <option key={option} value={option} title={branchFullNames[option] || option}>{option}</option>)}</select></label><label><span>Product</span><select value={form.products[0] || ''} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}><option value=''>Select product</option>{productAbbreviations.map((option) => <option key={option} value={option} title={productFullNames[option] || option}>{productFullNames[option] || option}</option>)}</select></label><label><span>Status</span><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{statusNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label className="full-span"><span>Location</span><LocationInputField value={form.location || ''} placeholder='Start typing address' className='text-input' onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: '', locationLat: null, locationLng: null }))} onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))} onOpenMap={() => openLocationPreview({ name: form.name || 'New event', location: form.location || '', locationLat: form.locationLat, locationLng: form.locationLng })} hasCoordinates={typeof form.locationLat === 'number' && typeof form.locationLng === 'number'} /></label><label><span>Payment</span><select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>{paymentNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Accounts</span><select value={form.accounts} onChange={(event) => setForm((current) => ({ ...current, accounts: event.target.value }))}>{accountNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Vinyl</span><select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>GS / AI</span><select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Images sent</span><select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Snappic</span><select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Attendant/s</span><select value={form.attendants[0] || ''} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}><option value="">Select attendant</option>{attendantNames.map((option) => <option key={option} value={option} title={option}>{option}</option>)}</select></label><label><span>Ex. VAT</span><input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} /></label><label><span>Package only</span><input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} /></label></>;
+function renderEventFields(
+  form,
+  setForm,
+  branchAbbreviations,
+  branchFullNames,
+  productAbbreviations,
+  productFullNames,
+  statusNames,
+  paymentNames,
+  accountNames,
+  yesNoNames,
+  attendantOptions,
+  openLocationPreview,
+  mainNameSuggestions,
+  hoursSuggestions
+) {
+  const groupedAttendants = [];
+  const branchBuckets = new Map();
+  const ungrouped = [];
+
+  (attendantOptions || []).forEach((option) => {
+    const fullName = String(option?.fullName || "").trim();
+    if (!fullName) {
+      return;
+    }
+    const branchKey = String(option?.branchKey || "").trim();
+    if (!branchKey) {
+      ungrouped.push(fullName);
+      return;
+    }
+    const list = branchBuckets.get(branchKey) || [];
+    list.push(fullName);
+    branchBuckets.set(branchKey, list);
+  });
+
+  branchAbbreviations.forEach((branchKey) => {
+    const names = (branchBuckets.get(branchKey) || []).slice().sort((left, right) => left.localeCompare(right));
+    if (names.length) {
+      groupedAttendants.push({
+        label: branchFullNames[branchKey] || branchKey,
+        options: names,
+      });
+    }
+  });
+
+  if (ungrouped.length) {
+    groupedAttendants.push({
+      label: "Other",
+      options: ungrouped.slice().sort((left, right) => left.localeCompare(right)),
+    });
+  }
+
+  return (
+    <>
+      <label>
+        <span>Name / Item</span>
+        <AutocompleteTextInput
+          className="text-input"
+          required
+          value={form.name}
+          suggestions={mainNameSuggestions}
+          minMenuWidth={320}
+          onChange={(nextValue) => setForm((current) => ({ ...current, name: nextValue }))}
+        />
+      </label>
+      <label>
+        <span>Event name</span>
+        <input
+          className="text-input"
+          placeholder="Event Name"
+          value={form.eventTitle || ""}
+          onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))}
+        />
+      </label>
+      <label>
+        <span>Date</span>
+        <input
+          className="text-input"
+          type="date"
+          required
+          value={form.date}
+          onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+        />
+      </label>
+      <label>
+        <span>Hours</span>
+        <AutocompleteTextInput
+          className="text-input"
+          value={form.hours}
+          suggestions={hoursSuggestions}
+          minMenuWidth={160}
+          onChange={(nextValue) => setForm((current) => ({ ...current, hours: nextValue }))}
+        />
+      </label>
+      <label>
+        <span>Branch</span>
+        <select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>
+          {branchAbbreviations.map((option) => (
+            <option key={option} value={option} title={branchFullNames[option] || option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Product</span>
+        <select value={form.products[0] || ""} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}>
+          <option value="">Select product</option>
+          {productAbbreviations.map((option) => (
+            <option key={option} value={option} title={productFullNames[option] || option}>
+              {productFullNames[option] || option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Status</span>
+        <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+          {statusNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="full-span">
+        <span>Location</span>
+        <LocationInputField
+          value={form.location || ""}
+          placeholder="Start typing address"
+          className="text-input"
+          onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: "", locationLat: null, locationLng: null }))}
+          onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))}
+          onOpenMap={() => openLocationPreview({ name: form.name || "New event", location: form.location || "", locationLat: form.locationLat, locationLng: form.locationLng })}
+          hasCoordinates={typeof form.locationLat === "number" && typeof form.locationLng === "number"}
+        />
+      </label>
+      <label>
+        <span>Payment</span>
+        <select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>
+          {paymentNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Accounts</span>
+        <select value={form.accounts} onChange={(event) => setForm((current) => ({ ...current, accounts: event.target.value }))}>
+          {accountNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Vinyl</span>
+        <select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>GS / AI</span>
+        <select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Images sent</span>
+        <select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Snappic</span>
+        <select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Attendant/s</span>
+        <select value={form.attendants[0] || ""} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}>
+          <option value="">Select attendant</option>
+          {groupedAttendants.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((option) => (
+                <option key={option} value={option} title={option}>
+                  {option}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Ex. VAT</span>
+        <input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} />
+      </label>
+      <label>
+        <span>Package only</span>
+        <input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} />
+      </label>
+    </>
+  );
 }
 function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit }) {
     if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
