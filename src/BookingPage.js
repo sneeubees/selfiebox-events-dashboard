@@ -79,7 +79,7 @@ function buildSubmitPayload(form, pageState) {
   };
 }
 
-function BookingAddressInput({ value, onChange, onPlaceSelect }) {
+function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
   const wrapperRef = useRef(null);
   const autocompleteContainerRef = useRef(null);
   const autocompleteElementRef = useRef(null);
@@ -87,13 +87,13 @@ function BookingAddressInput({ value, onChange, onPlaceSelect }) {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    if (!hasGoogleMapsApiKey()) {
+    if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
     void loadGooglePlacesLibrary().catch((error) => {
       console.error("Failed to preload Google Places for booking page", error);
     });
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -112,7 +112,7 @@ function BookingAddressInput({ value, onChange, onPlaceSelect }) {
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !hasGoogleMapsApiKey()) {
+    if (!isOpen || readOnly || !hasGoogleMapsApiKey()) {
       return undefined;
     }
 
@@ -166,18 +166,19 @@ function BookingAddressInput({ value, onChange, onPlaceSelect }) {
         autocompleteElement.removeEventListener("gmp-select", selectHandler);
       }
     };
-  }, [isOpen, onChange, onPlaceSelect]);
+  }, [isOpen, onChange, onPlaceSelect, readOnly]);
 
   return (
     <div className="booking-address-field" ref={wrapperRef}>
       <input
         className="text-input"
         value={value}
+        readOnly={readOnly}
         placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
-        onFocus={() => setIsOpen(true)}
+        onFocus={() => !readOnly && setIsOpen(true)}
         onChange={(event) => onChange(event.target.value)}
       />
-      {isOpen && hasGoogleMapsApiKey() ? (
+      {isOpen && !readOnly && hasGoogleMapsApiKey() ? (
         <div className="booking-address-popover">
           <div className="booking-address-autocomplete" ref={autocompleteContainerRef} />
           <div className="booking-address-actions">
@@ -311,6 +312,7 @@ export default function BookingPage({ token }) {
 
   const selectedProducts = useMemo(() => pageState.productNames || [], [pageState.productNames]);
   const optionalExtrasOptions = useMemo(() => getOptionalExtrasForProducts(selectedProducts), [selectedProducts]);
+  const isLocked = Boolean(pageState.isLocked);
 
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -437,6 +439,7 @@ export default function BookingPage({ token }) {
                     type="radio"
                     name="customerType"
                     checked={form.customerType === option}
+                    disabled={isLocked}
                     onChange={() => updateField("customerType", option)}
                   />
                   <span>{option}</span>
@@ -446,16 +449,16 @@ export default function BookingPage({ token }) {
           </div>
 
           <BookingFormField label="Event Name">
-            <input className="text-input" value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} />
+            <input className="text-input" value={form.eventName} readOnly={isLocked} onChange={(event) => updateField("eventName", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Contact person">
-            <input className="text-input" value={form.contactPerson} onChange={(event) => updateField("contactPerson", event.target.value)} />
+            <input className="text-input" value={form.contactPerson} readOnly={isLocked} onChange={(event) => updateField("contactPerson", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Cell">
-            <input className="text-input" value={form.cell} onChange={(event) => updateField("cell", event.target.value)} />
+            <input className="text-input" value={form.cell} readOnly={isLocked} onChange={(event) => updateField("cell", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Email">
-            <input className="text-input" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
+            <input className="text-input" type="email" value={form.email} readOnly={isLocked} onChange={(event) => updateField("email", event.target.value)} />
           </BookingFormField>
 
           <BookingStaticField label="Date of event" value={form.eventDate || pageState.eventDate} />
@@ -464,12 +467,13 @@ export default function BookingPage({ token }) {
           <BookingFormField label="Address" className="full-span">
             <BookingAddressInput
               value={form.address}
+              readOnly={isLocked}
               onChange={(nextValue) => updateField("address", nextValue)}
               onPlaceSelect={(place) =>
                 setForm((current) => ({
                   ...current,
-                  address: place.address,
-                  addressPlaceId: place.placeId || "",
+                  address: place.location || "",
+                  addressPlaceId: place.locationPlaceId || "",
                   addressLat: typeof place.locationLat === "number" ? place.locationLat : null,
                   addressLng: typeof place.locationLng === "number" ? place.locationLng : null,
                 }))
@@ -478,15 +482,15 @@ export default function BookingPage({ token }) {
           </BookingFormField>
 
           <BookingFormField label="POC Name:" tooltip="Point of Contact">
-            <input className="text-input" value={form.pointOfContactName} onChange={(event) => updateField("pointOfContactName", event.target.value)} />
+            <input className="text-input" value={form.pointOfContactName} readOnly={isLocked} onChange={(event) => updateField("pointOfContactName", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="POC Contact #">
-            <input className="text-input" value={form.pointOfContactNumber} onChange={(event) => updateField("pointOfContactNumber", event.target.value)} />
+            <input className="text-input" value={form.pointOfContactNumber} readOnly={isLocked} onChange={(event) => updateField("pointOfContactNumber", event.target.value)} />
           </BookingFormField>
 
           <div className="booking-time-row full-span">
             <BookingFormField label="Event start time">
-              <input className="text-input" type="time" value={form.eventStartTime} onChange={(event) => updateStartTime(event.target.value)} />
+              <input className="text-input" type="time" value={form.eventStartTime} readOnly={isLocked} onChange={(event) => updateStartTime(event.target.value)} />
             </BookingFormField>
             <BookingFormField
               label="Setup time"
@@ -496,6 +500,7 @@ export default function BookingPage({ token }) {
                 className="text-input"
                 type="time"
                 value={form.setupTime}
+                readOnly={isLocked}
                 onChange={(event) => {
                   setSetupTouched(true);
                   updateField("setupTime", event.target.value);
@@ -503,7 +508,7 @@ export default function BookingPage({ token }) {
               />
             </BookingFormField>
             <BookingFormField label="Event finish time">
-              <input className="text-input" type="time" value={form.eventFinishTime} onChange={(event) => updateField("eventFinishTime", event.target.value)} />
+              <input className="text-input" type="time" value={form.eventFinishTime} readOnly={isLocked} onChange={(event) => updateField("eventFinishTime", event.target.value)} />
             </BookingFormField>
           </div>
 
@@ -512,7 +517,7 @@ export default function BookingPage({ token }) {
             <div className="booking-extras-grid">
               {optionalExtrasOptions.length ? optionalExtrasOptions.map((option) => (
                 <label key={option} className="booking-inline-choice">
-                  <input type="checkbox" checked={(form.optionalExtras || []).includes(option)} onChange={() => toggleExtra(option)} />
+                  <input type="checkbox" checked={(form.optionalExtras || []).includes(option)} disabled={isLocked} onChange={() => toggleExtra(option)} />
                   <span>{option}</span>
                 </label>
               )) : <div className="booking-empty-state">No optional extras for the selected product mix.</div>}
@@ -528,6 +533,7 @@ export default function BookingPage({ token }) {
                     type="radio"
                     name="designYourself"
                     checked={form.designYourself === option}
+                    disabled={isLocked}
                     onChange={() => updateField("designYourself", option)}
                   />
                   <span>{option}</span>
@@ -541,7 +547,7 @@ export default function BookingPage({ token }) {
             helper="Venue access instructions - Specific dress code requests etc."
             className="full-span"
           >
-            <textarea rows={5} value={form.notes} onChange={(event) => updateField("notes", event.target.value)} />
+            <textarea rows={5} value={form.notes} readOnly={isLocked} onChange={(event) => updateField("notes", event.target.value)} />
           </BookingFormField>
 
           <div className="booking-form-field full-span booking-terms-card">
@@ -555,16 +561,17 @@ export default function BookingPage({ token }) {
               </button>.
             </p>
             <label className="booking-inline-choice booking-terms-accept">
-              <input type="checkbox" checked={form.acceptedTerms} onChange={(event) => updateField("acceptedTerms", event.target.checked)} />
+              <input type="checkbox" checked={form.acceptedTerms} disabled={isLocked} onChange={(event) => updateField("acceptedTerms", event.target.checked)} />
               <span>I accept the SelfieBox terms and conditions.</span>
             </label>
           </div>
         </div>
 
         {formNotice ? <div className="auth-error booking-form-notice">{formNotice}</div> : null}
+        {isLocked ? <div className="booking-lock-note">This booking form is locked on the day of the event and can no longer be edited.</div> : null}
 
         <div className="booking-form-actions">
-          <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
+          <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isLocked}>
             {isSubmitting ? "Submitting..." : "Submit"}
           </button>
         </div>

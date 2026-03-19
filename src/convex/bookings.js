@@ -3,8 +3,6 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { createEmptyBookingForm } from "../bookingConstants";
 
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-
 function parseIsoDate(value) {
   const text = String(value || "").trim();
   if (!text) {
@@ -13,6 +11,18 @@ function parseIsoDate(value) {
 
   const exact = /^\d{4}-\d{2}-\d{2}$/.test(text)
     ? new Date(`${text}T23:59:59`)
+    : new Date(text);
+  const timestamp = exact.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function parseIsoDateStart(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+  const exact = /^\d{4}-\d{2}-\d{2}$/.test(text)
+    ? new Date(`${text}T00:00:00`)
     : new Date(text);
   const timestamp = exact.getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
@@ -161,7 +171,8 @@ async function buildInitialFormData(ctx, eventRecord) {
 }
 
 function getBookingDateTimestamp(eventRecord, bookingRecord) {
-  return parseIsoDate(bookingRecord?.formData?.eventDate || eventRecord?.date);
+  const timestamp = parseIsoDateStart(bookingRecord?.formData?.eventDate || eventRecord?.date);
+  return timestamp;
 }
 
 function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
@@ -172,36 +183,16 @@ function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
       anonymousAllowed: true,
       remainingPublicClicks: null,
       cutoffTimestamp: null,
-    };
-  }
-
-  const cutoffTimestamp = eventTimestamp - THREE_DAYS_MS;
-  const createdWithinThreeDays = bookingRecord.createdAt >= cutoffTimestamp;
-
-  if (createdWithinThreeDays) {
-    const remainingPublicClicks = Math.max(0, 2 - Number(bookingRecord.publicAccessCount || 0));
-    return {
-      mode: "limited",
-      anonymousAllowed: remainingPublicClicks > 0,
-      remainingPublicClicks,
-      cutoffTimestamp,
-    };
-  }
-
-  if (now < cutoffTimestamp) {
-    return {
-      mode: "public",
-      anonymousAllowed: true,
-      remainingPublicClicks: null,
-      cutoffTimestamp,
+      isLocked: false,
     };
   }
 
   return {
-    mode: "registered_only",
-    anonymousAllowed: false,
-    remainingPublicClicks: 0,
-    cutoffTimestamp,
+    mode: "public",
+    anonymousAllowed: true,
+    remainingPublicClicks: null,
+    cutoffTimestamp: null,
+    isLocked: now >= eventTimestamp,
   };
 }
 
@@ -222,6 +213,7 @@ function buildDrawerBookingDto(eventRecord, bookingRecord) {
     publicMode: policy.mode,
     remainingPublicClicks: policy.remainingPublicClicks,
     cutoffTimestamp: policy.cutoffTimestamp,
+    isLocked: policy.isLocked,
   };
 }
 
@@ -353,6 +345,7 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
     submittedAt: bookingRecord.submittedAt || null,
     publicMode: policy.mode,
     remainingPublicClicks: policy.remainingPublicClicks,
+    isLocked: policy.isLocked,
   };
 }
 
@@ -424,21 +417,7 @@ export const openPublicLink = mutation({
     }
 
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
-    if (!policy.anonymousAllowed) {
-      return { status: policy.mode === "limited" ? "public_limit_reached" : "requires_auth" };
-    }
-
-    let nextRecord = bookingRecord;
-    if (policy.mode === "limited") {
-      const nextCount = Number(bookingRecord.publicAccessCount || 0) + 1;
-      await ctx.db.patch(bookingRecord._id, {
-        publicAccessCount: nextCount,
-        updatedAt: Date.now(),
-      });
-      nextRecord = await ctx.db.get(bookingRecord._id);
-    }
-
-    return await buildPublicBookingDto(ctx, eventRecord, nextRecord, "public");
+    return await buildPublicBookingDto(ctx, eventRecord, bookingRecord, "public");
   },
 });
 
@@ -487,14 +466,11 @@ export const submitPublicForm = mutation({
       throw new Error("The related event could not be found.");
     }
 
-    const approvedUser = await getApprovedCurrentUser(ctx);
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
-    if (!approvedUser && policy.mode === "registered_only") {
-      throw new Error("This booking link now requires a registered platform user.");
+    if (policy.isLocked) {
+      throw new Error("This booking form is locked on the day of the event.");
     }
-    if (!approvedUser && policy.mode === "limited" && Number(bookingRecord.publicAccessCount || 0) > 2) {
-      throw new Error("This booking link has reached its public access limit.");
-    }
+    const approvedUser = await getApprovedCurrentUser(ctx);
 
     const formData = sanitizeFormData(args.formData);
     const validationMessage = validateFormData(formData);
@@ -507,6 +483,15 @@ export const submitPublicForm = mutation({
       formData,
       submittedAt: now,
       submittedByUserId: approvedUser?._id,
+      updatedAt: now,
+    });
+    await ctx.db.patch(eventRecord._id, {
+      eventTitle: formData.eventName,
+      location: formData.address,
+      locationPlaceId: formData.addressPlaceId || "",
+      locationLat: typeof formData.addressLat === "number" ? formData.addressLat : undefined,
+      locationLng: typeof formData.addressLng === "number" ? formData.addressLng : undefined,
+      hours: `${formData.eventStartTime} - ${formData.eventFinishTime}`,
       updatedAt: now,
     });
 

@@ -373,6 +373,7 @@ textarea { resize: vertical; min-height: 110px; }
 .booking-terms-accept { margin-top: 10px; }
 .booking-form-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
 .booking-form-notice { margin-top: 16px; }
+.booking-lock-note { margin-top: 12px; font-size: 0.84rem; color: var(--muted); }
 .booking-address-field { position: relative; }
 .booking-address-popover { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 12; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow); }
 .booking-address-autocomplete { min-height: 60px; }
@@ -969,6 +970,9 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .booking-terms-modal {
   background: #162033;
   border-color: var(--line);
+}
+:root[data-theme="dark"] .booking-lock-note {
+  color: #bfd3ff;
 }
 :root[data-theme="dark"] .file-upload-dropzone.is-drag-over {
   background: #223556;
