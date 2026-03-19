@@ -218,7 +218,7 @@ function getColumnWidth(column) {
   if (column.key === 'quoteNumber') return 96;
   if (column.key === 'invoiceNumber') return 96;
   if (column.key === 'exVatAuto') return 108;
-  if (column.key === 'vinyl') return 80;
+  if (column.key === 'vinyl') return 116;
   if (column.key === 'gsAi') return 86;
   if (column.key === 'imagesSent') return 102;
   if (column.key === 'snappic') return 92;
@@ -3722,7 +3722,7 @@ function ActivityEntry({ entry, title, eventName = '' }) {
 function CustomSingleTag({ value, styles, width, placeholder = 'Select' }) {
   const label = value || placeholder;
   const resolved = value ? (styles[value] || { background: '#d6d6d6', color: '#223042' }) : { background: '#eef1f5', color: '#60708b' };
-  const pillStyle = width ? { ...resolved, width, minWidth: width, maxWidth: width, boxSizing: 'border-box' } : resolved;
+  const pillStyle = { ...resolved, width: '100%', minWidth: '100%', maxWidth: '100%', boxSizing: 'border-box' };
   return <span className="custom-single-pill" style={pillStyle}>{label}</span>;
 }
 

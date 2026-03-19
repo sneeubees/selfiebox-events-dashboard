@@ -388,6 +388,7 @@ textarea { resize: vertical; min-height: 110px; }
   margin-inline: auto;
   overflow: visible;
   width: 100%;
+  padding-inline: 6px;
 }
 .custom-single-pill {
   display: inline-flex;
@@ -400,6 +401,7 @@ textarea { resize: vertical; min-height: 110px; }
   text-overflow: ellipsis;
   padding: 4px 8px;
   box-sizing: border-box;
+  flex: 1 1 auto;
 }
 .branch-manager, .branch-selector-list {
   display: grid;
