@@ -151,11 +151,20 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
         });
         listenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
           const place = autocompleteRef.current?.getPlace?.();
-          const selectedValue = inputRef.current?.value || "";
-          const parsed = extractPlaceResult(place, selectedValue);
+          const parsed = extractPlaceResult(place, "");
+          const committedAddress =
+            parsed.location ||
+            place?.formatted_address ||
+            place?.name ||
+            inputRef.current?.value ||
+            "";
+          if (inputRef.current && committedAddress) {
+            inputRef.current.value = committedAddress;
+          }
+          onChange(committedAddress);
           onPlaceSelect({
             ...parsed,
-            location: parsed.location || selectedValue,
+            location: committedAddress,
           });
         });
       })
@@ -288,6 +297,12 @@ export default function BookingPage({ token }) {
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [setupTouched, setSetupTouched] = useState(false);
   const loadKeyRef = useRef("");
+  const addressDraftRef = useRef("");
+  const addressPlaceRef = useRef({
+    placeId: "",
+    lat: null,
+    lng: null,
+  });
   const clerkAppearance = useMemo(() => buildClerkAppearance(), []);
 
   useEffect(() => {
@@ -334,6 +349,12 @@ export default function BookingPage({ token }) {
             Boolean(nextForm.setupTime) &&
             nextForm.setupTime !== formatTimeOffset(nextForm.eventStartTime, -60)
           );
+          addressDraftRef.current = nextForm.address || "";
+          addressPlaceRef.current = {
+            placeId: nextForm.addressPlaceId || "",
+            lat: typeof nextForm.addressLat === "number" ? nextForm.addressLat : null,
+            lng: typeof nextForm.addressLng === "number" ? nextForm.addressLng : null,
+          };
           setForm(nextForm);
         }
       })
@@ -354,6 +375,14 @@ export default function BookingPage({ token }) {
   const isLocked = Boolean(pageState.isLocked);
 
   const updateField = (key, value) => {
+    if (key === "address") {
+      addressDraftRef.current = value;
+      addressPlaceRef.current = {
+        placeId: "",
+        lat: null,
+        lng: null,
+      };
+    }
     setForm((current) => ({ ...current, [key]: value }));
     setFormNotice("");
   };
@@ -380,7 +409,20 @@ export default function BookingPage({ token }) {
   };
 
   const handleSubmit = async () => {
-    const validationMessage = getFriendlyBookingValidationMessage(form, pageState);
+    const submitForm = {
+      ...form,
+      address: addressDraftRef.current || form.address || "",
+      addressPlaceId: addressPlaceRef.current.placeId || form.addressPlaceId || "",
+      addressLat:
+        typeof addressPlaceRef.current.lat === "number"
+          ? addressPlaceRef.current.lat
+          : form.addressLat,
+      addressLng:
+        typeof addressPlaceRef.current.lng === "number"
+          ? addressPlaceRef.current.lng
+          : form.addressLng,
+    };
+    const validationMessage = getFriendlyBookingValidationMessage(submitForm, pageState);
     if (validationMessage) {
       setFormNotice(validationMessage);
       return;
@@ -393,11 +435,11 @@ export default function BookingPage({ token }) {
         token,
         baseUrl: window.location.origin,
         clientIp,
-        formData: buildSubmitPayload(form, pageState),
+        formData: buildSubmitPayload(submitForm, pageState),
       });
       setPageState(result);
       if (result?.status === "ok") {
-        setForm((current) => ({
+        const nextForm = {
           ...createEmptyBookingForm(),
           ...(result.formData || {}),
           companyName: result.eventName || "",
@@ -405,6 +447,16 @@ export default function BookingPage({ token }) {
           product: (result.productNames || []).join(", "),
           region: result.regionName || result.formData?.region || "",
           eventDate: result.eventDate || result.formData?.eventDate || "",
+        };
+        addressDraftRef.current = nextForm.address || "";
+        addressPlaceRef.current = {
+          placeId: nextForm.addressPlaceId || "",
+          lat: typeof nextForm.addressLat === "number" ? nextForm.addressLat : null,
+          lng: typeof nextForm.addressLng === "number" ? nextForm.addressLng : null,
+        };
+        setForm((current) => ({
+          ...current,
+          ...nextForm,
         }));
         setSubmitModalOpen(true);
       }
@@ -522,15 +574,21 @@ export default function BookingPage({ token }) {
               value={form.address}
               readOnly={isLocked}
               onChange={(nextValue) => updateField("address", nextValue)}
-              onPlaceSelect={(place) =>
+              onPlaceSelect={(place) => {
+                addressDraftRef.current = place.location || "";
+                addressPlaceRef.current = {
+                  placeId: place.locationPlaceId || "",
+                  lat: typeof place.locationLat === "number" ? place.locationLat : null,
+                  lng: typeof place.locationLng === "number" ? place.locationLng : null,
+                };
                 setForm((current) => ({
                   ...current,
                   address: place.location || "",
                   addressPlaceId: place.locationPlaceId || "",
                   addressLat: typeof place.locationLat === "number" ? place.locationLat : null,
                   addressLng: typeof place.locationLng === "number" ? place.locationLng : null,
-                }))
-              }
+                }));
+              }}
             />
           </BookingFormField>
 
