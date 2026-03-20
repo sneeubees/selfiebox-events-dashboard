@@ -223,13 +223,6 @@ button { cursor: pointer; }
 .location-field { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .location-field.compact { gap: 4px; }
 .location-field .inline-input, .location-field .text-input { flex: 1; min-width: 0; }
-.location-search-button { width: 26px; height: 26px; min-width: 26px; padding: 0; border: 1px solid #cfd9ee; border-radius: 999px; background: #fff; color: #5f6e88; display: inline-flex; align-items: center; justify-content: center; }
-.location-search-button:hover { background: #eef3ff; color: #36559a; }
-.location-search-button svg { width: 14px; height: 14px; }
-.location-autocomplete-popover { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: min(420px, 78vw); padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16); }
-.location-autocomplete-host { display: grid; gap: 8px; }
-.location-autocomplete-host .sb-place-autocomplete { width: 100%; }
-.location-autocomplete-close { margin-top: 8px; }
 .location-pin-button { width: 26px; height: 26px; min-width: 26px; padding: 0; border: 1px solid #cfd9ee; border-radius: 999px; background: #eef3ff; color: #36559a; display: inline-flex; align-items: center; justify-content: center; }
 .location-pin-button:hover { background: #dfe8ff; }
 .location-pin-button svg { width: 14px; height: 14px; }

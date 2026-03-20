@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
-import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi, loadGooglePlacesLibrary } from './googleMaps';
+import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import {
@@ -3060,10 +3060,6 @@ function renderPinIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-5.5-5.64-5.5-10A5.5 5.5 0 0 1 12 5.5 5.5 5.5 0 0 1 17.5 11c0 4.36-5.5 10-5.5 10Zm0-7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="currentColor" /></svg>;
 }
 
-function renderSearchIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm8.91 11.5 2.3 2.29-1.42 1.42-2.29-2.3 1.41-1.41Z" fill="currentColor" /></svg>;
-}
-
 function buildGoogleMapsExternalUrl(location) {
   if (typeof location?.locationLat === 'number' && typeof location?.locationLng === 'number') {
     return 'https://www.google.com/maps/search/?api=1&query=' + location.locationLat + ',' + location.locationLng;
@@ -3072,124 +3068,58 @@ function buildGoogleMapsExternalUrl(location) {
 }
 
 function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect, onOpenMap, hasCoordinates }) {
-  const wrapperRef = useRef(null);
-  const autocompleteContainerRef = useRef(null);
-  const autocompleteElementRef = useRef(null);
-  const placeSelectHandlerRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const inputRef = useRef(null);
+  const autocompleteRef = useRef(null);
+  const listenerRef = useRef(null);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
-    void loadGooglePlacesLibrary().catch((error) => {
-      console.error('Google Places library failed to preload', error);
-    });
-  }, [readOnly]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (wrapperRef.current?.contains(event.target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isOpen]);
-
-  useEffect(() => () => {
-    if (autocompleteElementRef.current && placeSelectHandlerRef.current) {
-      autocompleteElementRef.current.removeEventListener('gmp-select', placeSelectHandlerRef.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen || readOnly || !hasGoogleMapsApiKey()) {
+    if (!inputRef.current) {
       return undefined;
     }
 
     let isMounted = true;
-    let mountTimeoutId = null;
-    let focusTimeoutId = null;
-
-    const mountAutocomplete = async () => {
-      try {
-        const placesLibrary = await loadGooglePlacesLibrary();
-        if (!isMounted || !autocompleteContainerRef.current) {
+    void loadGoogleMapsApi()
+      .then((google) => {
+        if (!isMounted || !google?.maps?.places || !inputRef.current) {
           return;
         }
 
-        const PlaceAutocompleteElement = placesLibrary?.PlaceAutocompleteElement;
-        if (!PlaceAutocompleteElement || !autocompleteContainerRef.current) {
-          return;
+        if (listenerRef.current) {
+          google.maps.event.removeListener(listenerRef.current);
         }
-
-        if (!autocompleteElementRef.current) {
-          const element = new PlaceAutocompleteElement();
-          element.className = compact ? 'sb-place-autocomplete compact' : 'sb-place-autocomplete';
-          element.setAttribute('aria-label', 'Search address');
-          element.includedRegionCodes = ['za'];
-          if (placeholder) {
-            element.setAttribute('placeholder', placeholder);
+        autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
+          componentRestrictions: { country: 'za' },
+          fields: ['formatted_address', 'geometry', 'place_id', 'name'],
+          types: ['geocode'],
+        });
+        listenerRef.current = autocompleteRef.current.addListener('place_changed', () => {
+          try {
+            const place = autocompleteRef.current?.getPlace?.();
+            const parsed = extractPlaceResult(place, inputRef.current?.value || '');
+            onTextChange?.(parsed.location || '');
+            onPlaceSelect?.(parsed);
+          } catch (error) {
+            console.error('Google place selection failed', error);
           }
-
-          const handlePlaceSelect = async (event) => {
-            try {
-              const prediction = event.placePrediction;
-              const place = prediction?.toPlace ? prediction.toPlace() : null;
-              if (!place) {
-                return;
-              }
-              if (place.fetchFields) {
-                await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-              }
-              onPlaceSelect?.(extractPlaceResult(place, value || '', prediction?.placeId || ''));
-              setIsOpen(false);
-            } catch (error) {
-              console.error('Google place selection failed', error);
-            }
-          };
-
-          autocompleteElementRef.current = element;
-          placeSelectHandlerRef.current = handlePlaceSelect;
-          element.addEventListener('gmp-select', handlePlaceSelect);
-        }
-
-        if (!autocompleteContainerRef.current.contains(autocompleteElementRef.current)) {
-          autocompleteContainerRef.current.innerHTML = '';
-          autocompleteContainerRef.current.appendChild(autocompleteElementRef.current);
-        }
-
-        focusTimeoutId = window.setTimeout(() => {
-          autocompleteElementRef.current?.focus?.();
-        }, 30);
-      } catch (error) {
+        });
+      })
+      .catch((error) => {
         console.error('Google Maps autocomplete failed to load', error);
-      }
-    };
-
-    mountTimeoutId = window.setTimeout(() => {
-      void mountAutocomplete();
-    }, 30);
+      });
 
     return () => {
       isMounted = false;
-      if (mountTimeoutId != null) {
-        window.clearTimeout(mountTimeoutId);
-      }
-      if (focusTimeoutId != null) {
-        window.clearTimeout(focusTimeoutId);
+      if (listenerRef.current && window.google?.maps?.event) {
+        window.google.maps.event.removeListener(listenerRef.current);
+        listenerRef.current = null;
       }
     };
-  }, [compact, isOpen, onPlaceSelect, placeholder, readOnly, value]);
+  }, [onPlaceSelect, onTextChange, readOnly]);
 
-  return <div ref={wrapperRef} className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : '', isOpen ? 'is-open' : ''].join(' ').trim()}><input className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{!readOnly && hasGoogleMapsApiKey() ? <button className="location-search-button" type="button" title="Search with Google Maps" onClick={() => setIsOpen((current) => !current)}>{renderSearchIcon()}</button> : null}{hasCoordinates ? <button className="location-pin-button" type="button" title="View map" onClick={onOpenMap}>{renderPinIcon()}</button> : null}{isOpen ? <div className="location-autocomplete-popover"><div ref={autocompleteContainerRef} className="location-autocomplete-host" /><button className="ghost-button location-autocomplete-close" type="button" onClick={() => setIsOpen(false)}>Close</button></div> : null}</div>;
+  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{hasCoordinates ? <button className="location-pin-button" type="button" title="View map" onClick={onOpenMap}>{renderPinIcon()}</button> : null}</div>;
 }
 
 function LocationMapPreview({ location }) {
