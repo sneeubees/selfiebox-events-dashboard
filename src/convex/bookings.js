@@ -225,13 +225,20 @@ function resolveDisplayValues(values, displayMap) {
 }
 
 async function buildInitialFormData(ctx, eventRecord) {
+  const linkedFields = await buildLinkedFormFields(ctx, eventRecord);
+  return {
+    ...createEmptyBookingForm(),
+    ...linkedFields,
+  };
+}
+
+async function buildLinkedFormFields(ctx, eventRecord) {
   const branchDisplayMap = await getLabelDisplayMap(ctx, "branch");
   const productDisplayMap = await getLabelDisplayMap(ctx, "products");
   const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
   const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
   const timeRange = parseEventTimeRange(eventRecord.hours);
   return {
-    ...createEmptyBookingForm(),
     product: productNames.join(", "),
     eventName: normalizeString(eventRecord.eventTitle),
     companyName: normalizeString(eventRecord.name),
@@ -245,6 +252,14 @@ async function buildInitialFormData(ctx, eventRecord) {
     eventStartTime: timeRange.start,
     eventFinishTime: timeRange.finish,
     durationHours: parseDurationHours(eventRecord.hours),
+  };
+}
+
+async function buildMergedBookingFormData(ctx, eventRecord, formData) {
+  const linkedFields = await buildLinkedFormFields(ctx, eventRecord);
+  return {
+    ...sanitizeFormData(formData),
+    ...linkedFields,
   };
 }
 
@@ -281,10 +296,11 @@ async function buildDrawerBookingDto(ctx, eventRecord, bookingRecord) {
 
   const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
   const snapshots = await getBookingSnapshots(ctx, bookingRecord._id);
+  const formData = await buildMergedBookingFormData(ctx, eventRecord, bookingRecord.formData);
   return {
     id: String(bookingRecord._id),
     token: bookingRecord.token,
-    formData: bookingRecord.formData,
+    formData,
     createdAt: bookingRecord.createdAt,
     updatedAt: bookingRecord.updatedAt,
     submittedAt: bookingRecord.submittedAt || null,
@@ -427,6 +443,7 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
   const attendantName = Array.isArray(eventRecord.attendants) && eventRecord.attendants.length
     ? normalizeString(eventRecord.attendants[0])
     : "";
+  const formData = await buildMergedBookingFormData(ctx, eventRecord, bookingRecord.formData);
   return {
     status: "ok",
     access,
@@ -444,7 +461,7 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
     designStatus,
     attendantName,
     token: bookingRecord.token,
-    formData: bookingRecord.formData,
+    formData,
     submittedAt: bookingRecord.submittedAt || null,
     publicMode: policy.mode,
     remainingPublicClicks: policy.remainingPublicClicks,
@@ -467,12 +484,13 @@ async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) 
   const attendantName = Array.isArray(eventRecord.attendants) && eventRecord.attendants.length
     ? normalizeString(eventRecord.attendants[0])
     : "";
+  const formData = await buildMergedBookingFormData(ctx, eventRecord, bookingRecord.formData);
   return {
     bookingId: bookingRecord._id,
     eventId: bookingRecord.eventId,
     eventName: eventRecord.name || "SelfieBox booking",
     eventTitle: normalizeString(eventRecord.eventTitle),
-    formData: bookingRecord.formData,
+    formData,
     productNames,
     regionName: branchNames.join(", "),
     quoteNumber: normalizeString(eventRecord.quoteNumber),
