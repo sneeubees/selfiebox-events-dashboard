@@ -160,6 +160,31 @@ async function getLabelDisplayMap(ctx, columnKey) {
   return map;
 }
 
+function normalizeDocumentToken(value) {
+  return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+async function findDocumentFileForNumber(ctx, eventId, documentNumber) {
+  const normalizedNumber = normalizeDocumentToken(documentNumber);
+  if (!normalizedNumber) {
+    return null;
+  }
+  const files = await ctx.db
+    .query("eventFiles")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .collect();
+  const match = files
+    .filter((file) => normalizeDocumentToken(file.name).includes(normalizedNumber))
+    .sort((left, right) => right.createdAt - left.createdAt)[0];
+  if (!match?.storageId) {
+    return null;
+  }
+  return {
+    name: match.name,
+    url: (await ctx.storage.getUrl(match.storageId)) || "",
+  };
+}
+
 function resolveDisplayValues(values, displayMap) {
   return (Array.isArray(values) ? values : [])
     .map((value) => {
@@ -374,6 +399,8 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
   const productDisplayMap = await getLabelDisplayMap(ctx, "products");
   const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
   const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
+  const quoteFile = await findDocumentFileForNumber(ctx, eventRecord._id, eventRecord.quoteNumber);
+  const invoiceFile = await findDocumentFileForNumber(ctx, eventRecord._id, eventRecord.invoiceNumber);
   return {
     status: "ok",
     access,
@@ -383,6 +410,11 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
     productNames,
     regionName: branchNames.join(", "),
     eventDate: eventRecord.date || bookingRecord.formData.eventDate || "",
+    venueAddress: eventRecord.location || bookingRecord.formData.address || "",
+    quoteNumber: normalizeString(eventRecord.quoteNumber),
+    quoteUrl: quoteFile?.url || "",
+    invoiceNumber: normalizeString(eventRecord.invoiceNumber),
+    invoiceUrl: invoiceFile?.url || "",
     token: bookingRecord.token,
     formData: bookingRecord.formData,
     submittedAt: bookingRecord.submittedAt || null,

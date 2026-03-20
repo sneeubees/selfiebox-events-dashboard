@@ -9,7 +9,7 @@ import {
   createEmptyBookingForm,
   getOptionalExtrasForProducts,
 } from "./bookingConstants";
-import { extractPlaceResult, hasGoogleMapsApiKey, loadGooglePlacesLibrary } from "./googleMaps";
+import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from "./googleMaps";
 
 export function getBookingTokenFromPath(pathname) {
   const normalized = String(pathname || "").trim();
@@ -93,114 +93,106 @@ async function getPublicIpAddress() {
 }
 
 function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
-  const wrapperRef = useRef(null);
-  const autocompleteContainerRef = useRef(null);
-  const autocompleteElementRef = useRef(null);
-  const placeSelectHandlerRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const inputRef = useRef(null);
+  const autocompleteRef = useRef(null);
+  const listenerRef = useRef(null);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
-    void loadGooglePlacesLibrary().catch((error) => {
-      console.error("Failed to preload Google Places for booking page", error);
-    });
-  }, [readOnly]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (wrapperRef.current?.contains(event.target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || readOnly || !hasGoogleMapsApiKey()) {
+    if (!inputRef.current) {
       return undefined;
     }
 
     let cancelled = false;
-    let autocompleteElement = autocompleteElementRef.current;
-    let selectHandler = placeSelectHandlerRef.current;
-
-    const mountAutocomplete = async () => {
-      const placesLibrary = await loadGooglePlacesLibrary();
-      if (cancelled || !autocompleteContainerRef.current) {
-        return;
-      }
-
-      if (!autocompleteElement) {
-        autocompleteElement = new placesLibrary.PlaceAutocompleteElement();
-        autocompleteElementRef.current = autocompleteElement;
-      }
-
-      autocompleteElement.placeholder = "Start typing address";
-      autocompleteElement.style.width = "100%";
-
-      if (selectHandler) {
-        autocompleteElement.removeEventListener("gmp-select", selectHandler);
-      }
-
-      selectHandler = async (event) => {
-        const nextPlace = event?.placePrediction?.toPlace ? await event.placePrediction.toPlace() : null;
-        if (!nextPlace) {
+    void loadGoogleMapsApi()
+      .then((google) => {
+        if (cancelled || !google?.maps?.places || !inputRef.current) {
           return;
         }
-        const parsed = await extractPlaceResult(nextPlace);
-        onChange(parsed.location || "");
-        onPlaceSelect(parsed);
-        setIsOpen(false);
-      };
-
-      placeSelectHandlerRef.current = selectHandler;
-      autocompleteElement.addEventListener("gmp-select", selectHandler);
-
-      autocompleteContainerRef.current.innerHTML = "";
-      autocompleteContainerRef.current.appendChild(autocompleteElement);
-    };
-
-    void mountAutocomplete().catch((error) => {
-      console.error("Failed to mount booking address autocomplete", error);
-    });
+        if (listenerRef.current) {
+          google.maps.event.removeListener(listenerRef.current);
+        }
+        autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
+          componentRestrictions: { country: "za" },
+          fields: ["formatted_address", "geometry", "place_id", "name"],
+          types: ["geocode"],
+        });
+        listenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
+          const place = autocompleteRef.current?.getPlace?.();
+          const parsed = extractPlaceResult(place);
+          onChange(parsed.location || "");
+          onPlaceSelect(parsed);
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to mount booking address autocomplete", error);
+      });
 
     return () => {
       cancelled = true;
-      if (autocompleteElement && selectHandler) {
-        autocompleteElement.removeEventListener("gmp-select", selectHandler);
+      if (listenerRef.current && window.google?.maps?.event) {
+        window.google.maps.event.removeListener(listenerRef.current);
+        listenerRef.current = null;
       }
     };
-  }, [isOpen, onChange, onPlaceSelect, readOnly]);
+  }, [onChange, onPlaceSelect, readOnly]);
 
   return (
-    <div className="booking-address-field" ref={wrapperRef}>
+    <input
+      ref={inputRef}
+      className="text-input"
+      value={value}
+      readOnly={readOnly}
+      placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+function TimeSpinnerInput({ value, onChange, readOnly }) {
+  const safeValue = String(value || "");
+  const match = safeValue.match(/^(\d{1,2}):(\d{2})$/);
+  const hourValue = match ? Number(match[1]) : "";
+  const minuteValue = match ? Number(match[2]) : "";
+
+  const updatePart = (part, rawValue) => {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) {
+      onChange("");
+      return;
+    }
+    const hours = part === "hour" ? parsed : (Number.isFinite(hourValue) ? hourValue : 0);
+    const minutes = part === "minute" ? parsed : (Number.isFinite(minuteValue) ? minuteValue : 0);
+    const clampedHours = Math.max(0, Math.min(23, hours));
+    const clampedMinutes = Math.max(0, Math.min(59, minutes));
+    onChange(`${String(clampedHours).padStart(2, "0")}:${String(clampedMinutes).padStart(2, "0")}`);
+  };
+
+  return (
+    <div className="time-spinner-input">
       <input
-        className="text-input"
-        value={value}
+        className="text-input time-spinner-field"
+        type="number"
+        min="0"
+        max="23"
+        step="1"
+        value={hourValue}
         readOnly={readOnly}
-        placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
-        onFocus={() => !readOnly && setIsOpen(true)}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => updatePart("hour", event.target.value)}
       />
-      {isOpen && !readOnly && hasGoogleMapsApiKey() ? (
-        <div className="booking-address-popover">
-          <div className="booking-address-autocomplete" ref={autocompleteContainerRef} />
-          <div className="booking-address-actions">
-            <button className="ghost-button" type="button" onClick={() => setIsOpen(false)}>
-              Close
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <span className="time-spinner-separator">:</span>
+      <input
+        className="text-input time-spinner-field"
+        type="number"
+        min="0"
+        max="59"
+        step="5"
+        value={minuteValue}
+        readOnly={readOnly}
+        onChange={(event) => updatePart("minute", event.target.value)}
+      />
     </div>
   );
 }
@@ -260,6 +252,7 @@ export default function BookingPage({ token }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formNotice, setFormNotice] = useState("");
   const [termsOpen, setTermsOpen] = useState(false);
+  const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [setupTouched, setSetupTouched] = useState(false);
   const loadKeyRef = useRef("");
   const clerkAppearance = useMemo(() => buildClerkAppearance(), []);
@@ -375,7 +368,7 @@ export default function BookingPage({ token }) {
           region: result.regionName || result.formData?.region || "",
           eventDate: result.eventDate || result.formData?.eventDate || "",
         }));
-        setFormNotice("Booking form submitted successfully.");
+        setSubmitModalOpen(true);
       }
     } catch (error) {
       setFormNotice(error?.message || "The booking form could not be submitted.");
@@ -442,9 +435,13 @@ export default function BookingPage({ token }) {
     <div className="booking-page-shell">
       <div className="booking-page-card">
         <div className="auth-brand">SelfieBox Events Platform</div>
-        <h1>Booking Form</h1>
-        <p className="booking-page-meta">{pageState.eventName}</p>
+        <h1>Booking Form: <span className="booking-page-client-name">{pageState.eventName}</span></h1>
+        <p className="booking-page-meta">{[pageState.eventDate, pageState.venueAddress].filter(Boolean).join(" · ")}</p>
         <p className="booking-page-products">{selectedProducts.join(", ")}</p>
+        <div className="booking-document-meta">
+          <div><span>Your Quote:</span>{pageState.quoteNumber ? (pageState.quoteUrl ? <a href={pageState.quoteUrl} target="_blank" rel="noreferrer">{pageState.quoteNumber}</a> : <strong>{pageState.quoteNumber}</strong>) : <strong>N/A</strong>}</div>
+          <div><span>Your Invoice:</span>{pageState.invoiceNumber ? (pageState.invoiceUrl ? <a href={pageState.invoiceUrl} target="_blank" rel="noreferrer">{pageState.invoiceNumber}</a> : <strong>{pageState.invoiceNumber}</strong>) : <strong>N/A</strong>}</div>
+        </div>
         <div className="booking-form-grid">
           <div className="booking-form-field full-span booking-radio-inline">
             <div className="booking-choice-row">
@@ -508,22 +505,16 @@ export default function BookingPage({ token }) {
               label="Setup time"
               tooltip="Setup time is one hour before the event start and is free and not part of your quoted times"
             >
-              <input
-                className="text-input"
-                type="time"
-                value={form.setupTime}
-                readOnly={isLocked}
-                onChange={(event) => {
-                  setSetupTouched(true);
-                  updateField("setupTime", event.target.value);
-                }}
-              />
+              <TimeSpinnerInput value={form.setupTime} readOnly={isLocked} onChange={(nextValue) => {
+                setSetupTouched(true);
+                updateField("setupTime", nextValue);
+              }} />
             </BookingFormField>
             <BookingFormField label="Event start time">
-              <input className="text-input" type="time" value={form.eventStartTime} readOnly={isLocked} onChange={(event) => updateStartTime(event.target.value)} />
+              <TimeSpinnerInput value={form.eventStartTime} readOnly={isLocked} onChange={updateStartTime} />
             </BookingFormField>
             <BookingFormField label="Event finish time">
-              <input className="text-input" type="time" value={form.eventFinishTime} readOnly={isLocked} onChange={(event) => updateField("eventFinishTime", event.target.value)} />
+              <TimeSpinnerInput value={form.eventFinishTime} readOnly={isLocked} onChange={(nextValue) => updateField("eventFinishTime", nextValue)} />
             </BookingFormField>
           </div>
 
@@ -587,11 +578,12 @@ export default function BookingPage({ token }) {
 
         <div className="booking-form-actions">
           <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isLocked}>
-            {isSubmitting ? "Submitting..." : "Submit"}
+            {isSubmitting ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
       {termsOpen ? <TermsModal onClose={() => setTermsOpen(false)} /> : null}
+      {submitModalOpen ? <div className="modal-scrim" onClick={() => setSubmitModalOpen(false)}><div className="modal-panel booking-submit-modal" role="dialog" aria-modal="true" aria-label="Booking saved" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Booking updated</h3><button className="modal-close-x" type="button" onClick={() => setSubmitModalOpen(false)}>x</button></div><div className="simple-stack"><p>Thank you for completing/updating your booking. You will receive an email with the new booking form shortly. Come back any time to make more changes.</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSubmitModalOpen(false)}>Back to booking form</button><button className="primary-button" type="button" onClick={() => { window.close(); setTimeout(() => { if (typeof window !== "undefined") { window.location.replace("about:blank"); } }, 120); }}>Close Form</button></div></div></div></div> : null}
     </div>
   );
 }
