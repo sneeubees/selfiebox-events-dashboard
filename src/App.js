@@ -806,7 +806,8 @@ function DashboardApp() {
           id: event.id,
           clientName: event.name || 'Untitled event',
           eventName: event.eventTitle || '',
-          productItems: event.products || [],
+          productLabel: (event.products || []).map((item) => productFullNames[item] || item).join(', ') || '-',
+          productColor: (event.products || []).length ? (productStyles[(event.products || [])[0]]?.background || '#5b74b8') : '#60708b',
           attendantLabel: visibleAttendants.join(', ') || 'Unassigned',
           timelineLabel: event.hours || '-',
           timeRange,
@@ -816,7 +817,7 @@ function DashboardApp() {
           textColor: palette.color,
         };
       });
-  }, [attendantBranchMap, currentUserAssignedBranches, hasUserAttendantBranchRestrictions, logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents]);
+  }, [attendantBranchMap, currentUserAssignedBranches, hasUserAttendantBranchRestrictions, logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames, productStyles]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -3418,14 +3419,11 @@ function DashboardApp() {
                       <div className="logistics-event-copy">
                         <strong title={row.clientName}>{row.clientName}</strong>
                         <span title={row.eventName || 'No event name'}>{row.eventName || 'No event name'}</span>
-                        <div className="logistics-product-list">
-                          {(row.productItems || []).length ? row.productItems.map((product) => (
-                            <span className="logistics-product-pill" key={`${row.id}-${product}`} style={productStyles[product] || undefined}>
-                              {productFullNames[product] || product}
-                            </span>
-                          )) : <span className="logistics-product-pill is-empty">No product</span>}
-                        </div>
-                        <small className="logistics-attendant-line" title={row.attendantLabel}>{row.attendantLabel}</small>
+                        <small title={`${row.productLabel} • ${row.attendantLabel}`}>
+                          <span style={{ color: row.productColor }}>{row.productLabel}</span>
+                          {' • '}
+                          <span className="logistics-attendant-line">{row.attendantLabel}</span>
+                        </small>
                       </div>
                     </div>
                     <div className="logistics-timeline" title={row.timelineLabel}>
