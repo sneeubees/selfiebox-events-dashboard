@@ -3119,7 +3119,7 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     };
   }, [onPlaceSelect, onTextChange, readOnly]);
 
-  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{hasCoordinates ? <button className="location-pin-button" type="button" title="View map" onClick={onOpenMap}>{renderPinIcon()}</button> : null}</div>;
+  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{onOpenMap ? <button className="location-pin-button" type="button" title={hasCoordinates ? "View map" : "Select an address first"} onClick={onOpenMap} disabled={!hasCoordinates}>{renderPinIcon()}</button> : null}</div>;
 }
 
 function LocationMapPreview({ location }) {

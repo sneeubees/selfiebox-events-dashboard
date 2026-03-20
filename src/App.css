@@ -225,7 +225,9 @@ button { cursor: pointer; }
 .location-field .inline-input, .location-field .text-input { flex: 1; min-width: 0; }
 .location-pin-button { width: 26px; height: 26px; min-width: 26px; padding: 0; border: 1px solid #cfd9ee; border-radius: 999px; background: #eef3ff; color: #36559a; display: inline-flex; align-items: center; justify-content: center; }
 .location-pin-button:hover { background: #dfe8ff; }
+.location-pin-button:disabled { opacity: 0.45; cursor: not-allowed; background: #f4f7fc; color: #7f8ea7; }
 .location-pin-button svg { width: 14px; height: 14px; }
+.pac-container { min-width: 320px !important; max-width: 520px !important; z-index: 9999 !important; }
 .drawer-location-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .drawer-location-text, .map-preview-address { font-size: 0.7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer-location-pin { width: 24px; height: 24px; min-width: 24px; }
