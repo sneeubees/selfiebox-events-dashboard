@@ -3099,7 +3099,6 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
           try {
             const place = autocompleteRef.current?.getPlace?.();
             const parsed = extractPlaceResult(place, inputRef.current?.value || '');
-            onTextChange?.(parsed.location || '');
             onPlaceSelect?.(parsed);
           } catch (error) {
             console.error('Google place selection failed', error);
