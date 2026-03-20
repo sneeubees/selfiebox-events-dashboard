@@ -770,6 +770,7 @@ function DashboardApp() {
         };
       });
   }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
+  const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
   const logisticsMonthEvents = useMemo(() => {
     if (!logisticsDialog.isOpen || !logisticsDialog.month) {
       return [];
@@ -2000,6 +2001,7 @@ function DashboardApp() {
         period: commissionDialog.period,
         attendant: commissionDialog.attendant,
         rows: commissionRows,
+        totals: commissionTotals,
       });
     } catch (error) {
       console.error('Failed to export commission PDF', error);
@@ -3361,6 +3363,30 @@ function DashboardApp() {
               ) : (
                 <div className="empty-month">No commission rows for this selection.</div>
               )}
+            </div>
+            <div className="commission-summary">
+              <div className="commission-summary-heading">
+                <strong>Commission for {getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</strong>
+                <span>Totals for {commissionDialog.attendant || '-'}</span>
+              </div>
+              <div className="commission-summary-grid">
+                <div>
+                  <span>Total Amount</span>
+                  <strong>{currencyFormatter.format(commissionTotals.amount)}</strong>
+                </div>
+                <div>
+                  <span>Total Car</span>
+                  <strong>{currencyFormatter.format(commissionTotals.car)}</strong>
+                </div>
+                <div>
+                  <span>Total Travel</span>
+                  <strong>{currencyFormatter.format(commissionTotals.travel)}</strong>
+                </div>
+                <div>
+                  <span>Commission for {getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
+                  <strong>{currencyFormatter.format(commissionTotals.grand)}</strong>
+                </div>
+              </div>
             </div>
             <div className="modal-actions">
               <button className="ghost-button" type="button" onClick={closeCommissionDialog}>
@@ -4743,6 +4769,16 @@ function calculateCommissionAmount(hoursPayable) {
   return 1000;
 }
 
+function calculateCommissionTotals(rows) {
+  return rows.reduce((totals, row) => {
+    totals.amount += Number(row.amount) || 0;
+    totals.car += Number(row.car) || 0;
+    totals.travel += Number(row.travel) || 0;
+    totals.grand = totals.amount + totals.car + totals.travel;
+    return totals;
+  }, { amount: 0, car: 0, travel: 0, grand: 0 });
+}
+
 function getCommissionPeriodLabel(month, year, period) {
   const monthLabel = `${month} ${year}`;
   if (period === 'firstHalf') {
@@ -4842,7 +4878,7 @@ function calculateCommissionTravel(km) {
   return Math.max(0, Math.round((Number(km) || 0) * 3));
 }
 
-async function exportCommissionPdf({ month, year, period, attendant, rows }) {
+async function exportCommissionPdf({ month, year, period, attendant, rows, totals }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
   const left = 44;
@@ -4867,6 +4903,16 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
     doc.addPage();
     y = 56;
   };
+  const summaryTotals = totals || calculateCommissionTotals(rows);
+  const periodLabel = getCommissionPeriodLabel(month, year, period);
+  const formatCommissionCurrency = (value) => currencyFormatter.format(Number(value) || 0);
+  const truncatePdfText = (value, maxLength) => {
+    const text = String(value || '-').trim();
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  };
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
@@ -4874,7 +4920,7 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
   y += 22;
 
   doc.setFontSize(12);
-  doc.text(getCommissionPeriodLabel(month, year, period), left, y);
+  doc.text(periodLabel, left, y);
   y += 22;
 
   doc.setFont('helvetica', 'normal');
@@ -4898,8 +4944,15 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
 
   doc.setFont('helvetica', 'normal');
   rows.forEach((row) => {
-    ensureSpace(28);
-    doc.text(String(row.eventLabel || row.eventName || '-').slice(0, 28), colX.event, y);
+    ensureSpace(40);
+    doc.setFontSize(10);
+    doc.setTextColor(27, 34, 48);
+    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 32), colX.event, y);
+    doc.setFontSize(8);
+    doc.setTextColor(108, 119, 138);
+    doc.text(truncatePdfText(row.addressLabel || 'No address set', 40), colX.event, y + 11);
+    doc.setFontSize(10);
+    doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
     doc.text(String(row.hours || '-').slice(0, 12), colX.times, y);
     doc.text(String(row.hoursPayable ?? 0), colX.hours + 16, y, { align: 'right' });
@@ -4907,11 +4960,26 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
     doc.text(String(row.car ?? 0), colX.car + 16, y, { align: 'right' });
     doc.text(String(row.km ?? 0), colX.km + 12, y, { align: 'right' });
     doc.text(String(row.travel ?? 0), colX.travel + 20, y, { align: 'right' });
-    y += 18;
+    y += 28;
   });
 
-  ensureSpace(90);
-  y += 24;
+  ensureSpace(126);
+  y += 14;
+  doc.line(left, y, pageWidth - left, y);
+  y += 18;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`Commission for ${periodLabel}`, left, y);
+  y += 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Total Amount: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
+  doc.text(`Total Car: ${formatCommissionCurrency(summaryTotals.car)}`, left + 190, y);
+  doc.text(`Total Travel: ${formatCommissionCurrency(summaryTotals.travel)}`, left + 340, y);
+  y += 20;
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Total Commission: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
+  y += 26;
   doc.line(left, y, left + 180, y);
   doc.line(left + 240, y, left + 360, y);
   y += 14;
