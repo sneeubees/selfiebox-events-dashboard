@@ -1051,3 +1051,31 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .booking-submission-link {
   color: #8db6ff;
 }
+
+.profile-branch-list,
+.profile-branch-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-branch-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-branch-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.branch-selector-item.is-disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}

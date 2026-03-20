@@ -150,6 +150,7 @@ function toUserDto(record) {
     designation: record.designation,
     profilePic: record.profilePic || "",
     theme: record.theme === "dark" ? "dark" : "light",
+    assignedBranches: Array.isArray(record.assignedBranches) ? record.assignedBranches : [],
     monthOrder: Array.isArray(record.monthOrder) && record.monthOrder.length === monthNames.length ? record.monthOrder : monthNames,
     columnOrderAfterPayment: Array.isArray(record.columnOrderAfterPayment) ? record.columnOrderAfterPayment : [],
     role: record.role,
@@ -192,6 +193,7 @@ export const syncCurrentUser = mutation({
         designation: isPrimaryAdmin ? "Operations Admin" : (user.designation || designation),
         profilePic: user.profilePic || args.profilePic || "",
         theme: user.theme === "dark" ? "dark" : theme,
+        assignedBranches: Array.isArray(user.assignedBranches) ? user.assignedBranches : [],
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(user.columnOrderAfterPayment) ? user.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : user.role,
@@ -220,6 +222,7 @@ export const syncCurrentUser = mutation({
         designation: isPrimaryAdmin ? "Operations Admin" : (existingByEmail.designation || designation),
         profilePic: existingByEmail.profilePic || args.profilePic || "",
         theme: existingByEmail.theme === "dark" ? "dark" : theme,
+        assignedBranches: Array.isArray(existingByEmail.assignedBranches) ? existingByEmail.assignedBranches : [],
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
         role: isPrimaryAdmin ? "admin" : existingByEmail.role,
@@ -251,6 +254,7 @@ export const syncCurrentUser = mutation({
       role: shouldBootstrapAdmin ? "admin" : "user",
       profilePic: args.profilePic || "",
       theme,
+      assignedBranches: [],
       monthOrder: monthNames,
       columnOrderAfterPayment: [],
       isApproved: shouldBootstrapAdmin,
@@ -318,6 +322,7 @@ export const update = mutation({
     role: v.union(v.literal("admin"), v.literal("manager"), v.literal("user")),
     profilePic: v.optional(v.string()),
     isApproved: v.boolean(),
+    assignedBranches: v.array(v.string()),
   },
   handler: async (ctx, args) => {
     const { user } = await getCurrentUserRecord(ctx);
@@ -340,6 +345,7 @@ export const update = mutation({
       profilePic: args.profilePic || "",
       isApproved: args.isApproved,
       isActive: args.isApproved,
+      assignedBranches: Array.from(new Set((args.assignedBranches || []).map((value) => String(value || "").trim()).filter(Boolean))),
       updatedAt: Date.now(),
     });
 

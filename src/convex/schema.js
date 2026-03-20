@@ -52,6 +52,7 @@ export default defineSchema({
     role: v.union(v.literal("admin"), v.literal("manager"), v.literal("user")),
     profilePic: v.optional(v.string()),
     theme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
+    assignedBranches: v.optional(v.array(v.string())),
     monthOrder: v.optional(v.array(v.string())),
     columnOrderAfterPayment: v.optional(v.array(v.string())),
     isApproved: v.boolean(),
