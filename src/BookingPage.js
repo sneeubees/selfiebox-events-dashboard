@@ -79,6 +79,36 @@ function buildSubmitPayload(form, pageState) {
   };
 }
 
+function getFriendlyBookingValidationMessage(form, pageState) {
+  const payload = buildSubmitPayload(form, pageState);
+  if (!payload.contactPerson) return "Please complete Contact person.";
+  if (!payload.cell) return "Please complete Cell.";
+  if (!payload.email) return "Please complete Email.";
+  if (!payload.email.includes("@")) return "Please enter a valid Email address.";
+  if (!payload.designYourself) return "Please complete Design yourself.";
+  if (!payload.acceptedTerms) return "Please accept the Terms and Conditions.";
+  return "";
+}
+
+function getBookingErrorMessage(error) {
+  const raw = String(error?.message || "").trim();
+  if (!raw) {
+    return "The booking form could not be saved. Please try again.";
+  }
+  const matched = raw.match(/Please (?:enter|choose|accept|complete) (.+?)(?:\.|$)/i);
+  if (matched?.[1]) {
+    const cleaned = matched[1]
+      .replace(/^a valid\s+/i, "")
+      .replace(/^the\s+/i, "")
+      .trim();
+    if (/email address/i.test(matched[1])) {
+      return "Please enter a valid Email address.";
+    }
+    return `Please complete ${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}.`;
+  }
+  return "The booking form could not be saved. Please check the required fields and try again.";
+}
+
 async function getPublicIpAddress() {
   try {
     const response = await fetch("https://api.ipify.org?format=json");
@@ -350,6 +380,11 @@ export default function BookingPage({ token }) {
   };
 
   const handleSubmit = async () => {
+    const validationMessage = getFriendlyBookingValidationMessage(form, pageState);
+    if (validationMessage) {
+      setFormNotice(validationMessage);
+      return;
+    }
     setIsSubmitting(true);
     setFormNotice("");
     try {
@@ -374,7 +409,7 @@ export default function BookingPage({ token }) {
         setSubmitModalOpen(true);
       }
     } catch (error) {
-      setFormNotice(error?.message || "The booking form could not be submitted.");
+      setFormNotice(getBookingErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
