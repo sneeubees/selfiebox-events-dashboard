@@ -122,10 +122,16 @@ async function getPublicIpAddress() {
   }
 }
 
-function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
+function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect, inputElementRef }) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const listenerRef = useRef(null);
+
+  useEffect(() => {
+    if (inputElementRef) {
+      inputElementRef.current = inputRef.current;
+    }
+  }, [inputElementRef, value]);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
@@ -191,6 +197,10 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
       readOnly={readOnly}
       placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
       onChange={(event) => onChange(event.target.value)}
+      onBlur={() => {
+        const nextValue = inputRef.current?.value || "";
+        onChange(nextValue);
+      }}
     />
   );
 }
@@ -299,6 +309,7 @@ export default function BookingPage({ token }) {
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [setupTouched, setSetupTouched] = useState(false);
   const loadKeyRef = useRef("");
+  const addressInputElementRef = useRef(null);
   const addressDraftRef = useRef("");
   const addressPlaceRef = useRef({
     placeId: "",
@@ -411,9 +422,10 @@ export default function BookingPage({ token }) {
   };
 
   const handleSubmit = async () => {
+    const liveAddressValue = String(addressInputElementRef.current?.value || "").trim();
     const submitForm = {
       ...form,
-      address: addressDraftRef.current || form.address || "",
+      address: liveAddressValue || addressDraftRef.current || form.address || "",
       addressPlaceId: addressPlaceRef.current.placeId || form.addressPlaceId || "",
       addressLat:
         typeof addressPlaceRef.current.lat === "number"
@@ -575,6 +587,7 @@ export default function BookingPage({ token }) {
             <BookingAddressInput
               value={form.address}
               readOnly={isLocked}
+              inputElementRef={addressInputElementRef}
               onChange={(nextValue) => updateField("address", nextValue)}
               onPlaceSelect={(place) => {
                 addressDraftRef.current = place.location || "";
