@@ -3101,19 +3101,21 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
           types: ['geocode'],
         });
         listenerRef.current = autocompleteRef.current.addListener('place_changed', () => {
-          try {
-            const place = autocompleteRef.current?.getPlace?.();
-            const selectedValue = inputRef.current?.value || '';
-            const parsed = extractPlaceResult(place, selectedValue);
-            const resolved = {
-              ...parsed,
-              location: parsed.location || selectedValue,
-            };
-            setLocalValue(resolved.location || '');
-            onPlaceSelect?.(resolved);
-          } catch (error) {
-            console.error('Google place selection failed', error);
-          }
+          window.setTimeout(() => {
+            try {
+              const place = autocompleteRef.current?.getPlace?.();
+              const selectedValue = inputRef.current?.value || '';
+              const parsed = extractPlaceResult(place, selectedValue);
+              const resolved = {
+                ...parsed,
+                location: selectedValue || parsed.location || '',
+              };
+              setLocalValue(resolved.location || '');
+              onPlaceSelect?.(resolved);
+            } catch (error) {
+              console.error('Google place selection failed', error);
+            }
+          }, 0);
         });
       })
       .catch((error) => {
