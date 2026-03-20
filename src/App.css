@@ -418,7 +418,7 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-subhead { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
 .commission-subhead strong { color: var(--text); }
 .commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.commission-table { display: grid; grid-template-columns: minmax(0, 1.6fr) 90px 110px 120px 110px; align-items: center; }
+.commission-table { display: grid; grid-template-columns: minmax(0, 1.8fr) 90px 110px 88px 88px 72px 72px 88px; align-items: center; }
 .commission-table > span,
 .commission-table > input { min-width: 0; }
 .commission-table-header { background: #f6f8fc; color: #52627d; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -431,10 +431,6 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-table-row { border-top: 1px solid var(--line); background: #fff; }
 .commission-table-row span { font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .commission-input { border-radius: 0; border: 0; background: transparent; padding: 9px 10px; height: 100%; }
-.commission-signoff { display: flex; justify-content: space-between; align-items: end; gap: 18px; padding-top: 6px; }
-.commission-signoff > div { display: grid; gap: 6px; min-width: 140px; }
-.commission-signoff span { font-size: 0.78rem; color: var(--muted); }
-.commission-line { height: 1px; background: var(--line); }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
 .filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
