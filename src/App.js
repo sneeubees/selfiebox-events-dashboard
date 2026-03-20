@@ -759,6 +759,7 @@ function DashboardApp() {
           eventName: event.name || 'Untitled event',
           eventTitle: event.eventTitle || '',
           eventLabel: event.eventTitle ? `${event.name || 'Untitled event'} - ${event.eventTitle}` : (event.name || 'Untitled event'),
+          addressLabel: event.location || '',
           date: event.date,
           hours: event.hours || '0',
           hoursPayable,
@@ -3324,7 +3325,10 @@ function DashboardApp() {
               {commissionRows.length ? (
                 commissionRows.map((row) => (
                   <div className="commission-table commission-table-row" key={row.id}>
-                    <span title={row.eventLabel}>{row.eventLabel}</span>
+                    <div className="commission-event-cell" title={[row.eventLabel, row.addressLabel].filter(Boolean).join(' - ')}>
+                      <strong>{row.eventLabel}</strong>
+                      <small>{row.addressLabel || 'No address set'}</small>
+                    </div>
                     <span>{formatDateDisplay(row.date || '') || '-'}</span>
                     <span>{row.hours}</span>
                     <input
@@ -4840,7 +4844,7 @@ function calculateCommissionTravel(km) {
 
 async function exportCommissionPdf({ month, year, period, attendant, rows }) {
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
   const left = 44;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
