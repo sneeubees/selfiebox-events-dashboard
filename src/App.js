@@ -353,6 +353,12 @@ function DashboardApp() {
     period: 'all',
     overrides: {},
   });
+  const [logisticsDialog, setLogisticsDialog] = useState({
+    isOpen: false,
+    month: '',
+    selectedDate: '',
+    ordersByDate: {},
+  });
   const [branchOptions, setBranchOptions] = useState(defaultBranchOptions);
   const [branchManagerOpen, setBranchManagerOpen] = useState(false);
   const [branchEditorEventId, setBranchEditorEventId] = useState(null);
@@ -761,6 +767,52 @@ function DashboardApp() {
         };
       });
   }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
+  const logisticsMonthEvents = useMemo(() => {
+    if (!logisticsDialog.isOpen || !logisticsDialog.month) {
+      return [];
+    }
+    return events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === logisticsDialog.month)
+      .sort((left, right) => sortEvents(left, right));
+  }, [events, logisticsDialog.isOpen, logisticsDialog.month, selectedWorkspaceYear]);
+  const logisticsRows = useMemo(() => {
+    if (!logisticsDialog.selectedDate) {
+      return [];
+    }
+    const selectedDateEvents = logisticsMonthEvents.filter((event) => event.date === logisticsDialog.selectedDate);
+    const savedOrder = logisticsDialog.ordersByDate[logisticsDialog.selectedDate] || [];
+    const orderLookup = new Map(savedOrder.map((eventId, index) => [eventId, index]));
+    return selectedDateEvents
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = orderLookup.has(left.id) ? orderLookup.get(left.id) : Number.MAX_SAFE_INTEGER;
+        const rightOrder = orderLookup.has(right.id) ? orderLookup.get(right.id) : Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return sortEvents(left, right);
+      })
+      .map((event) => {
+        const timeRange = parseLogisticsTimeRange(event.hours);
+        const barLeft = timeRange ? `${(timeRange.startMinutes / 1440) * 100}%` : '0%';
+        const barWidth = timeRange ? `${Math.max(((timeRange.endMinutes - timeRange.startMinutes) / 1440) * 100, 1.5)}%` : '0%';
+        const primaryProduct = (event.products || [])[0] || '';
+        return {
+          id: event.id,
+          clientName: event.name || 'Untitled event',
+          eventName: event.eventTitle || '',
+          productLabel: (event.products || []).map((item) => productFullNames[item] || item).join(', ') || '-',
+          attendantLabel: (event.attendants || []).join(', ') || 'Unassigned',
+          timelineLabel: event.hours || '-',
+          timeRange,
+          barLeft,
+          barWidth,
+          color: productStyles[primaryProduct]?.background || '#4f7ac8',
+          textColor: productStyles[primaryProduct]?.color || '#ffffff',
+        };
+      });
+  }, [logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames, productStyles]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -1835,6 +1887,82 @@ function DashboardApp() {
         },
       },
     }));
+  };
+
+  const openLogisticsDialog = (month) => {
+    if (!currentUser || currentUser.role !== 'manager') {
+      return;
+    }
+    const monthEvents = events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === month)
+      .sort((left, right) => sortEvents(left, right));
+    const initialDate = monthEvents[0]?.date || buildMonthDateKey(month, selectedWorkspaceYear, 1);
+    const initialIds = monthEvents.filter((event) => event.date === initialDate).map((event) => event.id);
+    setLogisticsDialog({
+      isOpen: true,
+      month,
+      selectedDate: initialDate,
+      ordersByDate: initialDate ? { [initialDate]: initialIds } : {},
+    });
+  };
+
+  const closeLogisticsDialog = () => {
+    setLogisticsDialog({
+      isOpen: false,
+      month: '',
+      selectedDate: '',
+      ordersByDate: {},
+    });
+  };
+
+  const changeLogisticsDay = (direction) => {
+    setLogisticsDialog((current) => {
+      if (!current.selectedDate || !current.month) {
+        return current;
+      }
+      const nextDate = shiftMonthDate(current.selectedDate, current.month, selectedWorkspaceYear, direction);
+      if (!nextDate) {
+        return current;
+      }
+      const nextDayIds = events
+        .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+        .filter((event) => getEventMonth(event) === current.month)
+        .filter((event) => event.date === nextDate)
+        .sort((left, right) => sortEvents(left, right))
+        .map((event) => event.id);
+      return {
+        ...current,
+        selectedDate: nextDate,
+        ordersByDate: current.ordersByDate[nextDate]
+          ? current.ordersByDate
+          : { ...current.ordersByDate, [nextDate]: nextDayIds },
+      };
+    });
+  };
+
+  const moveLogisticsRow = (eventId, direction) => {
+    setLogisticsDialog((current) => {
+      if (!current.selectedDate) {
+        return current;
+      }
+      const fallbackOrder = logisticsRows.map((row) => row.id);
+      const nextOrder = [...((current.ordersByDate[current.selectedDate] || fallbackOrder))];
+      const fromIndex = nextOrder.indexOf(eventId);
+      const toIndex = fromIndex + direction;
+      if (fromIndex < 0 || toIndex < 0 || toIndex >= nextOrder.length) {
+        return current;
+      }
+      const [moved] = nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        ordersByDate: {
+          ...current.ordersByDate,
+          [current.selectedDate]: nextOrder,
+        },
+      };
+    });
   };
 
   const exportCommissionSheet = async () => {
@@ -3082,7 +3210,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{currentUser.role === 'manager' ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -3218,6 +3346,75 @@ function DashboardApp() {
               </button>
               <button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>
                 Export to PDF
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {logisticsDialog.isOpen ? (
+        <ModalShell title={`Logistics - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog}>
+          <div className="logistics-sheet">
+            <div className="logistics-toolbar">
+              <div className="logistics-day-nav">
+                <button className="ghost-button" type="button" onClick={() => changeLogisticsDay(-1)}>
+                  Previous day
+                </button>
+                <strong>{formatDateDisplay(logisticsDialog.selectedDate) || '-'}</strong>
+                <button className="ghost-button" type="button" onClick={() => changeLogisticsDay(1)}>
+                  Next day
+                </button>
+              </div>
+            </div>
+            <div className="logistics-scale-wrap">
+              <div className="logistics-scale-spacer" />
+              <div className="logistics-scale">
+                {Array.from({ length: 24 }, (_, hour) => (
+                  <span key={hour}>{String(hour).padStart(2, '0')}:00</span>
+                ))}
+              </div>
+            </div>
+            <div className="logistics-rows">
+              {logisticsRows.length ? (
+                logisticsRows.map((row, index) => (
+                  <div className="logistics-row" key={row.id}>
+                    <div className="logistics-event-card">
+                      <div className="logistics-event-copy">
+                        <strong title={row.clientName}>{row.clientName}</strong>
+                        <span title={row.eventName || 'No event name'}>{row.eventName || 'No event name'}</span>
+                        <small title={`${row.productLabel} • ${row.attendantLabel}`}>{row.productLabel} • {row.attendantLabel}</small>
+                      </div>
+                      <div className="logistics-move-buttons">
+                        <button className="ghost-button logistics-move-button" type="button" onClick={() => moveLogisticsRow(row.id, -1)} disabled={index === 0}>
+                          ↑
+                        </button>
+                        <button className="ghost-button logistics-move-button" type="button" onClick={() => moveLogisticsRow(row.id, 1)} disabled={index === logisticsRows.length - 1}>
+                          ↓
+                        </button>
+                      </div>
+                    </div>
+                    <div className="logistics-timeline" title={row.timelineLabel}>
+                      {row.timeRange ? (
+                        <div
+                          className="logistics-bar"
+                          style={{ left: row.barLeft, width: row.barWidth, background: row.color, color: row.textColor }}
+                        >
+                          <span>{row.timelineLabel}</span>
+                        </div>
+                      ) : (
+                        <div className="logistics-bar logistics-bar-empty">
+                          <span>No time set</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-month">No events for this day yet.</div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={closeLogisticsDialog}>
+                Close
               </button>
             </div>
           </div>
@@ -4515,6 +4712,50 @@ function getCommissionPeriodLabel(month, year, period) {
     return `16-end ${monthLabel}`;
   }
   return `All ${monthLabel}`;
+}
+
+function buildMonthDateKey(month, year, day) {
+  const monthIndex = monthNames.indexOf(month);
+  if (monthIndex < 0) {
+    return '';
+  }
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function shiftMonthDate(currentDate, month, year, direction) {
+  if (!currentDate) {
+    return '';
+  }
+  const monthIndex = monthNames.indexOf(month);
+  if (monthIndex < 0) {
+    return '';
+  }
+  const nextDate = new Date(`${currentDate}T00:00:00`);
+  nextDate.setDate(nextDate.getDate() + direction);
+  if (nextDate.getFullYear() !== year || nextDate.getMonth() !== monthIndex) {
+    return '';
+  }
+  return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+}
+
+function parseLogisticsTimeRange(value) {
+  const text = String(value || '').trim().replace(/\u2013|\u2014/g, '-');
+  if (!text) {
+    return null;
+  }
+  const timeRangeMatch = text.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!timeRangeMatch) {
+    return null;
+  }
+  const startMinutes = Number(timeRangeMatch[1]) * 60 + Number(timeRangeMatch[2]);
+  let endMinutes = Number(timeRangeMatch[3]) * 60 + Number(timeRangeMatch[4]);
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60;
+  }
+  return {
+    startMinutes: Math.max(0, Math.min(startMinutes, 1439)),
+    endMinutes: Math.max(startMinutes + 1, Math.min(endMinutes, 1440)),
+  };
 }
 
 const COMMISSION_HOME_BASE = {
