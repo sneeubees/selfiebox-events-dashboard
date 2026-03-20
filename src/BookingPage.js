@@ -195,6 +195,8 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect, inputEl
       className="text-input"
       value={value}
       readOnly={readOnly}
+      autoComplete="new-password"
+      spellCheck={false}
       placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
       onChange={(event) => onChange(event.target.value)}
       onBlur={() => {
