@@ -14,6 +14,20 @@ export function sanitizeBookingFilenamePart(value) {
     .replace(/^-+|-+$/g, "") || "booking";
 }
 
+function drawInlineSegments(doc, segments, startX, y, gap = 8) {
+  let x = startX;
+  segments.forEach((segment, index) => {
+    doc.setFont("helvetica", segment.bold ? "bold" : "normal");
+    doc.setTextColor(...(segment.color || [90, 99, 118]));
+    const text = String(segment.text || "");
+    doc.text(text, x, y);
+    x += doc.getTextWidth(text);
+    if (index < segments.length - 1) {
+      x += gap;
+    }
+  });
+}
+
 export function buildBookingPdfArrayBuffer(payload) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -73,15 +87,22 @@ export function buildBookingPdfArrayBuffer(payload) {
     doc.text(eventLine, left, y);
     y += 16;
   }
-  const summaryLine = [
-    `Your product: ${(payload.productNames || []).join(", ") || payload.formData?.product || "N/A"}`,
-    `Your Quote: ${payload.quoteNumber || "N/A"}`,
-    `Your Invoice: ${payload.invoiceNumber || "N/A"}`,
-    `Design/Artwork Status: ${payload.designStatus || "N/A"}`,
-  ].join(", ");
-  doc.text(summaryLine, left, y);
+  doc.setFontSize(9);
+  drawInlineSegments(doc, [
+    { text: "Your product:", bold: true, color: [38, 66, 123] },
+    { text: `${(payload.productNames || []).join(", ") || payload.formData?.product || "N/A"},`, color: [90, 99, 118] },
+    { text: "Your Quote:", bold: true, color: [38, 66, 123] },
+    { text: `${payload.quoteNumber || "N/A"},`, color: [90, 99, 118] },
+    { text: "Your Invoice:", bold: true, color: [38, 66, 123] },
+    { text: `${payload.invoiceNumber || "N/A"},`, color: [90, 99, 118] },
+    { text: "Design/Artwork Status:", bold: true, color: [38, 66, 123] },
+    { text: payload.designStatus || "N/A", color: [90, 99, 118] },
+  ], left, y, 4);
   y += 14;
-  doc.text(`Your attendant is: ${payload.attendantName || "Attendant not yet assigned"}`, left, y);
+  drawInlineSegments(doc, [
+    { text: "Your attendant is:", bold: true, color: [38, 66, 123] },
+    { text: payload.attendantName || "Attendant not yet assigned", color: [90, 99, 118] },
+  ], left, y, 4);
   y += 18;
 
   const formData = payload.formData || {};
@@ -116,7 +137,7 @@ export function buildBookingPdfArrayBuffer(payload) {
   doc.text(termsLines, left, y);
 
   const footerY = pageHeight - 34;
-  doc.setFontSize(9);
+  doc.setFontSize(7);
   doc.setTextColor(90, 99, 118);
   doc.text("www.selfiebox.co.za", left, footerY - 14);
   doc.text(
