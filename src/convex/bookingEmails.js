@@ -42,9 +42,15 @@ function buildBookingSummaryLines(payload) {
 }
 
 function buildSummaryHtml(payload) {
-  return buildBookingSummaryLines(payload)
-    .map(([label, value]) => `<li><strong>${label}:</strong> ${value}</li>`)
+  const rows = buildBookingSummaryLines(payload)
+    .map(([label, value]) => `
+      <tr>
+        <td style="padding:4px 10px 4px 0;color:#1f2a44;font-weight:700;vertical-align:top;white-space:nowrap;">${label}</td>
+        <td style="padding:4px 0;color:#7a8598;vertical-align:top;">${value}</td>
+      </tr>
+    `)
     .join("");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`;
 }
 
 function buildSummaryText(payload) {
@@ -93,27 +99,31 @@ export const sendBookingSubmissionEmail = internalAction({
     const replyTo = payload.creatorEmail || "selfie@selfiebox.co.za";
     const summaryHtml = buildSummaryHtml(payload);
     const summaryText = buildSummaryText(payload);
+    const sentFooter = `Sent from ${payload.sourceIp || "-"} on ${new Date(payload.submittedAt || Date.now()).toLocaleString("en-ZA")} from SelfieBox events dashboard.`;
     const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2a44;">
-        <h2 style="margin-bottom: 12px;">SelfieBox booking form received</h2>
-        <p>Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available—so be sure to keep it safe.</p>
-        <p><strong>Summary of your booking:</strong></p>
-        <ul>${summaryHtml}</ul>
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #7a8598;">
+        <h2 style="margin-bottom: 12px; color: #1f2a44;">SelfieBox booking form received</h2>
+        <p>Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available, so be sure to keep it safe.</p>
+        <p><strong style="color: #1f2a44;">Summary of your booking:</strong></p>
+        ${summaryHtml}
         <p><a href="${payload.linkUrl}" style="display:inline-block;padding:10px 16px;background:#2e65ff;color:#ffffff;text-decoration:none;border-radius:8px;">Open booking link</a></p>
-        <p>Your booking form is attached for easy reference. If you have any questions, just reply to this message—we’re happy to help!</p>
+        <p>Your booking form is attached for easy reference. If you have any questions, just reply to this message, we're happy to help!</p>
+        <p style="margin-top:20px;font-size:12px;color:#9aa4b5;">${sentFooter}</p>
       </div>
     `;
     const text = [
       "SelfieBox booking form received",
       "",
-      "Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available—so be sure to keep it safe.",
+      "Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available, so be sure to keep it safe.",
       "",
       "Summary of your booking:",
       summaryText,
       "",
       `Booking link: ${payload.linkUrl}`,
       "",
-      "Your booking form is attached for easy reference. If you have any questions, just reply to this message—we’re happy to help!",
+      "Your booking form is attached for easy reference. If you have any questions, just reply to this message, we're happy to help!",
+      "",
+      sentFooter,
     ].join("\n");
 
     const response = await fetch("https://api.resend.com/emails", {

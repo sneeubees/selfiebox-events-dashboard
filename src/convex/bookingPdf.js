@@ -17,6 +17,7 @@ export function sanitizeBookingFilenamePart(value) {
 export function buildBookingPdfArrayBuffer(payload) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const left = 48;
   const right = pageWidth - 48;
   let y = 54;
@@ -55,10 +56,11 @@ export function buildBookingPdfArrayBuffer(payload) {
   doc.setFontSize(18);
   doc.setTextColor(29, 53, 95);
   doc.text("SelfieBox Booking Form", left, y);
+  y += 22;
   doc.setFontSize(16);
   doc.setTextColor(122, 133, 152);
-  doc.text(`: ${payload.eventName || "-"}`, left + 176, y);
-  y += 26;
+  doc.text(payload.eventName || "-", left, y);
+  y += 22;
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(90, 99, 118);
@@ -71,20 +73,15 @@ export function buildBookingPdfArrayBuffer(payload) {
     doc.text(eventLine, left, y);
     y += 16;
   }
-  const metaPairs = [
+  const summaryLine = [
     `Your product: ${(payload.productNames || []).join(", ") || payload.formData?.product || "N/A"}`,
     `Your Quote: ${payload.quoteNumber || "N/A"}`,
     `Your Invoice: ${payload.invoiceNumber || "N/A"}`,
     `Design/Artwork Status: ${payload.designStatus || "N/A"}`,
-    `Your attendant is: ${payload.attendantName || "Attendant not yet assigned"}`,
-  ];
-  metaPairs.forEach((line) => {
-    doc.text(line, left, y);
-    y += 14;
-  });
-  doc.text(`Submitted: ${formatDateTime(payload.submittedAt) || "-"}`, left, y);
+  ].join(", ");
+  doc.text(summaryLine, left, y);
   y += 14;
-  doc.text(`IP: ${payload.sourceIp || "-"}`, left, y);
+  doc.text(`Your attendant is: ${payload.attendantName || "Attendant not yet assigned"}`, left, y);
   y += 18;
 
   const formData = payload.formData || {};
@@ -117,6 +114,16 @@ export function buildBookingPdfArrayBuffer(payload) {
     right - left
   );
   doc.text(termsLines, left, y);
+
+  const footerY = pageHeight - 34;
+  doc.setFontSize(9);
+  doc.setTextColor(90, 99, 118);
+  doc.text("www.selfiebox.co.za", left, footerY - 14);
+  doc.text(
+    `Submitted: ${formatDateTime(payload.submittedAt) || "-"}    IP: ${payload.sourceIp || "-"}`,
+    left,
+    footerY
+  );
 
   return doc.output("arraybuffer");
 }
