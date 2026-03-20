@@ -441,7 +441,7 @@ export default function BookingPage({ token }) {
         <h1>Booking Form: <span className="booking-page-client-name">{pageState.eventName}</span></h1>
         <p className="booking-page-subtitle">Event Name: <span className="booking-page-client-name">{pageState.eventTitle || "N/A"}</span></p>
         <p className="booking-page-meta">{[pageState.eventDate, pageState.venueAddress].filter(Boolean).join(" · ")}</p>
-        <p className="booking-page-products">{selectedProducts.join(", ")}</p>
+        <p className="booking-page-products"><span>Your product:</span> <strong>{selectedProducts.join(", ") || "N/A"}</strong></p>
         <div className="booking-document-meta">
           <div><span>Your Quote:</span>{pageState.quoteNumber ? (pageState.quoteUrl ? <a href={pageState.quoteUrl} target="_blank" rel="noreferrer">{pageState.quoteNumber}</a> : <strong>{pageState.quoteNumber}</strong>) : <strong>N/A</strong>}</div>
           <div><span>Your Invoice:</span>{pageState.invoiceNumber ? (pageState.invoiceUrl ? <a href={pageState.invoiceUrl} target="_blank" rel="noreferrer">{pageState.invoiceNumber}</a> : <strong>{pageState.invoiceNumber}</strong>) : <strong>N/A</strong>}</div>

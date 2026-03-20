@@ -357,11 +357,14 @@ textarea { resize: vertical; min-height: 110px; }
 .booking-page-client-name { color: #7a8598; font-weight: 600; }
 .booking-page-subtitle { margin: 0 0 4px; color: #7a8598; font-size: 0.84rem; }
 .booking-page-meta { margin: 0; color: #5b6c8a; font-size: 0.9rem; }
-.booking-page-products { margin: 2px 0 10px; color: #365286; font-size: 0.84rem; font-weight: 600; }
+.booking-page-products { margin: 2px 0 10px; font-size: 0.84rem; }
+.booking-page-products span { color: #365286; font-weight: 600; }
+.booking-page-products strong { color: #7a8598; font-weight: 600; }
 .booking-document-meta { display: flex; flex-wrap: wrap; gap: 14px 24px; margin: 0 0 18px; color: #5b6c8a; font-size: 0.84rem; }
 .booking-document-meta div { display: flex; align-items: center; gap: 6px; }
 .booking-document-meta span { color: #365286; font-weight: 600; }
-.booking-document-meta a { color: var(--accent); text-decoration: none; }
+.booking-document-meta strong,
+.booking-document-meta a { color: #7a8598; font-weight: 600; text-decoration: none; }
 .booking-document-meta a:hover { text-decoration: underline; }
 .booking-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .booking-form-field { display: grid; gap: 6px; }
@@ -378,9 +381,9 @@ textarea { resize: vertical; min-height: 110px; }
 .booking-static-field { display: grid; gap: 6px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcff; }
 .booking-static-field span { font-size: 0.78rem; color: #365286; font-weight: 600; }
 .booking-static-field strong { font-size: 0.92rem; color: var(--text); font-weight: 600; }
-.booking-time-row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.time-spinner-input { display: flex; align-items: center; gap: 0; padding: 0 10px; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.time-spinner-field { width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; text-align: center; box-shadow: none; }
+.booking-time-row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(124px, 148px)); gap: 12px; justify-content: start; }
+.time-spinner-input { display: inline-flex; align-items: center; gap: 0; width: 124px; padding: 0 6px; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.time-spinner-field { width: 46px; min-width: 46px; padding: 0; border: 0; background: transparent; text-align: center; box-shadow: none; }
 .time-spinner-field:focus { outline: none; box-shadow: none; }
 .time-spinner-field::-webkit-outer-spin-button,
 .time-spinner-field::-webkit-inner-spin-button { opacity: 1; }
@@ -999,8 +1002,10 @@ textarea { resize: vertical; min-height: 110px; }
   :root[data-theme="dark"] .time-spinner-field {
     color: #eef4ff;
   }
+  :root[data-theme="dark"] .booking-page-products strong,
+  :root[data-theme="dark"] .booking-document-meta strong,
   :root[data-theme="dark"] .booking-document-meta a {
-    color: #8db6ff;
+    color: #d2dceb;
   }
   :root[data-theme="dark"] .booking-static-field,
   :root[data-theme="dark"] .booking-terms-modal {
