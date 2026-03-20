@@ -458,15 +458,33 @@ async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) 
   const submittedBy = bookingRecord.submittedByUserId
     ? await ctx.db.get(bookingRecord.submittedByUserId)
     : null;
+  const creatorUser = eventRecord.createdByUserId ? await ctx.db.get(eventRecord.createdByUserId) : null;
+  const branchDisplayMap = await getLabelDisplayMap(ctx, "branch");
+  const productDisplayMap = await getLabelDisplayMap(ctx, "products");
+  const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
+  const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
+  const designStatus = await findCustomColumnValueByLabel(ctx, eventRecord, "Designs");
+  const attendantName = Array.isArray(eventRecord.attendants) && eventRecord.attendants.length
+    ? normalizeString(eventRecord.attendants[0])
+    : "";
   return {
     bookingId: bookingRecord._id,
     eventId: bookingRecord.eventId,
     eventName: eventRecord.name || "SelfieBox booking",
+    eventTitle: normalizeString(eventRecord.eventTitle),
     formData: bookingRecord.formData,
+    productNames,
+    regionName: branchNames.join(", "),
+    quoteNumber: normalizeString(eventRecord.quoteNumber),
+    invoiceNumber: normalizeString(eventRecord.invoiceNumber),
+    designStatus,
+    attendantName,
     submittedAt: bookingRecord.submittedAt || bookingRecord.updatedAt || bookingRecord.createdAt,
     sourceIp: bookingRecord.lastSubmittedIp || "",
     submittedByUserId: bookingRecord.submittedByUserId || null,
     submittedByLabel: submittedBy?.fullName || submittedBy?.email || "",
+    creatorEmail: normalizeString(creatorUser?.email).toLowerCase(),
+    creatorLabel: creatorUser?.fullName || creatorUser?.email || "",
     linkUrl: trimmedBaseUrl ? `${trimmedBaseUrl}/${bookingRecord.token}` : bookingRecord.token,
   };
 }

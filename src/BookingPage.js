@@ -584,7 +584,7 @@ export default function BookingPage({ token }) {
 
         <div className="booking-form-actions">
           <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isLocked}>
-            {isSubmitting ? "Saving..." : "Save"}
+            {isSubmitting ? "Saving..." : "Save & Email"}
           </button>
         </div>
       </div>
