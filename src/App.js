@@ -3098,8 +3098,14 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
         listenerRef.current = autocompleteRef.current.addListener('place_changed', () => {
           try {
             const place = autocompleteRef.current?.getPlace?.();
-            const parsed = extractPlaceResult(place, inputRef.current?.value || '');
-            onPlaceSelect?.(parsed);
+            const selectedValue = inputRef.current?.value || '';
+            const parsed = extractPlaceResult(place, selectedValue);
+            const resolved = {
+              ...parsed,
+              location: parsed.location || selectedValue,
+            };
+            onTextChange?.(resolved.location || '');
+            onPlaceSelect?.(resolved);
           } catch (error) {
             console.error('Google place selection failed', error);
           }

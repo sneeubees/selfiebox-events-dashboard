@@ -121,8 +121,12 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
         });
         listenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
           const place = autocompleteRef.current?.getPlace?.();
-          const parsed = extractPlaceResult(place);
-          onPlaceSelect(parsed);
+          const selectedValue = inputRef.current?.value || "";
+          const parsed = extractPlaceResult(place, selectedValue);
+          onPlaceSelect({
+            ...parsed,
+            location: parsed.location || selectedValue,
+          });
         });
       })
       .catch((error) => {
