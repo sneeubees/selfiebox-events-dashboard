@@ -189,11 +189,32 @@ function parseNumericCellValue(value) {
     return 0;
   }
 
-  const normalized = input
-    .replace(/\s+/g, '')
-    .replace(/\./g, '')
-    .replace(/,/g, '.')
-    .replace(/[^0-9.-]/g, '');
+  const compact = input.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
+  if (!compact) {
+    return 0;
+  }
+
+  const lastComma = compact.lastIndexOf(',');
+  const lastDot = compact.lastIndexOf('.');
+  let normalized = compact;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      normalized = compact.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      normalized = compact.replace(/,/g, '');
+    }
+  } else if (lastComma >= 0) {
+    const decimalDigits = compact.length - lastComma - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? compact.replace(/\./g, '').replace(/,/g, '.')
+      : compact.replace(/,/g, '');
+  } else if (lastDot >= 0) {
+    const decimalDigits = compact.length - lastDot - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? compact.replace(/,/g, '')
+      : compact.replace(/\./g, '');
+  }
 
   if (!normalized || normalized === '-' || normalized === '.' || normalized === '-.') {
     return 0;
