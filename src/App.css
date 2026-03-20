@@ -312,6 +312,7 @@ button { cursor: pointer; }
 textarea { resize: vertical; min-height: 110px; }
 .modal-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
 .modal-panel { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
+.logistics-modal-panel { width: min(96vw, 1680px); max-height: 94vh; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .modal-close-x { width: 24px; height: 24px; border: 0; border-radius: 999px; background: #eef2ff; color: #26427b; font-size: 0.82rem; line-height: 1; }
 .modal-close-x:hover { background: #dfe7ff; }
@@ -436,17 +437,19 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-table-row { border-top: 1px solid var(--line); background: #fff; }
 .commission-table-row span { font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .commission-input { border-radius: 0; border: 0; background: transparent; padding: 9px 10px; height: 100%; }
-.logistics-sheet { display: grid; gap: 10px; }
+.logistics-sheet { display: grid; gap: 10px; min-height: 0; }
 .logistics-toolbar { display: flex; justify-content: flex-start; align-items: center; }
 .logistics-day-nav { display: inline-flex; align-items: center; gap: 8px; }
 .logistics-day-nav strong { min-width: 96px; text-align: center; color: var(--text); }
-.logistics-scale-wrap { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 8px; align-items: end; }
+.logistics-scale-wrap { display: grid; grid-template-columns: minmax(290px, 330px) minmax(0, 1fr); gap: 8px; align-items: end; }
 .logistics-scale-spacer { min-height: 1px; }
 .logistics-scale { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 0; font-size: 0.6rem; color: var(--muted); }
 .logistics-scale span { text-align: left; padding-left: 2px; }
-.logistics-rows { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.logistics-row { display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); gap: 8px; align-items: stretch; border-top: 1px solid var(--line); background: var(--panel); }
+.logistics-rows { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: calc(94vh - 210px); }
+.logistics-row { display: grid; grid-template-columns: minmax(290px, 330px) minmax(0, 1fr); gap: 8px; align-items: stretch; border-top: 1px solid var(--line); background: var(--panel); cursor: grab; }
 .logistics-row:first-child { border-top: 0; }
+.logistics-row.is-dragging-logistics { opacity: 0.62; }
+.logistics-row.is-drag-over-logistics { box-shadow: inset 0 0 0 2px #8fb4ff; }
 .logistics-event-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; min-width: 0; }
 .logistics-event-copy { display: grid; gap: 1px; min-width: 0; }
 .logistics-event-copy strong,
@@ -455,8 +458,6 @@ textarea { resize: vertical; min-height: 110px; }
 .logistics-event-copy strong { font-size: 0.82rem; color: var(--text); }
 .logistics-event-copy span { font-size: 0.72rem; color: var(--muted); }
 .logistics-event-copy small { font-size: 0.68rem; color: var(--muted); }
-.logistics-move-buttons { display: grid; gap: 4px; }
-.logistics-move-button { min-width: 28px; padding: 2px 0; line-height: 1; }
 .logistics-timeline { position: relative; min-height: 44px; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(4.166% - 1px), rgba(122, 138, 166, 0.18) calc(4.166% - 1px), rgba(122, 138, 166, 0.18) 4.166%); }
 .logistics-bar { position: absolute; top: 0; bottom: 0; border-radius: 0; display: flex; align-items: center; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .logistics-bar span { font-size: 0.72rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
@@ -994,6 +995,9 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .logistics-row {
   background: var(--panel);
+}
+:root[data-theme="dark"] .logistics-row.is-drag-over-logistics {
+  box-shadow: inset 0 0 0 2px #77a6ff;
 }
 :root[data-theme="dark"] .logistics-timeline {
   background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(4.166% - 1px), rgba(173, 194, 230, 0.18) calc(4.166% - 1px), rgba(173, 194, 230, 0.18) 4.166%);

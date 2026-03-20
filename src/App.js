@@ -359,6 +359,8 @@ function DashboardApp() {
     selectedDate: '',
     ordersByDate: {},
   });
+  const [draggedLogisticsRowId, setDraggedLogisticsRowId] = useState('');
+  const [dragOverLogisticsRowId, setDragOverLogisticsRowId] = useState('');
   const [branchOptions, setBranchOptions] = useState(defaultBranchOptions);
   const [branchManagerOpen, setBranchManagerOpen] = useState(false);
   const [branchEditorEventId, setBranchEditorEventId] = useState(null);
@@ -774,6 +776,7 @@ function DashboardApp() {
     return events
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
       .filter((event) => getEventMonth(event) === logisticsDialog.month)
+      .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
       .sort((left, right) => sortEvents(left, right));
   }, [events, logisticsDialog.isOpen, logisticsDialog.month, selectedWorkspaceYear]);
   const logisticsRows = useMemo(() => {
@@ -793,11 +796,11 @@ function DashboardApp() {
         }
         return sortEvents(left, right);
       })
-      .map((event) => {
+      .map((event, index) => {
         const timeRange = parseLogisticsTimeRange(event.hours);
         const barLeft = timeRange ? `${(timeRange.startMinutes / 1440) * 100}%` : '0%';
         const barWidth = timeRange ? `${Math.max(((timeRange.endMinutes - timeRange.startMinutes) / 1440) * 100, 1.5)}%` : '0%';
-        const primaryProduct = (event.products || [])[0] || '';
+        const palette = getLogisticsPalette(index);
         return {
           id: event.id,
           clientName: event.name || 'Untitled event',
@@ -808,11 +811,11 @@ function DashboardApp() {
           timeRange,
           barLeft,
           barWidth,
-          color: productStyles[primaryProduct]?.background || '#4f7ac8',
-          textColor: productStyles[primaryProduct]?.color || '#ffffff',
+          color: palette.background,
+          textColor: palette.color,
         };
       });
-  }, [logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames, productStyles]);
+  }, [logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -1890,12 +1893,13 @@ function DashboardApp() {
   };
 
   const openLogisticsDialog = (month) => {
-    if (!currentUser || currentUser.role !== 'manager') {
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
       return;
     }
     const monthEvents = events
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
       .filter((event) => getEventMonth(event) === month)
+      .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
       .sort((left, right) => sortEvents(left, right));
     const initialDate = monthEvents[0]?.date || buildMonthDateKey(month, selectedWorkspaceYear, 1);
     const initialIds = monthEvents.filter((event) => event.date === initialDate).map((event) => event.id);
@@ -1908,6 +1912,8 @@ function DashboardApp() {
   };
 
   const closeLogisticsDialog = () => {
+    setDraggedLogisticsRowId('');
+    setDragOverLogisticsRowId('');
     setLogisticsDialog({
       isOpen: false,
       month: '',
@@ -1928,6 +1934,7 @@ function DashboardApp() {
       const nextDayIds = events
         .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
         .filter((event) => getEventMonth(event) === current.month)
+        .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
         .filter((event) => event.date === nextDate)
         .sort((left, right) => sortEvents(left, right))
         .map((event) => event.id);
@@ -1941,16 +1948,21 @@ function DashboardApp() {
     });
   };
 
-  const moveLogisticsRow = (eventId, direction) => {
+  const handleLogisticsRowDrop = (targetEventId) => {
+    if (!draggedLogisticsRowId || draggedLogisticsRowId === targetEventId) {
+      setDraggedLogisticsRowId('');
+      setDragOverLogisticsRowId('');
+      return;
+    }
     setLogisticsDialog((current) => {
       if (!current.selectedDate) {
         return current;
       }
       const fallbackOrder = logisticsRows.map((row) => row.id);
       const nextOrder = [...((current.ordersByDate[current.selectedDate] || fallbackOrder))];
-      const fromIndex = nextOrder.indexOf(eventId);
-      const toIndex = fromIndex + direction;
-      if (fromIndex < 0 || toIndex < 0 || toIndex >= nextOrder.length) {
+      const fromIndex = nextOrder.indexOf(draggedLogisticsRowId);
+      const toIndex = nextOrder.indexOf(targetEventId);
+      if (fromIndex < 0 || toIndex < 0) {
         return current;
       }
       const [moved] = nextOrder.splice(fromIndex, 1);
@@ -1963,6 +1975,8 @@ function DashboardApp() {
         },
       };
     });
+    setDraggedLogisticsRowId('');
+    setDragOverLogisticsRowId('');
   };
 
   const exportCommissionSheet = async () => {
@@ -3210,7 +3224,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{currentUser.role === 'manager' ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -3352,7 +3366,7 @@ function DashboardApp() {
         </ModalShell>
       ) : null}
       {logisticsDialog.isOpen ? (
-        <ModalShell title={`Logistics - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog}>
+        <ModalShell title={`Logistics - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog} panelClassName="logistics-modal-panel">
           <div className="logistics-sheet">
             <div className="logistics-toolbar">
               <div className="logistics-day-nav">
@@ -3375,21 +3389,35 @@ function DashboardApp() {
             </div>
             <div className="logistics-rows">
               {logisticsRows.length ? (
-                logisticsRows.map((row, index) => (
-                  <div className="logistics-row" key={row.id}>
+                logisticsRows.map((row) => (
+                  <div
+                    className={["logistics-row", draggedLogisticsRowId === row.id ? 'is-dragging-logistics' : '', dragOverLogisticsRowId === row.id ? 'is-drag-over-logistics' : ''].join(' ').trim()}
+                    key={row.id}
+                    draggable
+                    onDragStart={() => {
+                      setDraggedLogisticsRowId(row.id);
+                      setDragOverLogisticsRowId(row.id);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (dragOverLogisticsRowId !== row.id) {
+                        setDragOverLogisticsRowId(row.id);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleLogisticsRowDrop(row.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedLogisticsRowId('');
+                      setDragOverLogisticsRowId('');
+                    }}
+                  >
                     <div className="logistics-event-card">
                       <div className="logistics-event-copy">
                         <strong title={row.clientName}>{row.clientName}</strong>
                         <span title={row.eventName || 'No event name'}>{row.eventName || 'No event name'}</span>
                         <small title={`${row.productLabel} • ${row.attendantLabel}`}>{row.productLabel} • {row.attendantLabel}</small>
-                      </div>
-                      <div className="logistics-move-buttons">
-                        <button className="ghost-button logistics-move-button" type="button" onClick={() => moveLogisticsRow(row.id, -1)} disabled={index === 0}>
-                          ↑
-                        </button>
-                        <button className="ghost-button logistics-move-button" type="button" onClick={() => moveLogisticsRow(row.id, 1)} disabled={index === logisticsRows.length - 1}>
-                          ↓
-                        </button>
                       </div>
                     </div>
                     <div className="logistics-timeline" title={row.timelineLabel}>
@@ -4401,8 +4429,8 @@ function BookingDrawerSummary({ booking }) {
   );
 }
 
-function ModalShell({ title, onClose, children, hideCloseButton = false, closeOnScrimClick = true }) {
-  return <div className="modal-scrim" onClick={closeOnScrimClick ? onClose : undefined}><div className="modal-panel" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>{title}</h3>{!hideCloseButton ? <button className="modal-close-x" type="button" onClick={onClose}>x</button> : null}</div>{children}</div></div>;
+function ModalShell({ title, onClose, children, hideCloseButton = false, closeOnScrimClick = true, panelClassName = '' }) {
+  return <div className="modal-scrim" onClick={closeOnScrimClick ? onClose : undefined}><div className={["modal-panel", panelClassName].join(' ').trim()} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>{title}</h3>{!hideCloseButton ? <button className="modal-close-x" type="button" onClick={onClose}>x</button> : null}</div>{children}</div></div>;
 }
 
 function ActivityEntry({ entry, title, eventName = '' }) {
@@ -4755,6 +4783,14 @@ function parseLogisticsTimeRange(value) {
   return {
     startMinutes: Math.max(0, Math.min(startMinutes, 1439)),
     endMinutes: Math.max(startMinutes + 1, Math.min(endMinutes, 1440)),
+  };
+}
+
+function getLogisticsPalette(index) {
+  const hue = Math.round((index * 137.508) % 360);
+  return {
+    background: `hsl(${hue} 78% 46%)`,
+    color: '#ffffff',
   };
 }
 
