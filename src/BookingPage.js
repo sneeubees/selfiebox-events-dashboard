@@ -126,6 +126,7 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect, inputEl
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const listenerRef = useRef(null);
+  const fieldNameRef = useRef(`booking-location-${Math.random().toString(36).slice(2, 12)}`);
 
   useEffect(() => {
     if (inputElementRef) {
@@ -190,20 +191,44 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect, inputEl
   }, [onChange, onPlaceSelect, readOnly]);
 
   return (
-    <input
-      ref={inputRef}
-      className="text-input"
-      value={value}
-      readOnly={readOnly}
-      autoComplete="new-password"
-      spellCheck={false}
-      placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
-      onChange={(event) => onChange(event.target.value)}
-      onBlur={() => {
-        const nextValue = inputRef.current?.value || "";
-        onChange(nextValue);
-      }}
-    />
+    <div className="booking-address-input-shell">
+      <input
+        className="booking-autofill-trap"
+        type="text"
+        name={`trap-address-${fieldNameRef.current}`}
+        autoComplete="street-address"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <input
+        className="booking-autofill-trap"
+        type="text"
+        name={`trap-city-${fieldNameRef.current}`}
+        autoComplete="address-level2"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+      <input
+        ref={inputRef}
+        className="text-input"
+        name={fieldNameRef.current}
+        value={value}
+        readOnly={readOnly}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-form-type="other"
+        spellCheck={false}
+        placeholder={hasGoogleMapsApiKey() ? "Search or type the event address" : "Enter the event address"}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => {
+          const nextValue = inputRef.current?.value || "";
+          onChange(nextValue);
+        }}
+      />
+    </div>
   );
 }
 

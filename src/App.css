@@ -372,6 +372,8 @@ textarea { resize: vertical; min-height: 110px; }
 .booking-form-field span { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.78rem; color: #365286; font-weight: 600; }
 .booking-form-field span small { font-size: 0.72rem; color: #6d7f9d; font-weight: 500; }
 .booking-form-field.full-span { grid-column: 1 / -1; }
+.booking-address-input-shell { position: relative; }
+.booking-autofill-trap { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .booking-radio-group { align-content: start; }
 .booking-radio-inline { padding-top: 4px; }
 .booking-choice-row { display: flex; flex-wrap: wrap; gap: 10px 14px; }
