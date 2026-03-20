@@ -3071,6 +3071,11 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const listenerRef = useRef(null);
+  const [localValue, setLocalValue] = useState(value || '');
+
+  useEffect(() => {
+    setLocalValue(value || '');
+  }, [value]);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
@@ -3104,7 +3109,7 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
               ...parsed,
               location: parsed.location || selectedValue,
             };
-            onTextChange?.(resolved.location || '');
+            setLocalValue(resolved.location || '');
             onPlaceSelect?.(resolved);
           } catch (error) {
             console.error('Google place selection failed', error);
@@ -3124,7 +3129,7 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     };
   }, [onPlaceSelect, onTextChange, readOnly]);
 
-  return <div className={[compact ? 'location-field compact' : 'location-field'].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} /></div>;
+  return <div className={[compact ? 'location-field compact' : 'location-field'].join(' ').trim()}><input ref={inputRef} className={className} title={title || localValue || ''} value={localValue || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => { const nextValue = event.target.value; setLocalValue(nextValue); onTextChange?.(nextValue); }} /></div>;
 }
 
 function LocationMapPreview({ location }) {
