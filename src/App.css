@@ -156,7 +156,7 @@ button { cursor: pointer; }
 .month-header:hover { background: #eef6ff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
-.month-header-main { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding-right: 18px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
+.month-header-main { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; gap: 10px; flex: 0 0 auto; min-width: max-content; padding-right: 18px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { display: inline-flex; align-items: center; gap: 8px; }
