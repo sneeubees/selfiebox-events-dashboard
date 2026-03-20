@@ -458,6 +458,10 @@ textarea { resize: vertical; min-height: 110px; }
 .logistics-event-copy strong { font-size: 0.82rem; color: var(--text); }
 .logistics-event-copy span { font-size: 0.72rem; color: var(--muted); }
 .logistics-event-copy small { font-size: 0.68rem; color: var(--muted); }
+.logistics-product-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.logistics-product-pill { display: inline-flex; align-items: center; justify-content: center; padding: 2px 8px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.logistics-product-pill.is-empty { background: #eef1f5; color: #60708b; }
+.logistics-attendant-line { font-weight: 700; color: var(--text); }
 .logistics-timeline { position: relative; min-height: 44px; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(4.166% - 1px), rgba(122, 138, 166, 0.18) calc(4.166% - 1px), rgba(122, 138, 166, 0.18) 4.166%); }
 .logistics-bar { position: absolute; top: 0; bottom: 0; border-radius: 0; display: flex; align-items: center; padding: 0 8px; overflow: hidden; white-space: nowrap; }
 .logistics-bar span { font-size: 0.72rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }

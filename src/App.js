@@ -801,12 +801,13 @@ function DashboardApp() {
         const barLeft = timeRange ? `${(timeRange.startMinutes / 1440) * 100}%` : '0%';
         const barWidth = timeRange ? `${Math.max(((timeRange.endMinutes - timeRange.startMinutes) / 1440) * 100, 1.5)}%` : '0%';
         const palette = getLogisticsPalette(index);
+        const visibleAttendants = (event.attendants || []).filter((name) => !hasUserAttendantBranchRestrictions || currentUserAssignedBranches.includes(attendantBranchMap[name] || ''));
         return {
           id: event.id,
           clientName: event.name || 'Untitled event',
           eventName: event.eventTitle || '',
-          productLabel: (event.products || []).map((item) => productFullNames[item] || item).join(', ') || '-',
-          attendantLabel: (event.attendants || []).join(', ') || 'Unassigned',
+          productItems: event.products || [],
+          attendantLabel: visibleAttendants.join(', ') || 'Unassigned',
           timelineLabel: event.hours || '-',
           timeRange,
           barLeft,
@@ -815,7 +816,7 @@ function DashboardApp() {
           textColor: palette.color,
         };
       });
-  }, [logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames]);
+  }, [attendantBranchMap, currentUserAssignedBranches, hasUserAttendantBranchRestrictions, logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -3417,7 +3418,14 @@ function DashboardApp() {
                       <div className="logistics-event-copy">
                         <strong title={row.clientName}>{row.clientName}</strong>
                         <span title={row.eventName || 'No event name'}>{row.eventName || 'No event name'}</span>
-                        <small title={`${row.productLabel} • ${row.attendantLabel}`}>{row.productLabel} • {row.attendantLabel}</small>
+                        <div className="logistics-product-list">
+                          {(row.productItems || []).length ? row.productItems.map((product) => (
+                            <span className="logistics-product-pill" key={`${row.id}-${product}`} style={productStyles[product] || undefined}>
+                              {productFullNames[product] || product}
+                            </span>
+                          )) : <span className="logistics-product-pill is-empty">No product</span>}
+                        </div>
+                        <small className="logistics-attendant-line" title={row.attendantLabel}>{row.attendantLabel}</small>
                       </div>
                     </div>
                     <div className="logistics-timeline" title={row.timelineLabel}>
