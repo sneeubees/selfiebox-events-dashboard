@@ -53,7 +53,7 @@ function buildSubmitPayload(form, pageState) {
   const next = { ...base, ...(form || {}) };
 
   return {
-    product: String(next.product || (pageState?.productNames || []).join(", ")),
+    product: String((pageState?.productNames || []).join(", ")),
     customerType: String(next.customerType || ""),
     eventName: String(next.eventName || ""),
     companyName: String(pageState?.eventName || next.companyName || ""),
@@ -176,7 +176,7 @@ function TimeSpinnerInput({ value, onChange, readOnly }) {
   return (
     <div className="time-spinner-input">
       <input
-        className="text-input time-spinner-field"
+        className="time-spinner-field"
         type="number"
         min="0"
         max="23"
@@ -187,7 +187,7 @@ function TimeSpinnerInput({ value, onChange, readOnly }) {
       />
       <span className="time-spinner-separator">:</span>
       <input
-        className="text-input time-spinner-field"
+        className="time-spinner-field"
         type="number"
         min="0"
         max="59"
@@ -439,11 +439,14 @@ export default function BookingPage({ token }) {
       <div className="booking-page-card">
         <div className="auth-brand">SelfieBox Events Platform</div>
         <h1>Booking Form: <span className="booking-page-client-name">{pageState.eventName}</span></h1>
+        <p className="booking-page-subtitle">Event Name: <span className="booking-page-client-name">{pageState.eventTitle || "N/A"}</span></p>
         <p className="booking-page-meta">{[pageState.eventDate, pageState.venueAddress].filter(Boolean).join(" · ")}</p>
         <p className="booking-page-products">{selectedProducts.join(", ")}</p>
         <div className="booking-document-meta">
           <div><span>Your Quote:</span>{pageState.quoteNumber ? (pageState.quoteUrl ? <a href={pageState.quoteUrl} target="_blank" rel="noreferrer">{pageState.quoteNumber}</a> : <strong>{pageState.quoteNumber}</strong>) : <strong>N/A</strong>}</div>
           <div><span>Your Invoice:</span>{pageState.invoiceNumber ? (pageState.invoiceUrl ? <a href={pageState.invoiceUrl} target="_blank" rel="noreferrer">{pageState.invoiceNumber}</a> : <strong>{pageState.invoiceNumber}</strong>) : <strong>N/A</strong>}</div>
+          <div><span>Design/Artwork Status:</span><strong>{pageState.designStatus || "N/A"}</strong></div>
+          <div><span>Your attendant is:</span><strong>{pageState.attendantName || "Attendant not yet assigned"}</strong></div>
         </div>
         <div className="booking-form-grid">
           <div className="booking-form-field full-span booking-radio-inline">
@@ -467,13 +470,13 @@ export default function BookingPage({ token }) {
             <input className="text-input" value={form.eventName} readOnly={isLocked} onChange={(event) => updateField("eventName", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Contact person">
-            <input className="text-input" value={form.contactPerson} readOnly={isLocked} onChange={(event) => updateField("contactPerson", event.target.value)} />
+            <input className="text-input" required value={form.contactPerson} readOnly={isLocked} onChange={(event) => updateField("contactPerson", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Cell">
-            <input className="text-input" value={form.cell} readOnly={isLocked} onChange={(event) => updateField("cell", event.target.value)} />
+            <input className="text-input" required value={form.cell} readOnly={isLocked} onChange={(event) => updateField("cell", event.target.value)} />
           </BookingFormField>
           <BookingFormField label="Email">
-            <input className="text-input" type="email" value={form.email} readOnly={isLocked} onChange={(event) => updateField("email", event.target.value)} />
+            <input className="text-input" required type="email" value={form.email} readOnly={isLocked} onChange={(event) => updateField("email", event.target.value)} />
           </BookingFormField>
 
           <BookingStaticField label="Date of event" value={form.eventDate || pageState.eventDate} />
@@ -536,7 +539,7 @@ export default function BookingPage({ token }) {
           <div className="booking-form-field booking-radio-group full-span">
             <span>Design yourself</span>
             <div className="booking-choice-row">
-              {["Yes", "No"].map((option) => (
+              {["Yes", "No", "Not sure yet"].map((option) => (
                 <label key={option} className="booking-inline-choice">
                   <input
                     type="radio"
@@ -570,7 +573,7 @@ export default function BookingPage({ token }) {
               </button>.
             </p>
             <label className="booking-inline-choice booking-terms-accept">
-              <input type="checkbox" checked={form.acceptedTerms} disabled={isLocked} onChange={(event) => updateField("acceptedTerms", event.target.checked)} />
+              <input required type="checkbox" checked={form.acceptedTerms} disabled={isLocked} onChange={(event) => updateField("acceptedTerms", event.target.checked)} />
               <span>I accept the SelfieBox terms and conditions.</span>
             </label>
           </div>

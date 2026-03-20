@@ -160,6 +160,36 @@ async function getLabelDisplayMap(ctx, columnKey) {
   return map;
 }
 
+function normalizeCompareKey(value) {
+  return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+async function findCustomColumnValueByLabel(ctx, eventRecord, targetLabel) {
+  const customFields = eventRecord?.customFields || {};
+  if (!customFields || typeof customFields !== "object") {
+    return "";
+  }
+
+  const directKey = Object.keys(customFields).find((key) => normalizeCompareKey(key) === normalizeCompareKey(targetLabel));
+  if (directKey) {
+    return normalizeString(customFields[directKey]);
+  }
+
+  const customColumns = await ctx.db.query("customColumns").collect();
+  const matchedColumn = customColumns.find(
+    (column) =>
+      column.isActive !== false &&
+      (normalizeCompareKey(column.label) === normalizeCompareKey(targetLabel) ||
+        normalizeCompareKey(column.columnKey) === normalizeCompareKey(targetLabel))
+  );
+
+  if (!matchedColumn) {
+    return "";
+  }
+
+  return normalizeString(customFields[matchedColumn.columnKey]);
+}
+
 function normalizeDocumentToken(value) {
   return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
@@ -377,18 +407,10 @@ function sanitizeFormData(formData) {
 }
 
 function validateFormData(formData) {
-  if (!formData.product) return "Please select a product.";
-  if (!formData.customerType) return "Please choose Corporate or Private.";
-  if (!formData.eventName) return "Please enter the event name.";
   if (!formData.contactPerson) return "Please enter a contact person.";
   if (!formData.cell) return "Please enter a contact cell number.";
   if (!formData.email || !formData.email.includes("@")) return "Please enter a valid email address.";
-  if (!formData.eventDate) return "Please enter the event date.";
-  if (!formData.region) return "Please select a region.";
-  if (!formData.address) return "Please enter the event address.";
-  if (!formData.pointOfContactName) return "Please enter the point of contact for the day.";
-  if (!formData.pointOfContactNumber) return "Please enter the point of contact number.";
-  if (!formData.eventStartTime || !formData.eventFinishTime) return "Please enter the event start and finish time.";
+  if (!formData.designYourself) return "Please choose a design yourself option.";
   if (!formData.acceptedTerms) return "Please accept the terms and conditions before submitting.";
   return "";
 }
@@ -401,6 +423,10 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
   const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
   const quoteFile = await findDocumentFileForNumber(ctx, eventRecord._id, eventRecord.quoteNumber);
   const invoiceFile = await findDocumentFileForNumber(ctx, eventRecord._id, eventRecord.invoiceNumber);
+  const designStatus = await findCustomColumnValueByLabel(ctx, eventRecord, "Designs");
+  const attendantName = Array.isArray(eventRecord.attendants) && eventRecord.attendants.length
+    ? normalizeString(eventRecord.attendants[0])
+    : "";
   return {
     status: "ok",
     access,
@@ -415,6 +441,8 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
     quoteUrl: quoteFile?.url || "",
     invoiceNumber: normalizeString(eventRecord.invoiceNumber),
     invoiceUrl: invoiceFile?.url || "",
+    designStatus,
+    attendantName,
     token: bookingRecord.token,
     formData: bookingRecord.formData,
     submittedAt: bookingRecord.submittedAt || null,
@@ -596,7 +624,10 @@ export const submitPublicForm = mutation({
       locationPlaceId: formData.addressPlaceId || "",
       locationLat: typeof formData.addressLat === "number" ? formData.addressLat : undefined,
       locationLng: typeof formData.addressLng === "number" ? formData.addressLng : undefined,
-      hours: `${formData.eventStartTime} - ${formData.eventFinishTime}`,
+      hours:
+        formData.eventStartTime && formData.eventFinishTime
+          ? `${formData.eventStartTime} - ${formData.eventFinishTime}`
+          : "",
       activity: [
         ...(eventRecord.activity || []),
         createActivityEntry(
