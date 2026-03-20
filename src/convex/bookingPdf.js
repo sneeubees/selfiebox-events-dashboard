@@ -91,12 +91,15 @@ export function buildBookingPdfArrayBuffer(payload) {
   drawInlineSegments(doc, [
     { text: "Your product:", bold: true, color: [38, 66, 123] },
     { text: `${(payload.productNames || []).join(", ") || payload.formData?.product || "N/A"},`, color: [90, 99, 118] },
-    { text: "Your Quote:", bold: true, color: [38, 66, 123] },
-    { text: `${payload.quoteNumber || "N/A"},`, color: [90, 99, 118] },
-    { text: "Your Invoice:", bold: true, color: [38, 66, 123] },
-    { text: `${payload.invoiceNumber || "N/A"},`, color: [90, 99, 118] },
     { text: "Design/Artwork Status:", bold: true, color: [38, 66, 123] },
     { text: payload.designStatus || "N/A", color: [90, 99, 118] },
+  ], left, y, 4);
+  y += 14;
+  drawInlineSegments(doc, [
+    { text: "Your Invoice Number:", bold: true, color: [38, 66, 123] },
+    { text: `${payload.invoiceNumber || "N/A"},`, color: [90, 99, 118] },
+    { text: "Your Quote Number:", bold: true, color: [38, 66, 123] },
+    { text: payload.quoteNumber || "N/A", color: [90, 99, 118] },
   ], left, y, 4);
   y += 14;
   drawInlineSegments(doc, [
@@ -137,7 +140,7 @@ export function buildBookingPdfArrayBuffer(payload) {
   doc.text(termsLines, left, y);
 
   const footerY = pageHeight - 34;
-  doc.setFontSize(7);
+  doc.setFontSize(6);
   doc.setTextColor(90, 99, 118);
   doc.text("www.selfiebox.co.za", left, footerY - 14);
   doc.text(

@@ -45,12 +45,12 @@ function buildSummaryHtml(payload) {
   const rows = buildBookingSummaryLines(payload)
     .map(([label, value]) => `
       <tr>
-        <td style="padding:2px 12px 2px 0;color:#1f2a44;font-weight:700;vertical-align:top;white-space:nowrap;">${label}</td>
-        <td style="padding:2px 0;color:#7a8598;vertical-align:top;">${value}</td>
+        <td style="padding:1px 14px 1px 0;color:#1f2a44;font-weight:700;vertical-align:top;white-space:nowrap;">${label}</td>
+        <td style="padding:1px 0;color:#7a8598;vertical-align:top;">${value}</td>
       </tr>
     `)
     .join("");
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0 2px;margin:4px 0 10px 16px;line-height:1.28;">${rows}</table>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0 1px;margin:8px 0 10px 30px;line-height:1.14;">${rows}</table>`;
 }
 
 function buildSummaryText(payload) {
