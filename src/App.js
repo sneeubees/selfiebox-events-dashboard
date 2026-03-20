@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
-import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
+import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi, loadGooglePlacesLibrary } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import {
@@ -3067,71 +3067,129 @@ function buildGoogleMapsExternalUrl(location) {
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location?.address || location?.location || '');
 }
 
-function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect }) {
-  const inputRef = useRef(null);
-  const autocompleteRef = useRef(null);
-  const listenerRef = useRef(null);
-  const [localValue, setLocalValue] = useState(value || '');
+function renderSearchIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm8.91 11.5 2.3 2.29-1.42 1.42-2.29-2.3 1.41-1.41Z" fill="currentColor" /></svg>;
+}
 
-  useEffect(() => {
-    setLocalValue(value || '');
-  }, [value]);
+function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect, onOpenMap, hasCoordinates }) {
+  const wrapperRef = useRef(null);
+  const autocompleteContainerRef = useRef(null);
+  const autocompleteElementRef = useRef(null);
+  const placeSelectHandlerRef = useRef(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
-    if (!inputRef.current) {
+    void loadGooglePlacesLibrary().catch((error) => {
+      console.error('Google Places library failed to preload', error);
+    });
+  }, [readOnly]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (wrapperRef.current?.contains(event.target)) {
+        return;
+      }
+      setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => () => {
+    if (autocompleteElementRef.current && placeSelectHandlerRef.current) {
+      autocompleteElementRef.current.removeEventListener('gmp-select', placeSelectHandlerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || readOnly || !hasGoogleMapsApiKey()) {
       return undefined;
     }
 
     let isMounted = true;
-    void loadGoogleMapsApi()
-      .then((google) => {
-        if (!isMounted || !google?.maps?.places || !inputRef.current) {
+    let mountTimeoutId = null;
+    let focusTimeoutId = null;
+
+    const mountAutocomplete = async () => {
+      try {
+        const placesLibrary = await loadGooglePlacesLibrary();
+        if (!isMounted || !autocompleteContainerRef.current) {
           return;
         }
 
-        if (listenerRef.current) {
-          google.maps.event.removeListener(listenerRef.current);
+        const PlaceAutocompleteElement = placesLibrary?.PlaceAutocompleteElement;
+        if (!PlaceAutocompleteElement || !autocompleteContainerRef.current) {
+          return;
         }
-        autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
-          componentRestrictions: { country: 'za' },
-          fields: ['formatted_address', 'geometry', 'place_id', 'name'],
-          types: ['geocode'],
-        });
-        listenerRef.current = autocompleteRef.current.addListener('place_changed', () => {
-          window.setTimeout(() => {
+
+        if (!autocompleteElementRef.current) {
+          const element = new PlaceAutocompleteElement();
+          element.className = compact ? 'sb-place-autocomplete compact' : 'sb-place-autocomplete';
+          element.setAttribute('aria-label', 'Search address');
+          element.includedRegionCodes = ['za'];
+          if (placeholder) {
+            element.setAttribute('placeholder', placeholder);
+          }
+
+          const handlePlaceSelect = async (event) => {
             try {
-              const place = autocompleteRef.current?.getPlace?.();
-              const selectedValue = inputRef.current?.value || '';
-              const parsed = extractPlaceResult(place, selectedValue);
-              const resolved = {
-                ...parsed,
-                location: selectedValue || parsed.location || '',
-              };
-              setLocalValue(resolved.location || '');
-              onPlaceSelect?.(resolved);
+              const prediction = event.placePrediction;
+              const place = prediction?.toPlace ? prediction.toPlace() : null;
+              if (!place) {
+                return;
+              }
+              if (place.fetchFields) {
+                await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+              }
+              onPlaceSelect?.(extractPlaceResult(place, value || '', prediction?.placeId || ''));
+              setIsOpen(false);
             } catch (error) {
               console.error('Google place selection failed', error);
             }
-          }, 0);
-        });
-      })
-      .catch((error) => {
+          };
+
+          autocompleteElementRef.current = element;
+          placeSelectHandlerRef.current = handlePlaceSelect;
+          element.addEventListener('gmp-select', handlePlaceSelect);
+        }
+
+        if (!autocompleteContainerRef.current.contains(autocompleteElementRef.current)) {
+          autocompleteContainerRef.current.innerHTML = '';
+          autocompleteContainerRef.current.appendChild(autocompleteElementRef.current);
+        }
+
+        focusTimeoutId = window.setTimeout(() => {
+          autocompleteElementRef.current?.focus?.();
+        }, 30);
+      } catch (error) {
         console.error('Google Maps autocomplete failed to load', error);
-      });
+      }
+    };
+
+    mountTimeoutId = window.setTimeout(() => {
+      void mountAutocomplete();
+    }, 30);
 
     return () => {
       isMounted = false;
-      if (listenerRef.current && window.google?.maps?.event) {
-        window.google.maps.event.removeListener(listenerRef.current);
-        listenerRef.current = null;
+      if (mountTimeoutId != null) {
+        window.clearTimeout(mountTimeoutId);
+      }
+      if (focusTimeoutId != null) {
+        window.clearTimeout(focusTimeoutId);
       }
     };
-  }, [onPlaceSelect, onTextChange, readOnly]);
+  }, [compact, isOpen, onPlaceSelect, placeholder, readOnly, value]);
 
-  return <div className={[compact ? 'location-field compact' : 'location-field'].join(' ').trim()}><input ref={inputRef} className={className} title={title || localValue || ''} value={localValue || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => { const nextValue = event.target.value; setLocalValue(nextValue); onTextChange?.(nextValue); }} /></div>;
+  return <div ref={wrapperRef} className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : '', isOpen ? 'is-open' : ''].join(' ').trim()}><input className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{!readOnly && hasGoogleMapsApiKey() ? <button className="location-search-button" type="button" title="Search with Google Maps" onClick={() => setIsOpen((current) => !current)}>{renderSearchIcon()}</button> : null}{hasCoordinates ? <button className="location-pin-button" type="button" title="View map" onClick={onOpenMap}>{renderPinIcon()}</button> : null}{isOpen ? <div className="location-autocomplete-popover"><div ref={autocompleteContainerRef} className="location-autocomplete-host" /><button className="ghost-button location-autocomplete-close" type="button" onClick={() => setIsOpen(false)}>Close</button></div> : null}</div>;
 }
 
 function LocationMapPreview({ location }) {
@@ -3328,6 +3386,8 @@ function renderEventFields(
             className="text-input"
             onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: "", locationLat: null, locationLng: null }))}
             onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))}
+            onOpenMap={() => openLocationPreview({ name: form.name || "New event", location: form.location || "", locationLat: form.locationLat, locationLng: form.locationLng })}
+            hasCoordinates={typeof form.locationLat === "number" && typeof form.locationLng === "number"}
           />
         </label>
       <label>
@@ -3419,7 +3479,7 @@ function renderEventFields(
 function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit }) {
     if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
   if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;
-  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} compact />;
+  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
   if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value)} />;
   if (columnKey === 'exVatAuto') return <span title={String(event.exVatAuto || '')}>{event.exVatAuto || ''}</span>;
   if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value)} />;
