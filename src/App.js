@@ -777,8 +777,9 @@ function DashboardApp() {
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
       .filter((event) => getEventMonth(event) === logisticsDialog.month)
       .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
+      .filter((event) => !hasUserAttendantBranchRestrictions || (event.branch || []).some((branchKey) => currentUserAssignedBranches.includes(branchKey)))
       .sort((left, right) => sortEvents(left, right));
-  }, [events, logisticsDialog.isOpen, logisticsDialog.month, selectedWorkspaceYear]);
+  }, [currentUserAssignedBranches, events, hasUserAttendantBranchRestrictions, logisticsDialog.isOpen, logisticsDialog.month, selectedWorkspaceYear]);
   const logisticsRows = useMemo(() => {
     if (!logisticsDialog.selectedDate) {
       return [];
@@ -806,6 +807,7 @@ function DashboardApp() {
           id: event.id,
           clientName: event.name || 'Untitled event',
           eventName: event.eventTitle || '',
+          addressLabel: event.location || '',
           productLabel: (event.products || []).map((item) => productFullNames[item] || item).join(', ') || '-',
           productColor: (event.products || []).length ? (productStyles[(event.products || [])[0]]?.background || '#5b74b8') : '#60708b',
           attendantLabel: visibleAttendants.join(', ') || 'Unassigned',
@@ -3368,7 +3370,7 @@ function DashboardApp() {
         </ModalShell>
       ) : null}
       {logisticsDialog.isOpen ? (
-        <ModalShell title={`Logistics - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog} panelClassName="logistics-modal-panel">
+        <ModalShell title={`Manager - Logistics manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog} panelClassName="logistics-modal-panel">
           <div className="logistics-sheet">
             <div className="logistics-toolbar">
               <div className="logistics-day-nav">
@@ -3418,10 +3420,10 @@ function DashboardApp() {
                     <div className="logistics-event-card">
                       <div className="logistics-event-copy">
                         <strong title={row.clientName}>{row.clientName}</strong>
-                        <span title={row.eventName || 'No event name'}>{row.eventName || 'No event name'}</span>
-                        <small title={`${row.productLabel} • ${row.attendantLabel}`}>
+                        <span title={[row.eventName || 'No event name', row.addressLabel || 'No address set'].join(' - ')}>{row.eventName || 'No event name'} - {row.addressLabel || 'No address set'}</span>
+                        <small title={`${row.productLabel} | ${row.attendantLabel}`}>
                           <span style={{ color: row.productColor }}>{row.productLabel}</span>
-                          {' • '}
+                          {' | '}
                           <span className="logistics-attendant-line">{row.attendantLabel}</span>
                         </small>
                       </div>
@@ -4916,6 +4918,7 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
   doc.save(`selfiebox-commission-${year}-${month.toLowerCase()}-${String(attendant || 'sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`);
 }
 export default App;
+
 
 
 
