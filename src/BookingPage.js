@@ -152,20 +152,22 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect }) {
         listenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
           const place = autocompleteRef.current?.getPlace?.();
           const parsed = extractPlaceResult(place, "");
-          const committedAddress =
-            parsed.location ||
-            place?.formatted_address ||
-            place?.name ||
-            inputRef.current?.value ||
-            "";
-          if (inputRef.current && committedAddress) {
-            inputRef.current.value = committedAddress;
-          }
-          onChange(committedAddress);
-          onPlaceSelect({
-            ...parsed,
-            location: committedAddress,
-          });
+          window.setTimeout(() => {
+            const committedAddress =
+              inputRef.current?.value ||
+              parsed.location ||
+              place?.formatted_address ||
+              place?.name ||
+              "";
+            if (inputRef.current && committedAddress) {
+              inputRef.current.value = committedAddress;
+            }
+            onChange(committedAddress);
+            onPlaceSelect({
+              ...parsed,
+              location: committedAddress,
+            });
+          }, 0);
         });
       })
       .catch((error) => {
