@@ -15,6 +15,44 @@ function buildBookingPdfFilename(payload) {
   return `${companyPart}_${datePart}_${productPart}.pdf`;
 }
 
+function buildBookingSummaryLines(payload) {
+  const formData = payload.formData || {};
+  return [
+    ["Client name", payload.eventName],
+    ["Event name", formData.eventName || payload.eventTitle || "-"],
+    ["Product", (payload.productNames || []).join(", ") || formData.product || "-"],
+    ["Booking type", formData.customerType || "-"],
+    ["Contact person", formData.contactPerson || "-"],
+    ["Cell", formData.cell || "-"],
+    ["Email", formData.email || "-"],
+    ["Date", formData.eventDate || "-"],
+    ["Region", formData.region || payload.regionName || "-"],
+    ["Address", formData.address || "-"],
+    ["POC Name", formData.pointOfContactName || "-"],
+    ["POC Contact #", formData.pointOfContactNumber || "-"],
+    ["Setup time", formData.setupTime || "-"],
+    ["Event start time", formData.eventStartTime || "-"],
+    ["Event finish time", formData.eventFinishTime || "-"],
+    ["Optional extras", Array.isArray(formData.optionalExtras) && formData.optionalExtras.length ? formData.optionalExtras.join(", ") : "-"],
+    ["Design yourself", formData.designYourself || "-"],
+    ["Design/Artwork Status", payload.designStatus || "N/A"],
+    ["Attendant", payload.attendantName || "Attendant not yet assigned"],
+    ["Notes / Special Instructions", formData.notes || "-"],
+  ];
+}
+
+function buildSummaryHtml(payload) {
+  return buildBookingSummaryLines(payload)
+    .map(([label, value]) => `<li><strong>${label}:</strong> ${value}</li>`)
+    .join("");
+}
+
+function buildSummaryText(payload) {
+  return buildBookingSummaryLines(payload)
+    .map(([label, value]) => `${label}: ${value}`)
+    .join("\n");
+}
+
 export const sendBookingSubmissionEmail = internalAction({
   args: {
     bookingId: v.id("eventBookings"),
@@ -50,33 +88,32 @@ export const sendBookingSubmissionEmail = internalAction({
     }
 
     const pdfBase64 = pdfBuffer;
-    const subject = `Booking form received - ${payload.eventName}`;
+    const subject = `SelfieBox booking form Received - ${payload.eventName} | ${payload.formData.eventDate || "-"}`;
     const ccRecipient = payload.creatorEmail || "selfie@selfiebox.co.za";
+    const replyTo = payload.creatorEmail || "selfie@selfiebox.co.za";
+    const summaryHtml = buildSummaryHtml(payload);
+    const summaryText = buildSummaryText(payload);
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2a44;">
         <h2 style="margin-bottom: 12px;">SelfieBox booking form received</h2>
-        <p>Thank you for completing your booking form.</p>
-        <p><strong>Booking:</strong> ${payload.eventName}</p>
-        <p><strong>Event name:</strong> ${payload.formData.eventName || payload.eventTitle || "-"}</p>
-        <p><strong>Contact person:</strong> ${payload.formData.contactPerson}</p>
-        <p><strong>Email:</strong> ${payload.formData.email}</p>
-        <p><strong>Date:</strong> ${payload.formData.eventDate || "-"}</p>
-        <p><strong>Product:</strong> ${(payload.productNames || []).join(", ") || payload.formData.product || "-"}</p>
+        <p>Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available—so be sure to keep it safe.</p>
+        <p><strong>Summary of your booking:</strong></p>
+        <ul>${summaryHtml}</ul>
         <p><a href="${payload.linkUrl}" style="display:inline-block;padding:10px 16px;background:#2e65ff;color:#ffffff;text-decoration:none;border-radius:8px;">Open booking link</a></p>
-        <p>The completed booking form PDF is attached for reference.</p>
+        <p>Your booking form is attached for easy reference. If you have any questions, just reply to this message—we’re happy to help!</p>
       </div>
     `;
     const text = [
       "SelfieBox booking form received",
       "",
-      `Booking: ${payload.eventName}`,
-      `Event name: ${payload.formData.eventName || payload.eventTitle || "-"}`,
-      `Contact person: ${payload.formData.contactPerson}`,
-      `Email: ${payload.formData.email}`,
-      `Date: ${payload.formData.eventDate || "-"}`,
-      `Product: ${(payload.productNames || []).join(", ") || payload.formData.product || "-"}`,
+      "Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available—so be sure to keep it safe.",
+      "",
+      "Summary of your booking:",
+      summaryText,
       "",
       `Booking link: ${payload.linkUrl}`,
+      "",
+      "Your booking form is attached for easy reference. If you have any questions, just reply to this message—we’re happy to help!",
     ].join("\n");
 
     const response = await fetch("https://api.resend.com/emails", {
@@ -90,6 +127,7 @@ export const sendBookingSubmissionEmail = internalAction({
         to: [payload.formData.email],
         cc: [ccRecipient],
         bcc: ["info@selfiebox.co.za"],
+        reply_to: replyTo,
         subject,
         html,
         text,
