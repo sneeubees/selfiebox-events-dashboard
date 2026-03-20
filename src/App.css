@@ -223,10 +223,6 @@ button { cursor: pointer; }
 .location-field { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .location-field.compact { gap: 4px; }
 .location-field .inline-input, .location-field .text-input { flex: 1; min-width: 0; }
-.location-pin-button { width: 26px; height: 26px; min-width: 26px; padding: 0; border: 1px solid #cfd9ee; border-radius: 999px; background: #eef3ff; color: #36559a; display: inline-flex; align-items: center; justify-content: center; }
-.location-pin-button:hover { background: #dfe8ff; }
-.location-pin-button:disabled { opacity: 0.45; cursor: not-allowed; background: #f4f7fc; color: #7f8ea7; }
-.location-pin-button svg { width: 14px; height: 14px; }
 .pac-container { min-width: 320px !important; max-width: 520px !important; z-index: 9999 !important; }
 .drawer-location-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .drawer-location-text, .map-preview-address { font-size: 0.7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -835,7 +831,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .search-clear-button,
 :root[data-theme="dark"] .profile-upload-button,
 :root[data-theme="dark"] .month-export-button,
-:root[data-theme="dark"] .location-pin-button,
 :root[data-theme="dark"] .modal-close-x,
 :root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .workspace-select-wrap select,
@@ -924,7 +919,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .profile-upload-button,
 :root[data-theme="dark"] .saved-filter-chip-button,
 :root[data-theme="dark"] .month-export-button,
-:root[data-theme="dark"] .location-pin-button,
 :root[data-theme="dark"] .modal-close-x {
   color: #c6d7ff;
 }

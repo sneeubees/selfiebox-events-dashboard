@@ -3067,7 +3067,7 @@ function buildGoogleMapsExternalUrl(location) {
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(location?.address || location?.location || '');
 }
 
-function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect, onOpenMap, hasCoordinates }) {
+function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect }) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const listenerRef = useRef(null);
@@ -3124,7 +3124,7 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     };
   }, [onPlaceSelect, onTextChange, readOnly]);
 
-  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{onOpenMap ? <button className="location-pin-button" type="button" title={hasCoordinates ? "View map" : "Select an address first"} onClick={onOpenMap} disabled={!hasCoordinates}>{renderPinIcon()}</button> : null}</div>;
+  return <div className={[compact ? 'location-field compact' : 'location-field'].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} /></div>;
 }
 
 function LocationMapPreview({ location }) {
@@ -3313,18 +3313,16 @@ function renderEventFields(
           ))}
         </select>
       </label>
-      <label className="full-span">
-        <span>Location</span>
-        <LocationInputField
-          value={form.location || ""}
-          placeholder="Start typing address"
-          className="text-input"
-          onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: "", locationLat: null, locationLng: null }))}
-          onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))}
-          onOpenMap={() => openLocationPreview({ name: form.name || "New event", location: form.location || "", locationLat: form.locationLat, locationLng: form.locationLng })}
-          hasCoordinates={typeof form.locationLat === "number" && typeof form.locationLng === "number"}
-        />
-      </label>
+        <label className="full-span">
+          <span>Location</span>
+          <LocationInputField
+            value={form.location || ""}
+            placeholder="Start typing address"
+            className="text-input"
+            onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: "", locationLat: null, locationLng: null }))}
+            onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))}
+          />
+        </label>
       <label>
         <span>Payment</span>
         <select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>
@@ -3414,7 +3412,7 @@ function renderEventFields(
 function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit }) {
     if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
   if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;
-  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
+  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} compact />;
   if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value)} />;
   if (columnKey === 'exVatAuto') return <span title={String(event.exVatAuto || '')}>{event.exVatAuto || ''}</span>;
   if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value)} />;
