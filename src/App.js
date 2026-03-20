@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
@@ -3143,6 +3143,7 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const listenerRef = useRef(null);
+  const initPromiseRef = useRef(null);
   const textChangeRef = useRef(onTextChange);
   const placeSelectRef = useRef(onPlaceSelect);
 
@@ -3151,23 +3152,21 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     placeSelectRef.current = onPlaceSelect;
   }, [onPlaceSelect, onTextChange]);
 
-  useEffect(() => {
-    if (readOnly || !hasGoogleMapsApiKey()) {
-      return;
+  const ensureAutocomplete = useCallback(() => {
+    if (readOnly || !hasGoogleMapsApiKey() || !inputRef.current) {
+      return Promise.resolve();
     }
-    if (!inputRef.current) {
-      return undefined;
+    if (autocompleteRef.current) {
+      return Promise.resolve();
+    }
+    if (initPromiseRef.current) {
+      return initPromiseRef.current;
     }
 
-    let cancelled = false;
-    void loadGoogleMapsApi()
+    initPromiseRef.current = loadGoogleMapsApi()
       .then((google) => {
-        if (cancelled || !google?.maps?.places || !inputRef.current) {
+        if (!google?.maps?.places || !inputRef.current || autocompleteRef.current) {
           return;
-        }
-        if (listenerRef.current && window.google?.maps?.event) {
-          window.google.maps.event.removeListener(listenerRef.current);
-          listenerRef.current = null;
         }
         autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
           componentRestrictions: { country: 'za' },
@@ -3197,18 +3196,34 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
       })
       .catch((error) => {
         console.error('Failed to mount board address autocomplete', error);
+      })
+      .finally(() => {
+        initPromiseRef.current = null;
       });
 
+    return initPromiseRef.current;
+  }, [readOnly]);
+
+  useEffect(() => {
+    if (readOnly || !hasGoogleMapsApiKey()) {
+      return;
+    }
+    void ensureAutocomplete();
+
     return () => {
-      cancelled = true;
       if (listenerRef.current && window.google?.maps?.event) {
         window.google.maps.event.removeListener(listenerRef.current);
         listenerRef.current = null;
       }
+      autocompleteRef.current = null;
+      initPromiseRef.current = null;
     };
-  }, [readOnly]);
+  }, [ensureAutocomplete, readOnly]);
 
-  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} autoComplete="new-password" spellCheck={false} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} onBlur={() => {
+  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} autoComplete="new-password" spellCheck={false} placeholder={placeholder} onFocus={(event) => {
+    void ensureAutocomplete();
+    onFocus?.(event);
+  }} onChange={(event) => onTextChange?.(event.target.value)} onBlur={() => {
     const nextValue = inputRef.current?.value || '';
     onTextChange?.(nextValue);
   }} />{typeof onOpenMap === 'function' ? <button className="location-pin-button" type="button" title={hasCoordinates ? 'View map' : 'Select an address first'} disabled={!hasCoordinates} onClick={onOpenMap}>{renderPinIcon()}</button> : null}</div>;
