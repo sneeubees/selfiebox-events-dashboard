@@ -114,6 +114,7 @@ export default defineSchema({
     name: v.string(),
     abbreviation: v.optional(v.string()),
     branchKey: v.optional(v.string()),
+    email: v.optional(v.string()),
     color: v.string(),
     order: v.number(),
     isActive: v.boolean(),

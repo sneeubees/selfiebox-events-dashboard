@@ -3,9 +3,9 @@ import { v } from "convex/values";
 import { PAYMENT_OPTIONS, PAYMENT_STYLES, PRODUCT_OPTIONS, PRODUCT_STYLES, seedEvents, STATUS_OPTIONS, STATUS_STYLES } from "../seedData";
 
 const defaultBranchOptions = [
-  { optionKey: "CT", name: "Cape Town", abbreviation: "CT", color: "#d7e5f5", order: 0 },
-  { optionKey: "KZN", name: "KwaZulu-Natal", abbreviation: "KZN", color: "#ffe1b8", order: 1 },
-  { optionKey: "GP", name: "Gauteng", abbreviation: "GP", color: "#c8ddf7", order: 2 },
+  { optionKey: "CT", name: "Cape Town", abbreviation: "CT", color: "#d7e5f5", email: "", order: 0 },
+  { optionKey: "KZN", name: "KwaZulu-Natal", abbreviation: "KZN", color: "#ffe1b8", email: "", order: 1 },
+  { optionKey: "GP", name: "Gauteng", abbreviation: "GP", color: "#c8ddf7", email: "", order: 2 },
 ];
 
 const defaultProductOptions = PRODUCT_OPTIONS.map((fullName, index) => ({
@@ -59,6 +59,7 @@ function toLabelDto(record) {
     name: record.name,
     abbreviation: record.abbreviation || "",
     branchKey: record.branchKey || "",
+    email: record.email || "",
     color: record.color,
     order: record.order,
   };
@@ -289,6 +290,7 @@ export const upsert = mutation({
     name: v.string(),
     abbreviation: v.optional(v.string()),
     branchKey: v.optional(v.string()),
+    email: v.optional(v.string()),
     color: v.string(),
     order: v.number(),
   },
@@ -322,6 +324,7 @@ export const upsert = mutation({
       name: args.name,
       abbreviation: args.abbreviation || "",
       branchKey: args.branchKey || "",
+      email: args.email || "",
       color: args.color,
       order: args.order,
       isActive: true,

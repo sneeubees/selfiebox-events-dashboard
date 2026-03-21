@@ -96,9 +96,9 @@ const eventDefaults = {
 };
 
 const defaultBranchOptions = [
-  { abbreviation: 'CT', fullName: 'Cape Town', color: '#d7e5f5' },
-  { abbreviation: 'KZN', fullName: 'KwaZulu-Natal', color: '#ffe1b8' },
-  { abbreviation: 'GP', fullName: 'Gauteng', color: '#c8ddf7' },
+  { abbreviation: 'CT', fullName: 'Cape Town', color: '#d7e5f5', email: '' },
+  { abbreviation: 'KZN', fullName: 'KwaZulu-Natal', color: '#ffe1b8', email: '' },
+  { abbreviation: 'GP', fullName: 'Gauteng', color: '#c8ddf7', email: '' },
 ];
 
 const defaultProductOptions = PRODUCT_OPTIONS.map((fullName) => ({
@@ -222,6 +222,11 @@ function parseNumericCellValue(value) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isValidCoZaEmail(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@(?:[a-z0-9-]+\.)+co\.za$/i.test(normalized);
 }
 
 function getColumnWidth(column) {
@@ -367,6 +372,7 @@ function DashboardApp() {
   const [newBranchFullName, setNewBranchFullName] = useState('');
   const [newBranchAbbreviation, setNewBranchAbbreviation] = useState('');
   const [newBranchColor, setNewBranchColor] = useState('#b8d9ff');
+  const [newBranchEmail, setNewBranchEmail] = useState('');
   const [branchDrafts, setBranchDrafts] = useState({});
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [productOptions, setProductOptions] = useState(defaultProductOptions);
@@ -1236,7 +1242,7 @@ function DashboardApp() {
     const sortByOrder = (left, right) => left.order - right.order;
     const sortByNameThenOrder = (left, right) => left.name.localeCompare(right.name) || sortByOrder(left, right);
 
-    const branch = (byColumn.branch || []).slice().sort(sortByNameThenOrder).map((option) => ({ abbreviation: option.abbreviation || option.optionKey, fullName: option.name, color: option.color }));
+    const branch = (byColumn.branch || []).slice().sort(sortByNameThenOrder).map((option) => ({ abbreviation: option.abbreviation || option.optionKey, fullName: option.name, color: option.color, email: option.email || '' }));
     const products = (byColumn.products || []).slice().sort(sortByNameThenOrder).map((option) => ({ optionKey: option.optionKey, abbreviation: option.abbreviation || abbreviateLabel(option.name || option.optionKey), fullName: sanitizeProductLabel(option.name), color: option.color }));
     const status = (byColumn.status || []).slice().sort(sortByNameThenOrder).map((option) => ({ name: option.name, color: option.color }));
     const attendants = (byColumn.attendants || []).slice().sort(sortByNameThenOrder).map((option) => ({ fullName: option.name, branchKey: option.branchKey || '' }));
@@ -1292,8 +1298,8 @@ function DashboardApp() {
     };
   }, [adminMenuColumn]);
 
-  const persistLabelOption = (columnKey, optionKey, name, abbreviation, color, order, branchKey = '') => {
-    void upsertLabelOptionMutation({ columnKey, optionKey, name, abbreviation: abbreviation || '', color, order, branchKey }).catch((error) => {
+  const persistLabelOption = (columnKey, optionKey, name, abbreviation, color, order, branchKey = '', email = '') => {
+    void upsertLabelOptionMutation({ columnKey, optionKey, name, abbreviation: abbreviation || '', color, order, branchKey, email }).catch((error) => {
       console.error('Failed to persist label option', error);
     });
   };
@@ -2529,14 +2535,19 @@ function DashboardApp() {
 
   const openBranchManager = () => {
     setAdminMenuColumn(null);
-    setBranchDrafts(Object.fromEntries(branchOptions.map((option) => [option.abbreviation, { abbreviation: option.abbreviation, fullName: option.fullName, color: option.color }])));
+    setBranchDrafts(Object.fromEntries(branchOptions.map((option) => [option.abbreviation, { abbreviation: option.abbreviation, fullName: option.fullName, color: option.color, email: option.email || '' }])));
     setBranchManagerOpen(true);
   };
 
   const addBranchOption = () => {
     const fullName = newBranchFullName.trim();
     const abbreviation = newBranchAbbreviation.trim().toUpperCase();
+    const email = newBranchEmail.trim().toLowerCase();
     if (!fullName || !abbreviation || abbreviation.length > 7) {
+      return;
+    }
+    if (!isValidCoZaEmail(email)) {
+      openNotice('Please enter a valid .co.za email address.');
       return;
     }
     if (branchOptions.some((option) => option.abbreviation.toLowerCase() === abbreviation.toLowerCase())) {
@@ -2547,20 +2558,21 @@ function DashboardApp() {
       openNotice('That branch name already exists.');
       return;
     }
-    const newOption = { abbreviation, fullName, color: newBranchColor };
-    persistLabelOption('branch', abbreviation, fullName, abbreviation, newBranchColor, branchOptions.length);
+    const newOption = { abbreviation, fullName, color: newBranchColor, email };
+    persistLabelOption('branch', abbreviation, fullName, abbreviation, newBranchColor, branchOptions.length, '', email);
     setBranchOptions((current) => [...current, newOption]);
     setBranchDrafts((current) => ({ ...current, [abbreviation]: newOption }));
     setNewBranchFullName('');
     setNewBranchAbbreviation('');
     setNewBranchColor('#b8d9ff');
+    setNewBranchEmail('');
   };
 
   const updateBranchDraft = (branchKey, key, value) => {
     setBranchDrafts((current) => ({
       ...current,
       [branchKey]: {
-        ...(current[branchKey] || { abbreviation: branchKey, fullName: branchKey, color: '#b8d9ff' }),
+        ...(current[branchKey] || { abbreviation: branchKey, fullName: branchKey, color: '#b8d9ff', email: '' }),
         [key]: key === 'abbreviation' ? value.toUpperCase().slice(0, 7) : value,
       },
     }));
@@ -2571,8 +2583,13 @@ function DashboardApp() {
     const nextFullName = draft?.fullName?.trim();
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
     const nextColor = draft?.color || '#b8d9ff';
+    const nextEmail = String(draft?.email || '').trim().toLowerCase();
     if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 7) {
       openNotice('Please enter a full name and an abbreviation of 7 characters or less.');
+      return;
+    }
+    if (!isValidCoZaEmail(nextEmail)) {
+      openNotice('Please enter a valid .co.za email address.');
       return;
     }
     const duplicateAbbreviation = branchOptions.some((option) => option.abbreviation !== branchKey && option.abbreviation.toLowerCase() === nextAbbreviation.toLowerCase());
@@ -2586,11 +2603,11 @@ function DashboardApp() {
       return;
     }
 
-    persistLabelOption('branch', nextAbbreviation, nextFullName, nextAbbreviation, nextColor, branchOptions.findIndex((option) => option.abbreviation === branchKey));
+    persistLabelOption('branch', nextAbbreviation, nextFullName, nextAbbreviation, nextColor, branchOptions.findIndex((option) => option.abbreviation === branchKey), '', nextEmail);
       if (nextAbbreviation !== branchKey) {
         removeLabelOption('branch', branchKey);
       }
-      setBranchOptions((current) => current.map((option) => (option.abbreviation === branchKey ? { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } : option)));
+      setBranchOptions((current) => current.map((option) => (option.abbreviation === branchKey ? { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor, email: nextEmail } : option)));
     if (nextAbbreviation !== branchKey) {
       replaceEvents((current) => current.map((event) => ({
         ...event,
@@ -2604,12 +2621,12 @@ function DashboardApp() {
       setBranchDrafts((current) => {
         const nextDrafts = { ...current };
         delete nextDrafts[branchKey];
-        nextDrafts[nextAbbreviation] = { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor };
+        nextDrafts[nextAbbreviation] = { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor, email: nextEmail };
         return nextDrafts;
       });
       return;
     }
-    setBranchDrafts((current) => ({ ...current, [branchKey]: { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } }));
+    setBranchDrafts((current) => ({ ...current, [branchKey]: { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor, email: nextEmail } }));
   };
 
   const deleteBranchOption = async (branchKey) => {
@@ -3487,7 +3504,7 @@ function DashboardApp() {
         </ModalShell>
       ) : null}
       {exportDialog.isOpen ? <ModalShell title={exportDialog.title} onClose={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}><div className="simple-stack export-dialog"><p>Select the columns to include in this export.</p><div className="export-column-grid">{visibleColumns.map((column) => <label className="export-column-option" key={column.key}><input type="checkbox" checked={exportDialog.selectedKeys.includes(column.key)} onChange={() => toggleExportColumn(column.key)} /><span>{displayColumnLabel(column)}</span></label>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setExportDialog((current) => ({ ...current, selectedKeys: visibleColumns.map((column) => column.key) }))}>Select all</button><button className="ghost-button" type="button" onClick={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}>Cancel</button><button className="primary-button" type="button" onClick={runExport}>Export</button></div></div></ModalShell> : null}
-        {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
+        {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><input className="text-input compact-text-input compact-branch-email-input" inputMode="email" autoComplete="off" placeholder="branch@company.co.za" value={newBranchEmail} onChange={(event) => setNewBranchEmail(event.target.value.toLowerCase())} /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><input className="text-input compact-text-input compact-branch-email-input" inputMode="email" autoComplete="off" placeholder="branch@company.co.za" value={branchDrafts[option.abbreviation]?.email ?? option.email ?? ''} onChange={(event) => updateBranchDraft(option.abbreviation, 'email', event.target.value.toLowerCase())} /><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {branchEditorEventId && selectedBranchEvent ? <ModalShell title="Select branch" onClose={() => setBranchEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{branchOptions.map((option) => <button className={["branch-selector-item", selectedBranchEvent.branch.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleBranchOnEvent(selectedBranchEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.abbreviation}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setBranchEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
         {productManagerOpen ? <ModalShell title="Manage product items" onClose={() => setProductManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-product-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newProductFullName} onChange={(event) => { const value = event.target.value; setNewProductFullName(value); setNewProductAbbreviation((current) => (current ? current : abbreviateLabel(value))); }} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newProductAbbreviation || abbreviateLabel(newProductFullName)} onChange={(event) => setNewProductAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newProductColor} onChange={setNewProductColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addProductOption}>Add</button></div><div className="branch-preview-list is-editor">{productOptions.map((option) => <div className="branch-editor-row compact-product-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color} onChange={(value) => updateProductDraft(option.optionKey || option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color, color: getContrastColor(productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color) }} title={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName}>{productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveProductOption(option.optionKey || option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteProductOption(option.optionKey || option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {productEditorEventId && selectedProductEvent ? <ModalShell title="Select product" onClose={() => setProductEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{productOptions.map((option) => <button className={["branch-selector-item", selectedProductEvent.products.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleProductOnEvent(selectedProductEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.fullName}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setProductEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
