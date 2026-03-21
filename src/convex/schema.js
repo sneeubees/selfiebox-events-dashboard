@@ -55,6 +55,7 @@ export default defineSchema({
     assignedBranches: v.optional(v.array(v.string())),
     monthOrder: v.optional(v.array(v.string())),
     columnOrderAfterPayment: v.optional(v.array(v.string())),
+    logisticsDayOrders: v.optional(v.record(v.string(), v.array(v.string()))),
     isApproved: v.boolean(),
     isActive: v.boolean(),
     lastSignInAt: v.optional(v.number()),

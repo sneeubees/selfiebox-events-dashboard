@@ -316,6 +316,7 @@ function DashboardApp() {
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
   const updateColumnOrderAfterPaymentMutation = useMutation(api.users.updateColumnOrderAfterPayment);
+  const updateLogisticsDayOrdersMutation = useMutation(api.users.updateLogisticsDayOrders);
   const updateManagedUserMutation = useMutation(api.users.update);
   const updateStaticColumnLabelMutation = useMutation(api.staticColumnLabels.upsert);
   const removeManagedUserAction = useAction(api.adminUsers.removeWithClerk);
@@ -789,6 +790,9 @@ function DashboardApp() {
       });
   }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
   const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
+  const savedLogisticsDayOrders = currentUser?.logisticsDayOrders && typeof currentUser.logisticsDayOrders === 'object'
+    ? currentUser.logisticsDayOrders
+    : {};
   const logisticsMonthEvents = useMemo(() => {
     if (!logisticsDialog.isOpen || !logisticsDialog.month) {
       return [];
@@ -1928,15 +1932,20 @@ function DashboardApp() {
       .sort((left, right) => sortEvents(left, right));
     const initialDate = monthEvents[0]?.date || buildMonthDateKey(month, selectedWorkspaceYear, 1);
     const initialIds = monthEvents.filter((event) => event.date === initialDate).map((event) => event.id);
+    const initialOrdersByDate = { ...savedLogisticsDayOrders };
+    if (initialDate && !initialOrdersByDate[initialDate]) {
+      initialOrdersByDate[initialDate] = initialIds;
+    }
     setLogisticsDialog({
       isOpen: true,
       month,
       selectedDate: initialDate,
-      ordersByDate: initialDate ? { [initialDate]: initialIds } : {},
+      ordersByDate: initialOrdersByDate,
     });
   };
 
-  const closeLogisticsDialog = () => {
+  const closeLogisticsDialog = async () => {
+    const ordersToSave = logisticsDialog.ordersByDate || {};
     setDraggedLogisticsRowId('');
     setDragOverLogisticsRowId('');
     setLogisticsDialog({
@@ -1945,6 +1954,17 @@ function DashboardApp() {
       selectedDate: '',
       ordersByDate: {},
     });
+    if (!currentUser) {
+      return;
+    }
+    try {
+      await updateLogisticsDayOrdersMutation({
+        logisticsDayOrders: ordersToSave,
+      });
+    } catch (error) {
+      console.error('Failed to save logistics order', error);
+      openNotice('The logistics order could not be saved right now.');
+    }
   };
 
   const changeLogisticsDay = (direction) => {
@@ -3501,7 +3521,7 @@ function DashboardApp() {
         </ModalShell>
       ) : null}
       {logisticsDialog.isOpen ? (
-        <ModalShell title={`Manager - Logistics manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={closeLogisticsDialog} panelClassName="logistics-modal-panel">
+        <ModalShell title={`Manager - Logistics manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={() => { void closeLogisticsDialog(); }} panelClassName="logistics-modal-panel">
           <div className="logistics-sheet">
             <div className="logistics-toolbar">
               <div className="logistics-day-nav">
@@ -3580,7 +3600,7 @@ function DashboardApp() {
               )}
             </div>
             <div className="modal-actions">
-              <button className="ghost-button" type="button" onClick={closeLogisticsDialog}>
+              <button className="ghost-button" type="button" onClick={() => { void closeLogisticsDialog(); }}>
                 Close
               </button>
             </div>

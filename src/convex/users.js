@@ -153,6 +153,7 @@ function toUserDto(record) {
     assignedBranches: Array.isArray(record.assignedBranches) ? record.assignedBranches : [],
     monthOrder: Array.isArray(record.monthOrder) && record.monthOrder.length === monthNames.length ? record.monthOrder : monthNames,
     columnOrderAfterPayment: Array.isArray(record.columnOrderAfterPayment) ? record.columnOrderAfterPayment : [],
+    logisticsDayOrders: record.logisticsDayOrders && typeof record.logisticsDayOrders === "object" ? record.logisticsDayOrders : {},
     role: record.role,
     isApproved: record.isApproved,
     isActive: record.isActive,
@@ -196,6 +197,7 @@ export const syncCurrentUser = mutation({
         assignedBranches: Array.isArray(user.assignedBranches) ? user.assignedBranches : [],
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(user.columnOrderAfterPayment) ? user.columnOrderAfterPayment : [],
+        logisticsDayOrders: user.logisticsDayOrders && typeof user.logisticsDayOrders === "object" ? user.logisticsDayOrders : {},
         role: isPrimaryAdmin ? "admin" : user.role,
         isApproved: isPrimaryAdmin ? true : user.isApproved,
         isActive: isPrimaryAdmin ? true : user.isActive,
@@ -225,6 +227,7 @@ export const syncCurrentUser = mutation({
         assignedBranches: Array.isArray(existingByEmail.assignedBranches) ? existingByEmail.assignedBranches : [],
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
+        logisticsDayOrders: existingByEmail.logisticsDayOrders && typeof existingByEmail.logisticsDayOrders === "object" ? existingByEmail.logisticsDayOrders : {},
         role: isPrimaryAdmin ? "admin" : existingByEmail.role,
         isApproved: isPrimaryAdmin ? true : existingByEmail.isApproved,
         isActive: isPrimaryAdmin ? true : existingByEmail.isActive,
@@ -257,6 +260,7 @@ export const syncCurrentUser = mutation({
       assignedBranches: [],
       monthOrder: monthNames,
       columnOrderAfterPayment: [],
+      logisticsDayOrders: {},
       isApproved: shouldBootstrapAdmin,
       isActive: shouldBootstrapAdmin,
       lastSignInAt: now,
@@ -446,6 +450,32 @@ export const updateColumnOrderAfterPayment = mutation({
   },
 });
 
+export const updateLogisticsDayOrders = mutation({
+  args: {
+    logisticsDayOrders: v.record(v.string(), v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await getCurrentUserRecord(ctx);
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const cleanedEntries = Object.entries(args.logisticsDayOrders || {})
+      .map(([dateKey, ids]) => [
+        String(dateKey || "").trim(),
+        Array.from(new Set((ids || []).map((value) => String(value || "").trim()).filter(Boolean))),
+      ])
+      .filter(([dateKey]) => Boolean(dateKey));
+
+    await ctx.db.patch(user._id, {
+      logisticsDayOrders: Object.fromEntries(cleanedEntries),
+      updatedAt: Date.now(),
+    });
+
+    return toUserDto(await ctx.db.get(user._id));
+  },
+});
+
 export const removeLocalUser = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -536,6 +566,7 @@ export const bootstrapPrimaryAdmin = mutation({
         theme: existingByClerkId.theme === "dark" ? "dark" : "light",
         monthOrder: Array.isArray(existingByClerkId.monthOrder) && existingByClerkId.monthOrder.length === monthNames.length ? existingByClerkId.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByClerkId.columnOrderAfterPayment) ? existingByClerkId.columnOrderAfterPayment : [],
+        logisticsDayOrders: existingByClerkId.logisticsDayOrders && typeof existingByClerkId.logisticsDayOrders === "object" ? existingByClerkId.logisticsDayOrders : {},
         isApproved: true,
         isActive: true,
         lastSignInAt: now,
@@ -567,6 +598,7 @@ export const bootstrapPrimaryAdmin = mutation({
         theme: existingByEmail.theme === "dark" ? "dark" : "light",
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
         columnOrderAfterPayment: Array.isArray(existingByEmail.columnOrderAfterPayment) ? existingByEmail.columnOrderAfterPayment : [],
+        logisticsDayOrders: existingByEmail.logisticsDayOrders && typeof existingByEmail.logisticsDayOrders === "object" ? existingByEmail.logisticsDayOrders : {},
         isApproved: true,
         isActive: true,
         lastSignInAt: now,
@@ -592,6 +624,7 @@ export const bootstrapPrimaryAdmin = mutation({
       theme: "light",
       monthOrder: monthNames,
       columnOrderAfterPayment: [],
+      logisticsDayOrders: {},
       isApproved: true,
       isActive: true,
       lastSignInAt: now,
