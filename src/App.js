@@ -3393,7 +3393,7 @@ function DashboardApp() {
             <div className="commission-summary">
               <div className="commission-summary-grid">
                 <div>
-                  <span>Total Commission</span>
+                  <span>Commission</span>
                   <strong>{currencyFormatter.format(commissionTotals.amount)}</strong>
                 </div>
                 <div>
@@ -3405,7 +3405,7 @@ function DashboardApp() {
                   <strong>{currencyFormatter.format(commissionTotals.travel)}</strong>
                 </div>
                 <div>
-                  <span>Total Commission</span>
+                  <span>Total</span>
                   <strong>{currencyFormatter.format(commissionTotals.grand)}</strong>
                 </div>
               </div>
@@ -4995,12 +4995,12 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   y += 20;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Total Commission: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
+  doc.text(`Commission: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
   doc.text(`Vehicle compensation: ${formatCommissionCurrency(summaryTotals.car)}`, left + 190, y);
   doc.text(`Travel Compensation: ${formatCommissionCurrency(summaryTotals.travel)}`, left + 400, y);
   y += 20;
   doc.setFont('helvetica', 'bold');
-  doc.text(`Total Commission: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
+  doc.text(`Total: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
   y += 26;
   doc.line(left, y, left + 180, y);
   doc.line(left + 240, y, left + 360, y);

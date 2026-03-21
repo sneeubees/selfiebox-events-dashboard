@@ -430,7 +430,7 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-subhead { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
 .commission-subhead strong { color: var(--text); }
 .commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.commission-table { display: grid; grid-template-columns: minmax(0, 2.35fr) 90px 110px 88px 102px 102px 72px 110px; align-items: center; }
+.commission-table { display: grid; grid-template-columns: minmax(0, 3fr) 84px 100px 80px 96px 96px 66px 96px; align-items: center; }
 .commission-table > span,
 .commission-table > input,
 .commission-table > div { min-width: 0; }
