@@ -753,10 +753,10 @@ function DashboardApp() {
           : Math.max(0, Number(override.hoursPayable) || 0);
         const amount = override.amount === '' || override.amount === undefined
           ? automaticAmount
-          : Math.max(0, Number(override.amount) || 0);
+          : Math.max(0, parseNumericCellValue(override.amount));
         const car = override.car === '' || override.car === undefined
           ? 0
-          : Math.max(0, Number(override.car) || 0);
+          : Math.max(0, parseNumericCellValue(override.car));
         const km = override.km === '' || override.km === undefined
           ? automaticKm
           : Math.max(0, Number(override.km) || 0);
@@ -3307,21 +3307,21 @@ function DashboardApp() {
                   type="button"
                   onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}
                 >
-                  All events
+                  Whole Month
                 </button>
                 <button
                   className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
                   type="button"
                   onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}
                 >
-                  1-15
+                  1st to 15th
                 </button>
                 <button
                   className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()}
                   type="button"
                   onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}
                 >
-                  16-end
+                  16th to last day
                 </button>
               </div>
             </div>
@@ -3332,11 +3332,11 @@ function DashboardApp() {
             </div>
             <div className="commission-table-wrap">
               <div className="commission-table commission-table-header">
-                <span>Event Name</span>
+                <span>Event</span>
                 <span>Date</span>
                 <span>Times</span>
                 <span>Hours</span>
-                <span>Amount</span>
+                <span>Commission</span>
                 <span>Car</span>
                 <span>KM</span>
                 <span>Travel</span>
@@ -3356,25 +3356,34 @@ function DashboardApp() {
                       value={row.hoursPayable}
                       onChange={(event) => updateCommissionOverride(row.id, 'hoursPayable', event.target.value)}
                     />
-                    <input
-                      className="text-input commission-input"
-                      inputMode="numeric"
-                      value={row.amount}
-                      onChange={(event) => updateCommissionOverride(row.id, 'amount', event.target.value)}
-                    />
-                    <input
-                      className="text-input commission-input"
-                      inputMode="numeric"
-                      value={row.car}
-                      onChange={(event) => updateCommissionOverride(row.id, 'car', event.target.value)}
-                    />
+                    <div className="commission-currency-field">
+                      <span>R</span>
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.amount}
+                        onChange={(event) => updateCommissionOverride(row.id, 'amount', event.target.value)}
+                      />
+                    </div>
+                    <div className="commission-currency-field">
+                      <span>R</span>
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.car}
+                        onChange={(event) => updateCommissionOverride(row.id, 'car', event.target.value)}
+                      />
+                    </div>
                     <input
                       className="text-input commission-input"
                       inputMode="numeric"
                       value={row.km}
                       onChange={(event) => updateCommissionOverride(row.id, 'km', event.target.value)}
                     />
-                    <span>{row.travel}</span>
+                    <div className="commission-currency-value">
+                      <span>R</span>
+                      <strong>{(Number(row.travel) || 0).toLocaleString('en-ZA')}</strong>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -3382,25 +3391,21 @@ function DashboardApp() {
               )}
             </div>
             <div className="commission-summary">
-              <div className="commission-summary-heading">
-                <strong>Commission for {getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</strong>
-                <span>Totals for {commissionDialog.attendant || '-'}</span>
-              </div>
               <div className="commission-summary-grid">
                 <div>
-                  <span>Total Amount</span>
+                  <span>Total Commission</span>
                   <strong>{currencyFormatter.format(commissionTotals.amount)}</strong>
                 </div>
                 <div>
-                  <span>Total Car</span>
+                  <span>Vehicle compensation</span>
                   <strong>{currencyFormatter.format(commissionTotals.car)}</strong>
                 </div>
                 <div>
-                  <span>Total Travel</span>
+                  <span>Travel Compensation</span>
                   <strong>{currencyFormatter.format(commissionTotals.travel)}</strong>
                 </div>
                 <div>
-                  <span>Commission for {getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
+                  <span>Total Commission</span>
                   <strong>{currencyFormatter.format(commissionTotals.grand)}</strong>
                 </div>
               </div>
@@ -4903,13 +4908,13 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   const pageHeight = doc.internal.pageSize.getHeight();
   const colX = {
     event: left,
-    date: 232,
-    times: 292,
-    hours: 366,
-    amount: 430,
-    car: 486,
-    km: 528,
-    travel: 572,
+    date: 252,
+    times: 314,
+    hours: 390,
+    amount: 458,
+    car: 528,
+    km: 578,
+    travel: 638,
   };
   let y = 56;
 
@@ -4946,11 +4951,11 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Event Name', colX.event, y);
+  doc.text('Event', colX.event, y);
   doc.text('Date', colX.date, y);
   doc.text('Times', colX.times, y);
   doc.text('Hours', colX.hours, y);
-  doc.text('Amount', colX.amount, y);
+  doc.text('Commission', colX.amount, y);
   doc.text('Car', colX.car, y);
   doc.text('KM', colX.km, y);
   doc.text('Travel', colX.travel, y);
@@ -4964,10 +4969,10 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
     ensureSpace(40);
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
-    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 32), colX.event, y);
+    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 42), colX.event, y);
     doc.setFontSize(8);
     doc.setTextColor(108, 119, 138);
-    doc.text(truncatePdfText(row.addressLabel || 'No address set', 40), colX.event, y + 11);
+    doc.text(truncatePdfText(row.addressLabel || 'No address set', 50), colX.event, y + 11);
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
@@ -4990,9 +4995,9 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   y += 20;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Total Amount: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
-  doc.text(`Total Car: ${formatCommissionCurrency(summaryTotals.car)}`, left + 190, y);
-  doc.text(`Total Travel: ${formatCommissionCurrency(summaryTotals.travel)}`, left + 340, y);
+  doc.text(`Total Commission: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
+  doc.text(`Vehicle compensation: ${formatCommissionCurrency(summaryTotals.car)}`, left + 190, y);
+  doc.text(`Travel Compensation: ${formatCommissionCurrency(summaryTotals.travel)}`, left + 400, y);
   y += 20;
   doc.setFont('helvetica', 'bold');
   doc.text(`Total Commission: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
