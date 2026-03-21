@@ -95,8 +95,10 @@ export const sendBookingSubmissionEmail = internalAction({
 
     const pdfBase64 = pdfBuffer;
     const subject = `SelfieBox booking form Received - ${payload.eventName} | ${payload.formData.eventDate || "-"}`;
-    const ccRecipient = payload.creatorEmail || "selfie@selfiebox.co.za";
-    const replyTo = payload.creatorEmail || "selfie@selfiebox.co.za";
+    const ccRecipients = Array.isArray(payload.branchEmails)
+      ? Array.from(new Set(payload.branchEmails.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)))
+      : [];
+    const replyTo = ccRecipients[0] || "selfie@selfiebox.co.za";
     const summaryHtml = buildSummaryHtml(payload);
     const summaryText = buildSummaryText(payload);
     const sentFooter = `Sent from ${payload.sourceIp || "-"} on ${new Date(payload.submittedAt || Date.now()).toLocaleString("en-ZA")} from SelfieBox events dashboard.`;
@@ -135,7 +137,7 @@ export const sendBookingSubmissionEmail = internalAction({
       body: JSON.stringify({
         from: fromEmail,
         to: [payload.formData.email],
-        cc: [ccRecipient],
+        ...(ccRecipients.length ? { cc: ccRecipients } : {}),
         bcc: ["info@selfiebox.co.za"],
         reply_to: replyTo,
         subject,

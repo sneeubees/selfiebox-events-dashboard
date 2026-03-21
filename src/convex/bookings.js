@@ -160,6 +160,32 @@ async function getLabelDisplayMap(ctx, columnKey) {
   return map;
 }
 
+async function getBranchEmailRecipients(ctx, branchValues) {
+  const rows = await ctx.db
+    .query("labelOptions")
+    .withIndex("by_column", (q) => q.eq("columnKey", "branch"))
+    .collect();
+  const emailMap = new Map();
+  rows.forEach((row) => {
+    const email = normalizeString(row.email).toLowerCase();
+    if (!email) {
+      return;
+    }
+    const keys = [row.abbreviation, row.optionKey, row.name]
+      .map((value) => normalizeString(value))
+      .filter(Boolean);
+    keys.forEach((key) => {
+      emailMap.set(key, email);
+    });
+  });
+
+  return Array.from(new Set(
+    (Array.isArray(branchValues) ? branchValues : [])
+      .map((value) => emailMap.get(normalizeString(value)))
+      .filter(Boolean)
+  ));
+}
+
 function normalizeCompareKey(value) {
   return normalizeString(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
@@ -475,11 +501,11 @@ async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) 
   const submittedBy = bookingRecord.submittedByUserId
     ? await ctx.db.get(bookingRecord.submittedByUserId)
     : null;
-  const creatorUser = eventRecord.createdByUserId ? await ctx.db.get(eventRecord.createdByUserId) : null;
   const branchDisplayMap = await getLabelDisplayMap(ctx, "branch");
   const productDisplayMap = await getLabelDisplayMap(ctx, "products");
   const productNames = resolveDisplayValues(eventRecord.products, productDisplayMap);
   const branchNames = resolveDisplayValues(eventRecord.branch, branchDisplayMap);
+  const branchEmails = await getBranchEmailRecipients(ctx, eventRecord.branch);
   const designStatus = await findCustomColumnValueByLabel(ctx, eventRecord, "Designs");
   const attendantName = Array.isArray(eventRecord.attendants) && eventRecord.attendants.length
     ? normalizeString(eventRecord.attendants[0])
@@ -501,8 +527,7 @@ async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) 
     sourceIp: bookingRecord.lastSubmittedIp || "",
     submittedByUserId: bookingRecord.submittedByUserId || null,
     submittedByLabel: submittedBy?.fullName || submittedBy?.email || "",
-    creatorEmail: normalizeString(creatorUser?.email).toLowerCase(),
-    creatorLabel: creatorUser?.fullName || creatorUser?.email || "",
+    branchEmails,
     linkUrl: trimmedBaseUrl ? `${trimmedBaseUrl}/${bookingRecord.token}` : bookingRecord.token,
   };
 }

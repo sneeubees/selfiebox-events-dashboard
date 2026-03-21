@@ -155,6 +155,7 @@ export const seedInitialData = mutation({
           name: option.name,
           abbreviation: option.abbreviation || "",
           branchKey: option.branchKey || "",
+          email: option.email || "",
           color: option.color,
           order: option.order,
           isActive: true,
