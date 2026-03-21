@@ -313,6 +313,7 @@ textarea { resize: vertical; min-height: 110px; }
 .modal-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
 .modal-panel { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
 .logistics-modal-panel { width: min(96vw, 1680px); max-height: 94vh; }
+.commission-modal-panel { max-height: 94vh; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .modal-close-x { width: 24px; height: 24px; border: 0; border-radius: 999px; background: #eef2ff; color: #26427b; font-size: 0.82rem; line-height: 1; }
 .modal-close-x:hover { background: #dfe7ff; }
@@ -413,7 +414,7 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-popup-actions { justify-content: flex-start; flex-wrap: nowrap; align-items: center; margin-top: 8px; }
 .filter-popup-actions .ghost-button,
 .filter-popup-actions .primary-button { min-width: 126px; white-space: nowrap; }
-.commission-sheet { display: grid; gap: 12px; }
+.commission-sheet { display: grid; gap: 12px; min-height: 0; }
 .commission-toolbar { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
 .commission-toolbar label { display: grid; gap: 6px; min-width: 220px; }
 .commission-toolbar select {
@@ -429,7 +430,7 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-periods .ghost-button.is-active { background: #dfe8ff; color: #23427f; }
 .commission-subhead { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
 .commission-subhead strong { color: var(--text); }
-.commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: min(56vh, 680px); }
 .commission-table { display: grid; grid-template-columns: minmax(0, 3fr) 84px 100px 80px 96px 96px 66px 96px; align-items: center; }
 .commission-table > span,
 .commission-table > input,
