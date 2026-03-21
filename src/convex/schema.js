@@ -183,6 +183,17 @@ export default defineSchema({
     })
       .index("by_booking", ["bookingId"])
       .index("by_event", ["eventId"]),
+  commissionSnapshots: defineTable({
+      month: v.string(),
+      year: v.number(),
+      period: v.string(),
+      attendant: v.string(),
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      createdAt: v.number(),
+      createdByUserId: v.optional(v.id("users")),
+    })
+      .index("by_month_attendant", ["year", "month", "attendant"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

@@ -301,6 +301,7 @@ function DashboardApp() {
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
+  const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
   const currentUser = useQuery(api.users.current, {});
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
@@ -344,7 +345,7 @@ function DashboardApp() {
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
-  const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
+  const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -358,6 +359,17 @@ function DashboardApp() {
     period: 'all',
     overrides: {},
   });
+  const [showCommissionSnapshotsModal, setShowCommissionSnapshotsModal] = useState(false);
+  const commissionSnapshots = useQuery(
+    api.commissions.listSnapshots,
+    canAccessDashboard && showCommissionSnapshotsModal && commissionDialog.month && commissionDialog.attendant
+      ? {
+          month: commissionDialog.month,
+          year: selectedWorkspaceYear,
+          attendant: commissionDialog.attendant,
+        }
+      : 'skip'
+  );
   const [logisticsDialog, setLogisticsDialog] = useState({
     isOpen: false,
     month: '',
@@ -1882,6 +1894,7 @@ function DashboardApp() {
   };
 
   const closeCommissionDialog = () => {
+    setShowCommissionSnapshotsModal(false);
     setCommissionDialog({
       isOpen: false,
       month: '',
@@ -2001,13 +2014,35 @@ function DashboardApp() {
       return;
     }
     try {
-      await exportCommissionPdf({
+      const { blob, fileName } = await exportCommissionPdf({
         month: commissionDialog.month,
         year: selectedWorkspaceYear,
         period: commissionDialog.period,
         attendant: commissionDialog.attendant,
         rows: commissionRows,
         totals: commissionTotals,
+      });
+      downloadBlobFile(fileName, blob, 'application/pdf');
+
+      const uploadUrl = await generateEventFileUploadUrl({});
+      const uploadResult = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/pdf',
+        },
+        body: blob,
+      });
+      if (!uploadResult.ok) {
+        throw new Error('Failed to upload the saved commission PDF.');
+      }
+      const { storageId } = await uploadResult.json();
+      await saveCommissionSnapshotMutation({
+        month: commissionDialog.month,
+        year: selectedWorkspaceYear,
+        period: commissionDialog.period,
+        attendant: commissionDialog.attendant,
+        storageId,
+        fileName,
       });
     } catch (error) {
       console.error('Failed to export commission PDF', error);
@@ -3329,6 +3364,19 @@ function DashboardApp() {
               <strong>SelfieBox commission sheet for:</strong>
               <span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
               <span>Attendant: {commissionDialog.attendant || '-'}</span>
+              <button
+                className="commission-saved-trigger"
+                type="button"
+                onClick={() => {
+                  if (!commissionDialog.attendant) {
+                    openNotice('Please choose an attendant first.');
+                    return;
+                  }
+                  setShowCommissionSnapshotsModal(true);
+                }}
+              >
+                Saved PDF's
+              </button>
             </div>
             <div className="commission-table-wrap">
               <div className="commission-table commission-table-header">
@@ -3418,6 +3466,37 @@ function DashboardApp() {
                 Export to PDF
               </button>
             </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {showCommissionSnapshotsModal ? (
+        <ModalShell
+          title={`Saved PDF's - ${commissionDialog.attendant || '-'}`}
+          onClose={() => setShowCommissionSnapshotsModal(false)}
+          panelClassName="commission-snapshots-modal-panel"
+        >
+          <div className="commission-snapshot-list">
+            {commissionSnapshots === undefined ? (
+              <div className="empty-month">Loading saved PDFs...</div>
+            ) : commissionSnapshots.length ? (
+              commissionSnapshots.map((snapshot) => (
+                <article className="commission-snapshot-item" key={snapshot.id}>
+                  <a className="commission-snapshot-link" href={snapshot.url} target="_blank" rel="noreferrer">
+                    {snapshot.fileName}
+                  </a>
+                  <small className="commission-snapshot-log">
+                    Created {new Date(snapshot.createdAt).toLocaleString()}
+                  </small>
+                </article>
+              ))
+            ) : (
+              <div className="empty-month">No saved PDFs for this attendant this month yet.</div>
+            )}
+          </div>
+          <div className="modal-actions">
+            <button className="primary-button" type="button" onClick={() => setShowCommissionSnapshotsModal(false)}>
+              Close
+            </button>
           </div>
         </ModalShell>
       ) : null}
@@ -4744,7 +4823,12 @@ async function buildWorkbookXlsxBuffer({ sheets, columns }) {
 
 function downloadWorkbookFile(filename, contents) {
   const blob = new Blob([contents], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
+  downloadBlobFile(filename, blob, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+function downloadBlobFile(filename, blob, type = 'application/octet-stream') {
+  const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type });
+  const url = URL.createObjectURL(safeBlob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -4810,6 +4894,26 @@ function getCommissionPeriodLabel(month, year, period) {
     return `16-end ${monthLabel}`;
   }
   return `All ${monthLabel}`;
+}
+
+function sanitizeFilenamePart(value, fallback = 'Sheet') {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/[<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || fallback;
+}
+
+function buildCommissionPdfFilename(month, year, period, attendant) {
+  const shortMonth = String(month || '').slice(0, 3);
+  const periodPrefix = period === 'firstHalf'
+    ? '1-15'
+    : period === 'secondHalf'
+      ? '16-lastDay'
+      : 'WholeMonth';
+  return `${periodPrefix}${shortMonth}${year}_${sanitizeFilenamePart(attendant, 'Attendant')}.pdf`;
 }
 
 function buildMonthDateKey(month, year, day) {
@@ -5009,7 +5113,9 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   doc.text('Signature', left, y);
   doc.text('Date', left + 240, y);
 
-  doc.save(`selfiebox-commission-${year}-${month.toLowerCase()}-${String(attendant || 'sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`);
+  const fileName = buildCommissionPdfFilename(month, year, period, attendant);
+  const blob = doc.output('blob');
+  return { blob, fileName };
 }
 export default App;
 
