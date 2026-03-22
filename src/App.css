@@ -521,6 +521,15 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-summary-grid > div { display: grid; gap: 4px; min-width: 0; }
 .commission-summary-grid span { color: var(--muted); font-size: 0.72rem; line-height: 1.25; }
 .commission-summary-grid strong { color: var(--text); font-size: 0.96rem; }
+.commission-rates-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.commission-rates-grid label {
+  display: grid;
+  gap: 6px;
+}
 .commission-snapshots-modal-panel { max-width: min(680px, calc(100vw - 40px)); }
 .commission-snapshot-list { display: grid; gap: 10px; max-height: min(56vh, 520px); overflow: auto; padding-right: 4px; }
 .commission-snapshot-item { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }

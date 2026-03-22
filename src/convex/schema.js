@@ -214,6 +214,18 @@ export default defineSchema({
     })
       .index("by_month_attendant", ["year", "month", "attendant"])
       .index("by_month_attendant_event", ["year", "month", "attendant", "eventId"]),
+  commissionRates: defineTable({
+      singletonKey: v.string(),
+      twoHours: v.number(),
+      threeHours: v.number(),
+      fourHours: v.number(),
+      fiveHours: v.number(),
+      sixPlusHours: v.number(),
+      perKmRate: v.number(),
+      updatedAt: v.number(),
+      updatedByUserId: v.optional(v.id("users")),
+    })
+      .index("by_singleton_key", ["singletonKey"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

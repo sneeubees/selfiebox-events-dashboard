@@ -348,6 +348,7 @@ function DashboardApp() {
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
+  const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -361,7 +362,17 @@ function DashboardApp() {
     period: 'all',
     overrides: {},
   });
+  const [showCommissionRatesModal, setShowCommissionRatesModal] = useState(false);
+  const [commissionRatesForm, setCommissionRatesForm] = useState({
+    twoHours: '500',
+    threeHours: '550',
+    fourHours: '600',
+    fiveHours: '650',
+    sixPlusHours: '1000',
+    perKmRate: '3',
+  });
   const [showCommissionSnapshotsModal, setShowCommissionSnapshotsModal] = useState(false);
+  const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const commissionOverrideRecords = useQuery(
     api.commissions.listOverrides,
     canAccessDashboard && commissionDialog.isOpen && commissionDialog.month && commissionDialog.attendant
@@ -669,6 +680,10 @@ function DashboardApp() {
     }])),
     [branchOptions]
   );
+  const commissionRates = useMemo(
+    () => normalizeCommissionRates(commissionRatesRecord),
+    [commissionRatesRecord]
+  );
   const currentUserAssignedBranches = useMemo(() => Array.isArray(currentUser?.assignedBranches) ? currentUser.assignedBranches : [], [currentUser?.assignedBranches]);
   const hasUserAttendantBranchRestrictions = currentUserAssignedBranches.length > 0;
   const attendantBranchMap = useMemo(() => Object.fromEntries(attendantOptions.map((option) => [option.fullName, option.branchKey || ''])), [attendantOptions]);
@@ -783,7 +798,7 @@ function DashboardApp() {
       })
       .map((event) => {
         const automaticHoursPayable = parseCommissionHours(event.hours);
-        const automaticAmount = calculateCommissionAmount(automaticHoursPayable);
+        const automaticAmount = calculateCommissionAmount(automaticHoursPayable, commissionRates);
         const routeBranchKey = (event.branch || []).find((branchKey) => canAutoCalculateCommissionRoute(event, branchAddressMap[branchKey]))
           || (event.branch || []).find((branchKey) => branchAddressMap[branchKey])
           || '';
@@ -818,12 +833,25 @@ function DashboardApp() {
           locationLng: typeof event.locationLng === 'number' ? event.locationLng : null,
           canAutoCalculateKm: routeBranchKey ? canAutoCalculateCommissionRoute(event, branchAddressMap[routeBranchKey]) : false,
           routeBranchKey,
-          travel: calculateCommissionTravel(km),
+          travel: calculateCommissionTravel(km, commissionRates),
           note,
         };
       });
-  }, [branchAddressMap, commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
+  }, [branchAddressMap, commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents, commissionRates]);
   const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
+  useEffect(() => {
+    if (!commissionRatesRecord) {
+      return;
+    }
+    setCommissionRatesForm({
+      twoHours: String(commissionRatesRecord.twoHours ?? DEFAULT_COMMISSION_RATES.twoHours),
+      threeHours: String(commissionRatesRecord.threeHours ?? DEFAULT_COMMISSION_RATES.threeHours),
+      fourHours: String(commissionRatesRecord.fourHours ?? DEFAULT_COMMISSION_RATES.fourHours),
+      fiveHours: String(commissionRatesRecord.fiveHours ?? DEFAULT_COMMISSION_RATES.fiveHours),
+      sixPlusHours: String(commissionRatesRecord.sixPlusHours ?? DEFAULT_COMMISSION_RATES.sixPlusHours),
+      perKmRate: String(commissionRatesRecord.perKmRate ?? DEFAULT_COMMISSION_RATES.perKmRate),
+    });
+  }, [commissionRatesRecord]);
   useEffect(() => {
     if (!commissionDialog.isOpen || !commissionDialog.month || !commissionDialog.attendant || commissionOverrideRecords === undefined) {
       return;
@@ -1990,6 +2018,7 @@ function DashboardApp() {
       window.clearTimeout(timeoutId);
     });
     commissionOverrideSaveTimeoutsRef.current.clear();
+    setShowCommissionRatesModal(false);
     setShowCommissionSnapshotsModal(false);
     setCommissionDialog({
       isOpen: false,
@@ -2063,6 +2092,36 @@ function DashboardApp() {
     } catch (error) {
       console.error('Failed to auto-calculate commission KM', error);
       openNotice('The driving distance could not be calculated right now.');
+    }
+  };
+
+  const openCommissionRatesModal = () => {
+    setCommissionRatesForm({
+      twoHours: String(commissionRates.twoHours),
+      threeHours: String(commissionRates.threeHours),
+      fourHours: String(commissionRates.fourHours),
+      fiveHours: String(commissionRates.fiveHours),
+      sixPlusHours: String(commissionRates.sixPlusHours),
+      perKmRate: String(commissionRates.perKmRate),
+    });
+    setShowCommissionRatesModal(true);
+  };
+
+  const saveCommissionRates = async () => {
+    try {
+      await saveCommissionRatesMutation({
+        twoHours: Math.max(0, parseNumericCellValue(commissionRatesForm.twoHours)),
+        threeHours: Math.max(0, parseNumericCellValue(commissionRatesForm.threeHours)),
+        fourHours: Math.max(0, parseNumericCellValue(commissionRatesForm.fourHours)),
+        fiveHours: Math.max(0, parseNumericCellValue(commissionRatesForm.fiveHours)),
+        sixPlusHours: Math.max(0, parseNumericCellValue(commissionRatesForm.sixPlusHours)),
+        perKmRate: Math.max(0, parseNumericCellValue(commissionRatesForm.perKmRate)),
+      });
+      setShowCommissionRatesModal(false);
+      openNotice('Commission rates saved.');
+    } catch (error) {
+      console.error('Failed to save commission rates', error);
+      openNotice('The commission rates could not be saved right now.');
     }
   };
 
@@ -3578,6 +3637,15 @@ function DashboardApp() {
                 >
                   Whole Month
                 </button>
+                {currentUser?.role === 'admin' ? (
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={openCommissionRatesModal}
+                  >
+                    Commision rates
+                  </button>
+                ) : null}
                 <button
                   className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
                   type="button"
@@ -3714,6 +3782,76 @@ function DashboardApp() {
               </button>
               <button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>
                 Export to PDF
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {showCommissionRatesModal ? (
+        <ModalShell title="Commision rates" onClose={() => setShowCommissionRatesModal(false)} closeOnScrimClick={false}>
+          <div className="simple-stack">
+            <div className="commission-rates-grid">
+              <label>
+                <span>2 hours and less</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.twoHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, twoHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>3 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.threeHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, threeHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>4 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.fourHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, fourHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>5 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.fiveHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, fiveHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>6 hours and more</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.sixPlusHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, sixPlusHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Rate P/KM</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.perKmRate}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, perKmRate: event.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={() => setShowCommissionRatesModal(false)}>
+                Cancel
+              </button>
+              <button className="primary-button" type="button" onClick={() => void saveCommissionRates()}>
+                Save
               </button>
             </div>
           </div>
@@ -5170,14 +5308,35 @@ function parseCommissionHours(value) {
   return 0;
 }
 
-function calculateCommissionAmount(hoursPayable) {
+const DEFAULT_COMMISSION_RATES = {
+  twoHours: 500,
+  threeHours: 550,
+  fourHours: 600,
+  fiveHours: 650,
+  sixPlusHours: 1000,
+  perKmRate: 3,
+};
+
+function normalizeCommissionRates(rates) {
+  return {
+    twoHours: typeof rates?.twoHours === 'number' ? rates.twoHours : DEFAULT_COMMISSION_RATES.twoHours,
+    threeHours: typeof rates?.threeHours === 'number' ? rates.threeHours : DEFAULT_COMMISSION_RATES.threeHours,
+    fourHours: typeof rates?.fourHours === 'number' ? rates.fourHours : DEFAULT_COMMISSION_RATES.fourHours,
+    fiveHours: typeof rates?.fiveHours === 'number' ? rates.fiveHours : DEFAULT_COMMISSION_RATES.fiveHours,
+    sixPlusHours: typeof rates?.sixPlusHours === 'number' ? rates.sixPlusHours : DEFAULT_COMMISSION_RATES.sixPlusHours,
+    perKmRate: typeof rates?.perKmRate === 'number' ? rates.perKmRate : DEFAULT_COMMISSION_RATES.perKmRate,
+  };
+}
+
+function calculateCommissionAmount(hoursPayable, rates = DEFAULT_COMMISSION_RATES) {
+  const normalizedRates = normalizeCommissionRates(rates);
   const hours = Number(hoursPayable) || 0;
   if (hours <= 0) return 0;
-  if (hours <= 2) return 500;
-  if (hours === 3) return 550;
-  if (hours === 4) return 600;
-  if (hours === 5) return 650;
-  return 1000;
+  if (hours <= 2) return normalizedRates.twoHours;
+  if (hours === 3) return normalizedRates.threeHours;
+  if (hours === 4) return normalizedRates.fourHours;
+  if (hours === 5) return normalizedRates.fiveHours;
+  return normalizedRates.sixPlusHours;
 }
 
 function calculateCommissionTotals(rows) {
@@ -5314,8 +5473,9 @@ async function calculateCommissionRoundTripKm(event, origin) {
   return Math.max(0, Math.round(totalMeters / 1000));
 }
 
-function calculateCommissionTravel(km) {
-  return Math.max(0, Math.round((Number(km) || 0) * 3));
+function calculateCommissionTravel(km, rates = DEFAULT_COMMISSION_RATES) {
+  const normalizedRates = normalizeCommissionRates(rates);
+  return Math.max(0, Math.round((Number(km) || 0) * normalizedRates.perKmRate));
 }
 
 async function exportCommissionPdf({ month, year, period, attendant, rows, totals }) {

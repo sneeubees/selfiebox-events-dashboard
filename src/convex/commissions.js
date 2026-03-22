@@ -1,6 +1,16 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const COMMISSION_RATES_SINGLETON_KEY = "default";
+const DEFAULT_COMMISSION_RATES = {
+  twoHours: 500,
+  threeHours: 550,
+  fourHours: 600,
+  fiveHours: 650,
+  sixPlusHours: 1000,
+  perKmRate: 3,
+};
+
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
@@ -25,6 +35,68 @@ async function requireCurrentUser(ctx) {
 
   return user;
 }
+
+function toRatesDto(row) {
+  return {
+    twoHours: typeof row?.twoHours === "number" ? row.twoHours : DEFAULT_COMMISSION_RATES.twoHours,
+    threeHours: typeof row?.threeHours === "number" ? row.threeHours : DEFAULT_COMMISSION_RATES.threeHours,
+    fourHours: typeof row?.fourHours === "number" ? row.fourHours : DEFAULT_COMMISSION_RATES.fourHours,
+    fiveHours: typeof row?.fiveHours === "number" ? row.fiveHours : DEFAULT_COMMISSION_RATES.fiveHours,
+    sixPlusHours: typeof row?.sixPlusHours === "number" ? row.sixPlusHours : DEFAULT_COMMISSION_RATES.sixPlusHours,
+    perKmRate: typeof row?.perKmRate === "number" ? row.perKmRate : DEFAULT_COMMISSION_RATES.perKmRate,
+    updatedAt: row?.updatedAt || 0,
+  };
+}
+
+export const getRates = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireCurrentUser(ctx);
+    const row = await ctx.db
+      .query("commissionRates")
+      .withIndex("by_singleton_key", (q) => q.eq("singletonKey", COMMISSION_RATES_SINGLETON_KEY))
+      .unique();
+    return toRatesDto(row);
+  },
+});
+
+export const saveRates = mutation({
+  args: {
+    twoHours: v.number(),
+    threeHours: v.number(),
+    fourHours: v.number(),
+    fiveHours: v.number(),
+    sixPlusHours: v.number(),
+    perKmRate: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCurrentUser(ctx);
+    const existing = await ctx.db
+      .query("commissionRates")
+      .withIndex("by_singleton_key", (q) => q.eq("singletonKey", COMMISSION_RATES_SINGLETON_KEY))
+      .unique();
+
+    const payload = {
+      singletonKey: COMMISSION_RATES_SINGLETON_KEY,
+      twoHours: Math.max(0, Number(args.twoHours) || 0),
+      threeHours: Math.max(0, Number(args.threeHours) || 0),
+      fourHours: Math.max(0, Number(args.fourHours) || 0),
+      fiveHours: Math.max(0, Number(args.fiveHours) || 0),
+      sixPlusHours: Math.max(0, Number(args.sixPlusHours) || 0),
+      perKmRate: Math.max(0, Number(args.perKmRate) || 0),
+      updatedAt: Date.now(),
+      updatedByUserId: currentUser._id,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+      return toRatesDto(await ctx.db.get(existing._id));
+    }
+
+    const id = await ctx.db.insert("commissionRates", payload);
+    return toRatesDto(await ctx.db.get(id));
+  },
+});
 
 export const saveSnapshot = mutation({
   args: {
