@@ -36,6 +36,22 @@ async function requireCurrentUser(ctx) {
   return user;
 }
 
+async function requireCommissionUser(ctx) {
+  const user = await requireCurrentUser(ctx);
+  if (!["admin", "manager"].includes(user.role)) {
+    throw new Error("Only admins and managers can manage commission exports.");
+  }
+  return user;
+}
+
+async function requireAdminUser(ctx) {
+  const user = await requireCurrentUser(ctx);
+  if (user.role !== "admin") {
+    throw new Error("Only admins can manage commission exports.");
+  }
+  return user;
+}
+
 function toRatesDto(row) {
   return {
     twoHours: typeof row?.twoHours === "number" ? row.twoHours : DEFAULT_COMMISSION_RATES.twoHours,
@@ -51,7 +67,7 @@ function toRatesDto(row) {
 export const getRates = query({
   args: {},
   handler: async (ctx) => {
-    await requireCurrentUser(ctx);
+    await requireAdminUser(ctx);
     const row = await ctx.db
       .query("commissionRates")
       .withIndex("by_singleton_key", (q) => q.eq("singletonKey", COMMISSION_RATES_SINGLETON_KEY))
@@ -70,7 +86,7 @@ export const saveRates = mutation({
     perKmRate: v.number(),
   },
   handler: async (ctx, args) => {
-    const currentUser = await requireCurrentUser(ctx);
+    const currentUser = await requireAdminUser(ctx);
     const existing = await ctx.db
       .query("commissionRates")
       .withIndex("by_singleton_key", (q) => q.eq("singletonKey", COMMISSION_RATES_SINGLETON_KEY))
@@ -108,7 +124,7 @@ export const saveSnapshot = mutation({
     fileName: v.string(),
   },
   handler: async (ctx, args) => {
-    const currentUser = await requireCurrentUser(ctx);
+    const currentUser = await requireCommissionUser(ctx);
     const now = Date.now();
     const id = await ctx.db.insert("commissionSnapshots", {
       month: args.month,
@@ -131,7 +147,7 @@ export const listSnapshots = query({
     attendant: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    await requireCommissionUser(ctx);
     const rows = await ctx.db
       .query("commissionSnapshots")
       .withIndex("by_month_attendant", (q) => q.eq("year", args.year).eq("month", args.month).eq("attendant", args.attendant))
@@ -160,7 +176,7 @@ export const listOverrides = query({
     attendant: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    await requireCommissionUser(ctx);
     const rows = await ctx.db
       .query("commissionOverrides")
       .withIndex("by_month_attendant", (q) => q.eq("year", args.year).eq("month", args.month).eq("attendant", args.attendant))
@@ -192,7 +208,7 @@ export const saveOverride = mutation({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const currentUser = await requireCurrentUser(ctx);
+    const currentUser = await requireCommissionUser(ctx);
     const existing = await ctx.db
       .query("commissionOverrides")
       .withIndex("by_month_attendant_event", (q) =>

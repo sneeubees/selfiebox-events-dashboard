@@ -2087,7 +2087,7 @@ function DashboardApp() {
     };
 
   const openCommissionDialog = (month) => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
       return;
     }
     const monthEvents = events
@@ -3670,7 +3670,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
