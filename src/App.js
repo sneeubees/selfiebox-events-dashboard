@@ -347,6 +347,7 @@ function DashboardApp() {
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
+  const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -361,6 +362,16 @@ function DashboardApp() {
     overrides: {},
   });
   const [showCommissionSnapshotsModal, setShowCommissionSnapshotsModal] = useState(false);
+  const commissionOverrideRecords = useQuery(
+    api.commissions.listOverrides,
+    canAccessDashboard && commissionDialog.isOpen && commissionDialog.month && commissionDialog.attendant
+      ? {
+          month: commissionDialog.month,
+          year: selectedWorkspaceYear,
+          attendant: commissionDialog.attendant,
+        }
+      : 'skip'
+  );
   const commissionSnapshots = useQuery(
     api.commissions.listSnapshots,
     canAccessDashboard && showCommissionSnapshotsModal && commissionDialog.month && commissionDialog.attendant
@@ -773,6 +784,7 @@ function DashboardApp() {
         const km = override.km === '' || override.km === undefined
           ? automaticKm
           : Math.max(0, Number(override.km) || 0);
+        const note = override.note === undefined ? '' : String(override.note);
         return {
           id: event.id,
           eventName: event.name || 'Untitled event',
@@ -786,10 +798,37 @@ function DashboardApp() {
           car,
           km,
           travel: calculateCommissionTravel(km),
+          note,
         };
       });
   }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
   const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
+  useEffect(() => {
+    if (!commissionDialog.isOpen || !commissionDialog.month || !commissionDialog.attendant || commissionOverrideRecords === undefined) {
+      return;
+    }
+    const nextOverrides = Object.fromEntries(
+      commissionOverrideRecords.map((record) => [
+        record.eventId,
+        {
+          hoursPayable: record.hoursPayable || '',
+          amount: record.amount || '',
+          car: record.car || '',
+          km: record.km || '',
+          note: record.note || '',
+        },
+      ])
+    );
+    setCommissionDialog((current) => {
+      if (!current.isOpen || current.month !== commissionDialog.month || current.attendant !== commissionDialog.attendant) {
+        return current;
+      }
+      return {
+        ...current,
+        overrides: nextOverrides,
+      };
+    });
+  }, [commissionDialog.attendant, commissionDialog.isOpen, commissionDialog.month, commissionOverrideRecords]);
   const savedLogisticsDayOrders = currentUser?.logisticsDayOrders && typeof currentUser.logisticsDayOrders === 'object'
     ? currentUser.logisticsDayOrders
     : {};
@@ -1919,6 +1958,28 @@ function DashboardApp() {
         },
       },
     }));
+    if (!commissionDialog.month || !commissionDialog.attendant) {
+      return;
+    }
+    const currentOverride = commissionDialog.overrides[eventId] || {};
+    const nextOverride = {
+      ...currentOverride,
+      [field]: value,
+    };
+    void saveCommissionOverrideMutation({
+      month: commissionDialog.month,
+      year: selectedWorkspaceYear,
+      attendant: commissionDialog.attendant,
+      eventId,
+      hoursPayable: String(nextOverride.hoursPayable ?? ''),
+      amount: String(nextOverride.amount ?? ''),
+      car: String(nextOverride.car ?? ''),
+      km: String(nextOverride.km ?? ''),
+      note: String(nextOverride.note ?? ''),
+    }).catch((error) => {
+      console.error('Failed to save commission override', error);
+      openNotice('The commission changes could not be saved right now.');
+    });
   };
 
   const openLogisticsDialog = (month) => {
@@ -3346,7 +3407,7 @@ function DashboardApp() {
                 <span>Attendant</span>
                 <select
                   value={commissionDialog.attendant}
-                  onChange={(event) => setCommissionDialog((current) => ({ ...current, attendant: event.target.value }))}
+                  onChange={(event) => setCommissionDialog((current) => ({ ...current, attendant: event.target.value, overrides: {} }))}
                 >
                   <option value="">Select attendant</option>
                   {commissionAttendantNames.map((name) => (
@@ -3403,11 +3464,12 @@ function DashboardApp() {
                 <span>Event</span>
                 <span>Date</span>
                 <span>Times</span>
-                <span>Hours</span>
-                <span>Commission</span>
+                <span>Hrs</span>
+                <span>Comm</span>
                 <span>Car</span>
                 <span>KM</span>
                 <span>Travel</span>
+                <span>Note</span>
               </div>
               {commissionRows.length ? (
                 commissionRows.map((row) => (
@@ -3452,6 +3514,11 @@ function DashboardApp() {
                       <span>R</span>
                       <strong>{(Number(row.travel) || 0).toLocaleString('en-ZA')}</strong>
                     </div>
+                    <input
+                      className="text-input commission-input"
+                      value={row.note}
+                      onChange={(event) => updateCommissionOverride(row.id, 'note', event.target.value)}
+                    />
                   </div>
                 ))
               ) : (
@@ -5032,13 +5099,14 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   const pageHeight = doc.internal.pageSize.getHeight();
   const colX = {
     event: left,
-    date: 252,
-    times: 314,
-    hours: 390,
-    amount: 458,
-    car: 528,
-    km: 578,
-    travel: 638,
+    date: 286,
+    times: 350,
+    hours: 434,
+    amount: 480,
+    car: 536,
+    km: 592,
+    travel: 646,
+    note: 712,
   };
   let y = 56;
 
@@ -5062,15 +5130,11 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('SelfieBox commission sheet for:', left, y);
+  doc.text(`SelfieBox commission sheet for: ${attendant || '-'}`, left, y);
   y += 22;
 
   doc.setFontSize(12);
   doc.text(periodLabel, left, y);
-  y += 22;
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Attendant: ${attendant || '-'}`, left, y);
   y += 24;
 
   doc.setFont('helvetica', 'bold');
@@ -5078,11 +5142,12 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   doc.text('Event', colX.event, y);
   doc.text('Date', colX.date, y);
   doc.text('Times', colX.times, y);
-  doc.text('Hours', colX.hours, y);
-  doc.text('Commission', colX.amount, y);
+  doc.text('Hrs', colX.hours, y);
+  doc.text('Comm', colX.amount, y);
   doc.text('Car', colX.car, y);
   doc.text('KM', colX.km, y);
   doc.text('Travel', colX.travel, y);
+  doc.text('Note', colX.note, y);
   y += 8;
   doc.setLineWidth(0.8);
   doc.line(left, y, pageWidth - left, y);
@@ -5100,23 +5165,20 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
-    doc.text(String(row.hours || '-').slice(0, 12), colX.times, y);
+    doc.text(String(row.hours || '-').slice(0, 18), colX.times, y);
     doc.text(String(row.hoursPayable ?? 0), colX.hours + 16, y, { align: 'right' });
     doc.text(String(row.amount ?? 0), colX.amount + 22, y, { align: 'right' });
     doc.text(String(row.car ?? 0), colX.car + 16, y, { align: 'right' });
     doc.text(String(row.km ?? 0), colX.km + 12, y, { align: 'right' });
     doc.text(String(row.travel ?? 0), colX.travel + 20, y, { align: 'right' });
+    doc.text(truncatePdfText(row.note || '-', 18), colX.note, y);
     y += 28;
   });
 
-  ensureSpace(126);
+  ensureSpace(118);
   y += 14;
   doc.line(left, y, pageWidth - left, y);
   y += 18;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(`Commission for ${periodLabel}`, left, y);
-  y += 20;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text(`Commission: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
@@ -5125,7 +5187,7 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   y += 20;
   doc.setFont('helvetica', 'bold');
   doc.text(`Total: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
-  y += 26;
+  y += 40;
   doc.line(left, y, left + 180, y);
   doc.line(left + 240, y, left + 360, y);
   y += 14;

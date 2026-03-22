@@ -195,6 +195,21 @@ export default defineSchema({
       createdByUserId: v.optional(v.id("users")),
     })
       .index("by_month_attendant", ["year", "month", "attendant"]),
+  commissionOverrides: defineTable({
+      month: v.string(),
+      year: v.number(),
+      attendant: v.string(),
+      eventId: v.id("events"),
+      hoursPayable: v.optional(v.string()),
+      amount: v.optional(v.string()),
+      car: v.optional(v.string()),
+      km: v.optional(v.string()),
+      note: v.optional(v.string()),
+      updatedAt: v.number(),
+      updatedByUserId: v.optional(v.id("users")),
+    })
+      .index("by_month_attendant", ["year", "month", "attendant"])
+      .index("by_month_attendant_event", ["year", "month", "attendant", "eventId"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

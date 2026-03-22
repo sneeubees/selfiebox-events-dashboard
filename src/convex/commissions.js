@@ -76,3 +76,92 @@ export const listSnapshots = query({
     return enriched.sort((left, right) => right.createdAt - left.createdAt);
   },
 });
+
+export const listOverrides = query({
+  args: {
+    month: v.string(),
+    year: v.number(),
+    attendant: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    const rows = await ctx.db
+      .query("commissionOverrides")
+      .withIndex("by_month_attendant", (q) => q.eq("year", args.year).eq("month", args.month).eq("attendant", args.attendant))
+      .collect();
+
+    return rows.map((row) => ({
+      id: row._id,
+      eventId: row.eventId,
+      hoursPayable: row.hoursPayable || "",
+      amount: row.amount || "",
+      car: row.car || "",
+      km: row.km || "",
+      note: row.note || "",
+      updatedAt: row.updatedAt,
+    }));
+  },
+});
+
+export const saveOverride = mutation({
+  args: {
+    month: v.string(),
+    year: v.number(),
+    attendant: v.string(),
+    eventId: v.id("events"),
+    hoursPayable: v.optional(v.string()),
+    amount: v.optional(v.string()),
+    car: v.optional(v.string()),
+    km: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCurrentUser(ctx);
+    const existing = await ctx.db
+      .query("commissionOverrides")
+      .withIndex("by_month_attendant_event", (q) =>
+        q
+          .eq("year", args.year)
+          .eq("month", args.month)
+          .eq("attendant", args.attendant)
+          .eq("eventId", args.eventId)
+      )
+      .unique();
+
+    const nextValues = {
+      hoursPayable: String(args.hoursPayable || ""),
+      amount: String(args.amount || ""),
+      car: String(args.car || ""),
+      km: String(args.km || ""),
+      note: String(args.note || ""),
+    };
+    const hasAnyValue = Object.values(nextValues).some((value) => value.trim() !== "");
+
+    if (!hasAnyValue) {
+      if (existing) {
+        await ctx.db.delete(existing._id);
+      }
+      return { id: existing?._id || null, removed: true };
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        ...nextValues,
+        updatedAt: Date.now(),
+        updatedByUserId: currentUser._id,
+      });
+      return { id: existing._id, removed: false };
+    }
+
+    const id = await ctx.db.insert("commissionOverrides", {
+      month: args.month,
+      year: args.year,
+      attendant: args.attendant,
+      eventId: args.eventId,
+      ...nextValues,
+      updatedAt: Date.now(),
+      updatedByUserId: currentUser._id,
+    });
+    return { id, removed: false };
+  },
+});
