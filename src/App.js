@@ -138,6 +138,58 @@ const monthAccentClass = {
   December: 'month-accent-12',
 };
 
+const CHANGELOG_ENTRIES = [
+  {
+    title: 'Dashboard and workflow',
+    items: [
+      'Dark mode was added as a saved user preference.',
+      'Saved custom filter views, drag-and-drop month ordering, and drag-and-drop column ordering after Payment were added.',
+      'Excel export was upgraded with filtered exports, month exports, column selection, and styled .xlsx output.',
+      'Search, filter, row highlighting, and header layout were refined across the board.',
+    ],
+  },
+  {
+    title: 'Events and board data',
+    items: [
+      'Optional Event Name was added under the main Client name.',
+      'Automatic PDF extraction was added for quote numbers, invoice numbers, and ExVAT Auto values.',
+      'Accounts was added alongside Payment, with matching items and monthly Fully Paid counts.',
+      'Custom columns, totals for numeric columns, and import tooling were improved for final data imports.',
+    ],
+  },
+  {
+    title: 'Users, rights, and profiles',
+    items: [
+      'Registration now captures first name, surname, and designation, with refreshed auth styling.',
+      'Managers can configure more of the board, while user rights and branch restrictions were expanded.',
+      'Users can be assigned to branch groups, which affects attendants, commission views, and logistics visibility.',
+    ],
+  },
+  {
+    title: 'Booking workflow',
+    items: [
+      'Unique booking links and public booking forms were added to each event drawer.',
+      'Booking submissions now update the drawer and linked event fields, with confirmation emails and PDF snapshots.',
+      'Quote, invoice, product, design status, and attendant details are shown directly on the booking form.',
+    ],
+  },
+  {
+    title: 'Operations tools',
+    items: [
+      'Commission sheets were added with editable saved values, totals, PDF export, saved PDF history, and rate management.',
+      'Driving-distance travel calculations and branch-based travel origins were added for commission planning.',
+      'A logistics manager view was added with day timelines, drag-to-order rows, and saved per-day layout.',
+    ],
+  },
+  {
+    title: 'Environment and rollout',
+    items: [
+      'A dedicated staging site was created so new work can be tested safely before any live release.',
+      'Live data was cloned into staging to keep testing realistic while protecting production changes.',
+    ],
+  },
+];
+
 const COLOR_SWATCHES = [
   '#ffffff',
   '#f5f5f5',
@@ -372,6 +424,7 @@ function DashboardApp() {
     perKmRate: '3',
   });
   const [showCommissionSnapshotsModal, setShowCommissionSnapshotsModal] = useState(false);
+  const [showChangelogModal, setShowChangelogModal] = useState(false);
   const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const commissionOverrideRecords = useQuery(
     api.commissions.listOverrides,
@@ -2020,6 +2073,7 @@ function DashboardApp() {
     commissionOverrideSaveTimeoutsRef.current.clear();
     setShowCommissionRatesModal(false);
     setShowCommissionSnapshotsModal(false);
+    setShowChangelogModal(false);
     setCommissionDialog({
       isOpen: false,
       month: '',
@@ -3465,12 +3519,17 @@ function DashboardApp() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar compact">
-        <div>
-          <div className="topbar-kicker">Events Dashboard</div>
-          <h1>SelfieBox Events {selectedWorkspaceYear}</h1>
-        </div>
+      <div className="app-shell">
+        <header className="topbar compact">
+          <div>
+            <div className="topbar-kicker-row">
+              <div className="topbar-kicker">Events Dashboard</div>
+              <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
+                V1.2001
+              </button>
+            </div>
+            <h1>SelfieBox Events {selectedWorkspaceYear}</h1>
+          </div>
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
             <span className="workspace-prefix">Workspace for</span>
@@ -3608,6 +3667,27 @@ function DashboardApp() {
       {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4><div className="rights-scroll">{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</div></section><section className="rights-section"><h4>Users</h4><div className="rights-scroll">{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</div></section></div></ModalShell> : null}
       {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={branchScopedAttendantOptions.map((option) => option.fullName)} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
+      {showChangelogModal ? (
+        <ModalShell title="Changelog - V1.2001" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
+          <div className="changelog-modal">
+            {CHANGELOG_ENTRIES.map((section) => (
+              <section className="changelog-section" key={section.title}>
+                <h4>{section.title}</h4>
+                <ul>
+                  {section.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <div className="modal-actions">
+              <button className="primary-button" type="button" onClick={() => setShowChangelogModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
       {commissionDialog.isOpen ? (
         <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog} closeOnScrimClick={false} panelClassName="commission-modal-panel">
           <div className="commission-sheet">

@@ -28,6 +28,19 @@ button { cursor: pointer; }
 .app-shell { height: 100vh; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a620f; }
+.topbar-kicker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.topbar-kicker-row .topbar-kicker { margin-bottom: 0; }
+.topbar-version-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #5a77b2;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.topbar-version-button:hover { color: #274582; }
 .topbar.compact h1, .auth-card h1, .drawer-header h3 { margin: 0; font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
 .topbar.compact h1 { font-size: 1.45rem; }
 .topbar-actions, .workspace-select-wrap, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
@@ -572,6 +585,11 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-option { min-width: 0; font-size: 0.66rem; line-height: 1; padding: 1px 0; }
 .filter-option span { display: inline-block; max-width: 19ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .filter-option input { transform: scale(0.85); }
+.changelog-modal { display: grid; gap: 12px; max-height: min(72vh, 700px); overflow: auto; padding-right: 4px; }
+.changelog-section { display: grid; gap: 6px; }
+.changelog-section h4 { margin: 0; font-size: 0.82rem; color: var(--text); }
+.changelog-section ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.changelog-section li { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
 .totals-row { min-width: max-content; }
 @media (max-width: 1200px) { .topbar { flex-direction: column; align-items: stretch; } .modal-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .app-shell { padding: 8px; } .topbar-actions, .workspace-select-wrap { flex-direction: column; align-items: stretch; } .modal-form { grid-template-columns: 1fr; } .board-row { width: max-content; } .event-drawer { width: 100vw; } .search-wide { min-width: 220px; } .booking-page-card { padding: 18px; } .booking-form-grid, .booking-extras-grid, .booking-time-row { grid-template-columns: 1fr; } }
@@ -987,6 +1005,8 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .auth-brand {
   color: #f0c56b;
 }
+:root[data-theme="dark"] .topbar-version-button { color: #b5ccff; }
+:root[data-theme="dark"] .topbar-version-button:hover { color: #d7e5ff; }
 :root[data-theme="dark"] .workspace-text-button,
 :root[data-theme="dark"] .saved-filter-chip-button,
 :root[data-theme="dark"] .search-clear-button,
