@@ -9,6 +9,9 @@
  */
 
 import type * as adminUsers from "../adminUsers.js";
+import type * as bookingEmails from "../bookingEmails.js";
+import type * as bookingPdf from "../bookingPdf.js";
+import type * as bookings from "../bookings.js";
 import type * as collaboration from "../collaboration.js";
 import type * as columns from "../columns.js";
 import type * as documentNumbers from "../documentNumbers.js";
@@ -31,6 +34,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   adminUsers: typeof adminUsers;
+  bookingEmails: typeof bookingEmails;
+  bookingPdf: typeof bookingPdf;
+  bookings: typeof bookings;
   collaboration: typeof collaboration;
   columns: typeof columns;
   documentNumbers: typeof documentNumbers;

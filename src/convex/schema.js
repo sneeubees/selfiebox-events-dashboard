@@ -15,6 +15,32 @@ const eventFile = v.object({
   size: v.string(),
 });
 
+const bookingFormData = v.object({
+  product: v.string(),
+  customerType: v.string(),
+  eventName: v.optional(v.string()),
+  companyName: v.optional(v.string()),
+  contactPerson: v.string(),
+  cell: v.string(),
+  email: v.string(),
+  eventDate: v.string(),
+  region: v.string(),
+  address: v.string(),
+  addressPlaceId: v.optional(v.string()),
+  addressLat: v.optional(v.union(v.number(), v.null())),
+  addressLng: v.optional(v.union(v.number(), v.null())),
+  pointOfContactName: v.string(),
+  pointOfContactNumber: v.string(),
+  setupTime: v.optional(v.string()),
+  eventStartTime: v.string(),
+  eventFinishTime: v.string(),
+  durationHours: v.string(),
+  optionalExtras: v.array(v.string()),
+  designYourself: v.string(),
+  notes: v.string(),
+  acceptedTerms: v.boolean(),
+});
+
 export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
@@ -26,8 +52,10 @@ export default defineSchema({
     role: v.union(v.literal("admin"), v.literal("manager"), v.literal("user")),
     profilePic: v.optional(v.string()),
     theme: v.optional(v.union(v.literal("light"), v.literal("dark"))),
+    assignedBranches: v.optional(v.array(v.string())),
     monthOrder: v.optional(v.array(v.string())),
     columnOrderAfterPayment: v.optional(v.array(v.string())),
+    logisticsDayOrders: v.optional(v.record(v.string(), v.array(v.string()))),
     isApproved: v.boolean(),
     isActive: v.boolean(),
     lastSignInAt: v.optional(v.number()),
@@ -87,6 +115,11 @@ export default defineSchema({
     name: v.string(),
     abbreviation: v.optional(v.string()),
     branchKey: v.optional(v.string()),
+    email: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressPlaceId: v.optional(v.string()),
+    addressLat: v.optional(v.union(v.number(), v.null())),
+    addressLng: v.optional(v.union(v.number(), v.null())),
     color: v.string(),
     order: v.number(),
     isActive: v.boolean(),
@@ -123,9 +156,76 @@ export default defineSchema({
     legacyEntryId: v.optional(v.string()),
     actorUserId: v.optional(v.id("users")),
     createdAt: v.number(),
-  })
+    })
     .index("by_workspace_year", ["workspaceYear"])
     .index("by_event", ["eventId"]),
+  eventBookings: defineTable({
+      eventId: v.id("events"),
+      eventKey: v.string(),
+      token: v.string(),
+    formData: bookingFormData,
+    createdByUserId: v.optional(v.id("users")),
+    submittedByUserId: v.optional(v.id("users")),
+      publicAccessCount: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      submittedAt: v.optional(v.number()),
+      lastSubmittedIp: v.optional(v.string()),
+    })
+      .index("by_event", ["eventId"])
+      .index("by_event_key", ["eventKey"])
+      .index("by_token", ["token"]),
+  bookingSnapshots: defineTable({
+      bookingId: v.id("eventBookings"),
+      eventId: v.id("events"),
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      sourceIp: v.optional(v.string()),
+      submittedAt: v.number(),
+      createdByUserId: v.optional(v.id("users")),
+      createdByLabel: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_booking", ["bookingId"])
+      .index("by_event", ["eventId"]),
+  commissionSnapshots: defineTable({
+      month: v.string(),
+      year: v.number(),
+      period: v.string(),
+      attendant: v.string(),
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      createdAt: v.number(),
+      createdByUserId: v.optional(v.id("users")),
+    })
+      .index("by_month_attendant", ["year", "month", "attendant"]),
+  commissionOverrides: defineTable({
+      month: v.string(),
+      year: v.number(),
+      attendant: v.string(),
+      eventId: v.string(),
+      hoursPayable: v.optional(v.string()),
+      amount: v.optional(v.string()),
+      car: v.optional(v.string()),
+      km: v.optional(v.string()),
+      note: v.optional(v.string()),
+      updatedAt: v.number(),
+      updatedByUserId: v.optional(v.id("users")),
+    })
+      .index("by_month_attendant", ["year", "month", "attendant"])
+      .index("by_month_attendant_event", ["year", "month", "attendant", "eventId"]),
+  commissionRates: defineTable({
+      singletonKey: v.string(),
+      twoHours: v.number(),
+      threeHours: v.number(),
+      fourHours: v.number(),
+      fiveHours: v.number(),
+      sixPlusHours: v.number(),
+      perKmRate: v.number(),
+      updatedAt: v.number(),
+      updatedByUserId: v.optional(v.id("users")),
+    })
+      .index("by_singleton_key", ["singletonKey"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

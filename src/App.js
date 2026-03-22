@@ -1,9 +1,10 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
-import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi, loadGooglePlacesLibrary } from './googleMaps';
+import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
+import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import {
   BOARD_COLUMNS,
@@ -95,9 +96,9 @@ const eventDefaults = {
 };
 
 const defaultBranchOptions = [
-  { abbreviation: 'CT', fullName: 'Cape Town', color: '#d7e5f5' },
-  { abbreviation: 'KZN', fullName: 'KwaZulu-Natal', color: '#ffe1b8' },
-  { abbreviation: 'GP', fullName: 'Gauteng', color: '#c8ddf7' },
+  { abbreviation: 'CT', fullName: 'Cape Town', color: '#d7e5f5', email: '', address: '', addressPlaceId: '', addressLat: null, addressLng: null },
+  { abbreviation: 'KZN', fullName: 'KwaZulu-Natal', color: '#ffe1b8', email: '', address: '', addressPlaceId: '', addressLat: null, addressLng: null },
+  { abbreviation: 'GP', fullName: 'Gauteng', color: '#c8ddf7', email: '', address: '', addressPlaceId: '', addressLat: null, addressLng: null },
 ];
 
 const defaultProductOptions = PRODUCT_OPTIONS.map((fullName) => ({
@@ -136,6 +137,53 @@ const monthAccentClass = {
   November: 'month-accent-11',
   December: 'month-accent-12',
 };
+
+const CHANGELOG_ENTRIES = [
+  {
+    title: 'Booking workflow',
+    items: [
+      'A Booking section was added in the drawer with unique client booking links per event.',
+      'Booking forms now update the main event fields, save PDF snapshots, write into Logs, and send confirmation emails.',
+      'Booking emails now go to the form email, BCC info@selfiebox.co.za, and CC the selected branch contact emails.',
+      'Booking PDFs, validation, terms popup, quote and invoice references, and product-based optional extras were refined.',
+    ],
+  },
+  {
+    title: 'Commission and logistics',
+    items: [
+      'Commission sheets were added with saved overrides, notes, totals, saved PDF history, and landscape PDF export.',
+      'Commission rates can now be edited by admins, including the per-kilometre travel rate.',
+      'Travel auto-calculation now uses driving directions from the branch address to the event and back.',
+      'A Logistics manager view was added with timeline bars, drag-to-order rows, and saved day planning per user.',
+    ],
+  },
+  {
+    title: 'Users, branches, and operations',
+    items: [
+      'Admins can assign one or more branches to each user, while users see their branches as read-only in Profile.',
+      'Branch manager now stores both branch email addresses and branch addresses.',
+      'Branch assignments now control which attendants users can assign, commission against, and see in logistics views.',
+      'Scrollable user-rights and manage-users popups were improved for larger teams.',
+    ],
+  },
+  {
+    title: 'Board and UI improvements',
+    items: [
+      'Direct Google address autocomplete was improved on the board and in booking forms, while map preview remains available.',
+      'Month header summaries stay visible while horizontally scrolling, with actions still reachable to the right.',
+      'Drag-and-drop file upload was added in the drawer, and active-row styling and map popup controls were refined.',
+      'A version badge and in-app changelog were added to the dashboard header.',
+    ],
+  },
+  {
+    title: 'Data and exports',
+    items: [
+      'Numeric totals were corrected for imported local currency formats and dot-decimal values such as ExVAT Auto.',
+      'Commission and booking exports now save cleaner filenames and include richer PDF layouts.',
+      'This release is code-only: live custom columns, label names, colors, and event data remain untouched.',
+    ],
+  },
+];
 
 const COLOR_SWATCHES = [
   '#ffffff',
@@ -188,11 +236,32 @@ function parseNumericCellValue(value) {
     return 0;
   }
 
-  const normalized = input
-    .replace(/\s+/g, '')
-    .replace(/\./g, '')
-    .replace(/,/g, '.')
-    .replace(/[^0-9.-]/g, '');
+  const compact = input.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
+  if (!compact) {
+    return 0;
+  }
+
+  const lastComma = compact.lastIndexOf(',');
+  const lastDot = compact.lastIndexOf('.');
+  let normalized = compact;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) {
+      normalized = compact.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      normalized = compact.replace(/,/g, '');
+    }
+  } else if (lastComma >= 0) {
+    const decimalDigits = compact.length - lastComma - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? compact.replace(/\./g, '').replace(/,/g, '.')
+      : compact.replace(/,/g, '');
+  } else if (lastDot >= 0) {
+    const decimalDigits = compact.length - lastDot - 1;
+    normalized = decimalDigits > 0 && decimalDigits <= 2
+      ? compact.replace(/,/g, '')
+      : compact.replace(/\./g, '');
+  }
 
   if (!normalized || normalized === '-' || normalized === '.' || normalized === '-.') {
     return 0;
@@ -200,6 +269,11 @@ function parseNumericCellValue(value) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isValidCoZaEmail(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@(?:[a-z0-9-]+\.)+co\.za$/i.test(normalized);
 }
 
 function getColumnWidth(column) {
@@ -274,6 +348,7 @@ function DashboardApp() {
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
   const { signOut } = useClerk();
   const { user: clerkUser } = useUser();
+  const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
   const currentUser = useQuery(api.users.current, {});
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
@@ -288,6 +363,7 @@ function DashboardApp() {
   const updateMyProfile = useMutation(api.users.updateMyProfile);
   const updateMonthOrderMutation = useMutation(api.users.updateMonthOrder);
   const updateColumnOrderAfterPaymentMutation = useMutation(api.users.updateColumnOrderAfterPayment);
+  const updateLogisticsDayOrdersMutation = useMutation(api.users.updateLogisticsDayOrders);
   const updateManagedUserMutation = useMutation(api.users.update);
   const updateStaticColumnLabelMutation = useMutation(api.staticColumnLabels.upsert);
   const removeManagedUserAction = useAction(api.adminUsers.removeWithClerk);
@@ -316,7 +392,10 @@ function DashboardApp() {
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
-  const [selectedWorkspaceYear, setSelectedWorkspaceYear] = useState(2026);
+  const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
+  const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
+  const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
+  const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -330,12 +409,57 @@ function DashboardApp() {
     period: 'all',
     overrides: {},
   });
+  const [showCommissionRatesModal, setShowCommissionRatesModal] = useState(false);
+  const [commissionRatesForm, setCommissionRatesForm] = useState({
+    twoHours: '500',
+    threeHours: '550',
+    fourHours: '600',
+    fiveHours: '650',
+    sixPlusHours: '1000',
+    perKmRate: '3',
+  });
+  const [showCommissionSnapshotsModal, setShowCommissionSnapshotsModal] = useState(false);
+  const [showChangelogModal, setShowChangelogModal] = useState(false);
+  const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
+  const commissionOverrideRecords = useQuery(
+    api.commissions.listOverrides,
+    canAccessDashboard && commissionDialog.isOpen && commissionDialog.month && commissionDialog.attendant
+      ? {
+          month: commissionDialog.month,
+          year: selectedWorkspaceYear,
+          attendant: commissionDialog.attendant,
+        }
+      : 'skip'
+  );
+  const commissionSnapshots = useQuery(
+    api.commissions.listSnapshots,
+    canAccessDashboard && showCommissionSnapshotsModal && commissionDialog.month && commissionDialog.attendant
+      ? {
+          month: commissionDialog.month,
+          year: selectedWorkspaceYear,
+          attendant: commissionDialog.attendant,
+        }
+      : 'skip'
+  );
+  const [logisticsDialog, setLogisticsDialog] = useState({
+    isOpen: false,
+    month: '',
+    selectedDate: '',
+    ordersByDate: {},
+  });
+  const [draggedLogisticsRowId, setDraggedLogisticsRowId] = useState('');
+  const [dragOverLogisticsRowId, setDragOverLogisticsRowId] = useState('');
   const [branchOptions, setBranchOptions] = useState(defaultBranchOptions);
   const [branchManagerOpen, setBranchManagerOpen] = useState(false);
   const [branchEditorEventId, setBranchEditorEventId] = useState(null);
   const [newBranchFullName, setNewBranchFullName] = useState('');
   const [newBranchAbbreviation, setNewBranchAbbreviation] = useState('');
   const [newBranchColor, setNewBranchColor] = useState('#b8d9ff');
+  const [newBranchEmail, setNewBranchEmail] = useState('');
+  const [newBranchAddress, setNewBranchAddress] = useState('');
+  const [newBranchAddressPlaceId, setNewBranchAddressPlaceId] = useState('');
+  const [newBranchAddressLat, setNewBranchAddressLat] = useState(null);
+  const [newBranchAddressLng, setNewBranchAddressLng] = useState(null);
   const [branchDrafts, setBranchDrafts] = useState({});
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [productOptions, setProductOptions] = useState(defaultProductOptions);
@@ -487,6 +611,7 @@ function DashboardApp() {
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
   const [draftUpdate, setDraftUpdate] = useState('');
@@ -501,8 +626,8 @@ function DashboardApp() {
   const [previewFile, setPreviewFile] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null);
   const [editingUserId, setEditingUserId] = useState('');
-  const [profileForm, setProfileForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: '', profilePic: '', theme: 'light' });
-  const [managedUserForm, setManagedUserForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: 'user', profilePic: '', isApproved: false });
+  const [profileForm, setProfileForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: '', profilePic: '', theme: 'light', assignedBranches: [] });
+  const [managedUserForm, setManagedUserForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: 'user', profilePic: '', isApproved: false, assignedBranches: [] });
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
   const [noticeDialog, setNoticeDialog] = useState({ isOpen: false, title: '', message: '' });
@@ -558,9 +683,12 @@ function DashboardApp() {
   const filesMigratedRef = useRef(false);
   const eventsRef = useRef(events);
   const persistTimeoutsRef = useRef(new Map());
+  const commissionOverrideSaveTimeoutsRef = useRef(new Map());
+  const commissionOverridesLoadedKeyRef = useRef('');
   const eventSyncLocksRef = useRef(new Map());
   const eventFileInputRef = useRef(null);
   const confirmResolverRef = useRef(null);
+  const [isFileDropActive, setIsFileDropActive] = useState(false);
 
   const visibleColumns = useMemo(() => allColumns.filter((column) => columnVisibility[column.key] && (effectiveColumnRights[column.key]?.canView ?? true)), [allColumns, columnVisibility, effectiveColumnRights]);
   const customItemColumnKeys = useMemo(() => new Set(customColumns.filter((column) => ['singleItem', 'multiItem'].includes(column.type)).map((column) => column.key)), [customColumns]);
@@ -592,6 +720,21 @@ function DashboardApp() {
   const branchAbbreviations = useMemo(() => branchOptions.map((option) => option.abbreviation), [branchOptions]);
   const branchStyles = useMemo(() => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, { background: option.color, color: getContrastColor(option.color) }])), [branchOptions]);
   const branchFullNames = useMemo(() => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, option.fullName])), [branchOptions]);
+  const branchAddressMap = useMemo(
+    () => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, {
+      address: option.address || '',
+      lat: typeof option.addressLat === 'number' ? option.addressLat : null,
+      lng: typeof option.addressLng === 'number' ? option.addressLng : null,
+    }])),
+    [branchOptions]
+  );
+  const commissionRates = useMemo(
+    () => normalizeCommissionRates(commissionRatesRecord),
+    [commissionRatesRecord]
+  );
+  const currentUserAssignedBranches = useMemo(() => Array.isArray(currentUser?.assignedBranches) ? currentUser.assignedBranches : [], [currentUser?.assignedBranches]);
+  const hasUserAttendantBranchRestrictions = currentUserAssignedBranches.length > 0;
+  const attendantBranchMap = useMemo(() => Object.fromEntries(attendantOptions.map((option) => [option.fullName, option.branchKey || ''])), [attendantOptions]);
   const selectedBranchEvent = useMemo(() => events.find((event) => event.id === branchEditorEventId) || null, [branchEditorEventId, events]);
   const productAbbreviations = useMemo(() => productOptions.map((option) => option.abbreviation), [productOptions]);
   const productStyles = useMemo(() => Object.fromEntries(productOptions.map((option) => [option.abbreviation, { background: option.color, color: getContrastColor(option.color) }])), [productOptions]);
@@ -603,7 +746,6 @@ function DashboardApp() {
   const managedSingleStyles = useMemo(() => Object.fromEntries(Object.entries(managedSingleOptions).map(([columnKey, options]) => [columnKey, Object.fromEntries(options.map((option) => [option.name, { background: option.color, color: getContrastColor(option.color) }]))])), [managedSingleOptions]);
   const selectedManagedSingleEvent = useMemo(() => events.find((event) => event.id === managedSingleEditor.eventId) || null, [managedSingleEditor.eventId, events]);
   const selectedCustomOptionEvent = useMemo(() => events.find((event) => event.id === customOptionEditor.eventId) || null, [customOptionEditor.eventId, events]);
-  const attendantNames = useMemo(() => attendantOptions.map((option) => option.fullName), [attendantOptions]);
   const attendantStyles = useMemo(() => Object.fromEntries(attendantOptions.map((option) => {
     const branchStyle = branchStyles[option.branchKey];
     return [
@@ -611,13 +753,32 @@ function DashboardApp() {
       branchStyle || { background: '#dfe7f6', color: getContrastColor('#dfe7f6') },
     ];
   })), [attendantOptions, branchStyles]);
-  const filteredAttendantOptions = useMemo(() => {
-    if (!selectedBranches.length) {
+  const branchScopedAttendantOptions = useMemo(() => {
+    if (!hasUserAttendantBranchRestrictions) {
       return attendantOptions;
     }
-    return attendantOptions.filter((option) => !option.branchKey || selectedBranches.includes(option.branchKey));
-  }, [attendantOptions, selectedBranches]);
+    return attendantOptions.filter((option) => option.branchKey && currentUserAssignedBranches.includes(option.branchKey));
+  }, [attendantOptions, currentUserAssignedBranches, hasUserAttendantBranchRestrictions]);
+  const filteredAttendantOptions = useMemo(() => {
+    if (!selectedBranches.length) {
+      return branchScopedAttendantOptions;
+    }
+    return branchScopedAttendantOptions.filter((option) => !option.branchKey || selectedBranches.includes(option.branchKey));
+  }, [branchScopedAttendantOptions, selectedBranches]);
   const selectedAttendantEvent = useMemo(() => events.find((event) => event.id === attendantEditorEventId) || null, [attendantEditorEventId, events]);
+  const selectableAttendantOptionsForEvent = useMemo(() => {
+    if (!selectedAttendantEvent) {
+      return filteredAttendantOptions;
+    }
+    const selectedNames = new Set(selectedAttendantEvent.attendants || []);
+    const visible = [...filteredAttendantOptions];
+    attendantOptions.forEach((option) => {
+      if (selectedNames.has(option.fullName) && !visible.some((item) => item.fullName === option.fullName)) {
+        visible.push(option);
+      }
+    });
+    return visible.sort((left, right) => left.fullName.localeCompare(right.fullName));
+  }, [attendantOptions, filteredAttendantOptions, selectedAttendantEvent]);
 
   const filteredEvents = useMemo(() => {
     return [...events]
@@ -651,6 +812,7 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
+  const selectedEventBooking = useMemo(() => eventBookingRecord || null, [eventBookingRecord]);
   const commissionMonthEvents = useMemo(() => {
     if (!commissionDialog.isOpen || !commissionDialog.month) {
       return [];
@@ -659,11 +821,12 @@ function DashboardApp() {
       .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
       .filter((event) => getEventMonth(event) === commissionDialog.month)
       .filter((event) => Array.isArray(event.attendants) && event.attendants.length > 0)
+      .filter((event) => !hasUserAttendantBranchRestrictions || (event.attendants || []).some((name) => currentUserAssignedBranches.includes(attendantBranchMap[name] || '')))
       .sort((left, right) => sortEvents(left, right));
-  }, [commissionDialog.isOpen, commissionDialog.month, events, selectedWorkspaceYear]);
+  }, [attendantBranchMap, commissionDialog.isOpen, commissionDialog.month, currentUserAssignedBranches, events, hasUserAttendantBranchRestrictions, selectedWorkspaceYear]);
   const commissionAttendantNames = useMemo(
-    () => Array.from(new Set(commissionMonthEvents.flatMap((event) => event.attendants || []))).sort((left, right) => left.localeCompare(right)),
-    [commissionMonthEvents]
+    () => Array.from(new Set(commissionMonthEvents.flatMap((event) => event.attendants || []).filter((name) => !hasUserAttendantBranchRestrictions || currentUserAssignedBranches.includes(attendantBranchMap[name] || '')))).sort((left, right) => left.localeCompare(right)),
+    [attendantBranchMap, commissionMonthEvents, currentUserAssignedBranches, hasUserAttendantBranchRestrictions]
   );
   const commissionRows = useMemo(() => {
     if (!commissionDialog.attendant) {
@@ -683,24 +846,145 @@ function DashboardApp() {
       })
       .map((event) => {
         const automaticHoursPayable = parseCommissionHours(event.hours);
-        const automaticAmount = calculateCommissionAmount(automaticHoursPayable);
+        const automaticAmount = calculateCommissionAmount(automaticHoursPayable, commissionRates);
+        const routeBranchKey = (event.branch || []).find((branchKey) => canAutoCalculateCommissionRoute(event, branchAddressMap[branchKey]))
+          || (event.branch || []).find((branchKey) => branchAddressMap[branchKey])
+          || '';
         const override = commissionDialog.overrides[event.id] || {};
         const hoursPayable = override.hoursPayable === '' || override.hoursPayable === undefined
           ? automaticHoursPayable
           : Math.max(0, Number(override.hoursPayable) || 0);
         const amount = override.amount === '' || override.amount === undefined
           ? automaticAmount
-          : Math.max(0, Number(override.amount) || 0);
+          : Math.max(0, parseNumericCellValue(override.amount));
+        const car = override.car === '' || override.car === undefined
+          ? 0
+          : Math.max(0, parseNumericCellValue(override.car));
+        const km = override.km === '' || override.km === undefined
+          ? 0
+          : Math.max(0, Number(override.km) || 0);
+        const note = override.note === undefined ? '' : String(override.note);
         return {
           id: event.id,
-          eventName: event.eventTitle || event.name || 'Untitled event',
+          eventName: event.name || 'Untitled event',
+          eventTitle: event.eventTitle || '',
+          eventLabel: event.eventTitle ? `${event.name || 'Untitled event'} - ${event.eventTitle}` : (event.name || 'Untitled event'),
+          addressLabel: event.location || '',
           date: event.date,
           hours: event.hours || '0',
           hoursPayable,
           amount,
+          car,
+          km,
+          location: event.location || '',
+          locationLat: typeof event.locationLat === 'number' ? event.locationLat : null,
+          locationLng: typeof event.locationLng === 'number' ? event.locationLng : null,
+          canAutoCalculateKm: routeBranchKey ? canAutoCalculateCommissionRoute(event, branchAddressMap[routeBranchKey]) : false,
+          routeBranchKey,
+          travel: calculateCommissionTravel(km, commissionRates),
+          note,
         };
       });
-  }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
+  }, [branchAddressMap, commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents, commissionRates]);
+  const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
+  useEffect(() => {
+    if (!commissionRatesRecord) {
+      return;
+    }
+    setCommissionRatesForm({
+      twoHours: String(commissionRatesRecord.twoHours ?? DEFAULT_COMMISSION_RATES.twoHours),
+      threeHours: String(commissionRatesRecord.threeHours ?? DEFAULT_COMMISSION_RATES.threeHours),
+      fourHours: String(commissionRatesRecord.fourHours ?? DEFAULT_COMMISSION_RATES.fourHours),
+      fiveHours: String(commissionRatesRecord.fiveHours ?? DEFAULT_COMMISSION_RATES.fiveHours),
+      sixPlusHours: String(commissionRatesRecord.sixPlusHours ?? DEFAULT_COMMISSION_RATES.sixPlusHours),
+      perKmRate: String(commissionRatesRecord.perKmRate ?? DEFAULT_COMMISSION_RATES.perKmRate),
+    });
+  }, [commissionRatesRecord]);
+  useEffect(() => {
+    if (!commissionDialog.isOpen || !commissionDialog.month || !commissionDialog.attendant || commissionOverrideRecords === undefined) {
+      return;
+    }
+    const overrideKey = `${selectedWorkspaceYear}|${commissionDialog.month}|${commissionDialog.attendant}`;
+    if (commissionOverridesLoadedKeyRef.current === overrideKey) {
+      return;
+    }
+    const nextOverrides = Object.fromEntries(
+      commissionOverrideRecords.map((record) => [
+        record.eventId,
+        {
+          hoursPayable: record.hoursPayable || '',
+          amount: record.amount || '',
+          car: record.car || '',
+          km: record.km || '',
+          note: record.note || '',
+        },
+      ])
+    );
+    commissionOverridesLoadedKeyRef.current = overrideKey;
+    setCommissionDialog((current) => {
+      if (!current.isOpen || current.month !== commissionDialog.month || current.attendant !== commissionDialog.attendant) {
+        return current;
+      }
+      return {
+        ...current,
+        overrides: nextOverrides,
+      };
+    });
+  }, [commissionDialog.attendant, commissionDialog.isOpen, commissionDialog.month, commissionOverrideRecords, selectedWorkspaceYear]);
+  const savedLogisticsDayOrders = currentUser?.logisticsDayOrders && typeof currentUser.logisticsDayOrders === 'object'
+    ? currentUser.logisticsDayOrders
+    : {};
+  const logisticsMonthEvents = useMemo(() => {
+    if (!logisticsDialog.isOpen || !logisticsDialog.month) {
+      return [];
+    }
+    return events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === logisticsDialog.month)
+      .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
+      .filter((event) => !hasUserAttendantBranchRestrictions || (event.branch || []).some((branchKey) => currentUserAssignedBranches.includes(branchKey)))
+      .sort((left, right) => sortEvents(left, right));
+  }, [currentUserAssignedBranches, events, hasUserAttendantBranchRestrictions, logisticsDialog.isOpen, logisticsDialog.month, selectedWorkspaceYear]);
+  const logisticsRows = useMemo(() => {
+    if (!logisticsDialog.selectedDate) {
+      return [];
+    }
+    const selectedDateEvents = logisticsMonthEvents.filter((event) => event.date === logisticsDialog.selectedDate);
+    const savedOrder = logisticsDialog.ordersByDate[logisticsDialog.selectedDate] || [];
+    const orderLookup = new Map(savedOrder.map((eventId, index) => [eventId, index]));
+    return selectedDateEvents
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = orderLookup.has(left.id) ? orderLookup.get(left.id) : Number.MAX_SAFE_INTEGER;
+        const rightOrder = orderLookup.has(right.id) ? orderLookup.get(right.id) : Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return sortEvents(left, right);
+      })
+      .map((event, index) => {
+        const timeRange = parseLogisticsTimeRange(event.hours);
+        const barLeft = timeRange ? `${(timeRange.startMinutes / 1440) * 100}%` : '0%';
+        const barWidth = timeRange ? `${Math.max(((timeRange.endMinutes - timeRange.startMinutes) / 1440) * 100, 1.5)}%` : '0%';
+        const palette = getLogisticsPalette(index);
+        const visibleAttendants = (event.attendants || []).filter((name) => !hasUserAttendantBranchRestrictions || currentUserAssignedBranches.includes(attendantBranchMap[name] || ''));
+        return {
+          id: event.id,
+          clientName: event.name || 'Untitled event',
+          eventName: event.eventTitle || '',
+          addressLabel: event.location || '',
+          productLabel: (event.products || []).map((item) => productFullNames[item] || item).join(', ') || '-',
+          productColor: (event.products || []).length ? (productStyles[(event.products || [])[0]]?.background || '#5b74b8') : '#60708b',
+          attendantLabel: visibleAttendants.join(', ') || 'Unassigned',
+          timelineLabel: event.hours || '-',
+          timeRange,
+          barLeft,
+          barWidth,
+          color: palette.background,
+          textColor: palette.color,
+        };
+      });
+  }, [attendantBranchMap, currentUserAssignedBranches, hasUserAttendantBranchRestrictions, logisticsDialog.ordersByDate, logisticsDialog.selectedDate, logisticsMonthEvents, productFullNames, productStyles]);
   const highlightedRowId = dateEditor.eventId || branchEditorEventId || productEditorEventId || statusEditorEventId || managedSingleEditor.eventId || customOptionEditor.eventId || attendantEditorEventId || selectedId || activeRowId;
   const initials = currentUser ? `${currentUser.firstName?.[0] || ''}${currentUser.surname?.[0] || ''}`.toUpperCase() : 'SB';
   const nextWorkspaceYear = workspaceYears.length ? Math.max(...workspaceYears) + 1 : Number(selectedWorkspaceYear || new Date().getFullYear()) + 1;
@@ -741,6 +1025,57 @@ function DashboardApp() {
 
   const closeNotice = () => {
     setNoticeDialog({ isOpen: false, title: '', message: '' });
+  };
+
+  const buildBookingLinkUrl = (token) => {
+    if (!token || typeof window === 'undefined') {
+      return '';
+    }
+    return `${window.location.origin}/${token}`;
+  };
+
+  const copyBookingLink = async (token) => {
+    const url = buildBookingLinkUrl(token);
+    if (!url) {
+      openNotice('Generate the booking link first.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      openNotice('Booking link copied to clipboard.');
+    } catch (error) {
+      console.error('Failed to copy booking link', error);
+      openNotice('The booking link could not be copied right now.');
+    }
+  };
+
+  const openBookingLink = (token) => {
+    const url = buildBookingLinkUrl(token);
+    if (!url) {
+      openNotice('Generate the booking link first.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const generateBookingLink = async () => {
+    if (!selectedEvent) {
+      return;
+    }
+
+    try {
+      const result = await generateBookingLinkMutation({ eventKey: selectedEvent.id });
+      if (result?.token) {
+        setDrawerTab('booking');
+        openNotice('Booking link is ready for this event.');
+      } else {
+        openNotice('The booking link could not be generated.');
+      }
+    } catch (error) {
+      console.error('Failed to generate booking link', error);
+      openNotice(error?.message || 'The booking link could not be generated.');
+    }
   };
 
   const closeRenameDialog = () => {
@@ -820,6 +1155,7 @@ function DashboardApp() {
         role: formatRole(currentUser.role || ''),
         profilePic: currentUser.profilePic || '',
         theme: currentUser.theme === 'dark' ? 'dark' : 'light',
+        assignedBranches: Array.isArray(currentUser.assignedBranches) ? currentUser.assignedBranches : [],
       });
     }
   }, [showProfileModal, currentUser]);
@@ -1063,7 +1399,16 @@ function DashboardApp() {
     const sortByOrder = (left, right) => left.order - right.order;
     const sortByNameThenOrder = (left, right) => left.name.localeCompare(right.name) || sortByOrder(left, right);
 
-    const branch = (byColumn.branch || []).slice().sort(sortByNameThenOrder).map((option) => ({ abbreviation: option.abbreviation || option.optionKey, fullName: option.name, color: option.color }));
+    const branch = (byColumn.branch || []).slice().sort(sortByNameThenOrder).map((option) => ({
+      abbreviation: option.abbreviation || option.optionKey,
+      fullName: option.name,
+      color: option.color,
+      email: option.email || '',
+      address: option.address || '',
+      addressPlaceId: option.addressPlaceId || '',
+      addressLat: typeof option.addressLat === 'number' ? option.addressLat : null,
+      addressLng: typeof option.addressLng === 'number' ? option.addressLng : null,
+    }));
     const products = (byColumn.products || []).slice().sort(sortByNameThenOrder).map((option) => ({ optionKey: option.optionKey, abbreviation: option.abbreviation || abbreviateLabel(option.name || option.optionKey), fullName: sanitizeProductLabel(option.name), color: option.color }));
     const status = (byColumn.status || []).slice().sort(sortByNameThenOrder).map((option) => ({ name: option.name, color: option.color }));
     const attendants = (byColumn.attendants || []).slice().sort(sortByNameThenOrder).map((option) => ({ fullName: option.name, branchKey: option.branchKey || '' }));
@@ -1099,6 +1444,7 @@ function DashboardApp() {
         role: editingUser.role || 'user',
         profilePic: editingUser.profilePic || '',
         isApproved: Boolean(editingUser.isApproved),
+        assignedBranches: Array.isArray(editingUser.assignedBranches) ? editingUser.assignedBranches : [],
       });
     }
   }, [editingUser]);
@@ -1118,11 +1464,24 @@ function DashboardApp() {
     };
   }, [adminMenuColumn]);
 
-  const persistLabelOption = (columnKey, optionKey, name, abbreviation, color, order, branchKey = '') => {
-    void upsertLabelOptionMutation({ columnKey, optionKey, name, abbreviation: abbreviation || '', color, order, branchKey }).catch((error) => {
-      console.error('Failed to persist label option', error);
-    });
-  };
+  const persistLabelOption = (
+    columnKey,
+    optionKey,
+    name,
+    abbreviation,
+    color,
+    order,
+    branchKey = '',
+    email = '',
+    address = '',
+    addressPlaceId = '',
+    addressLat = null,
+    addressLng = null
+  ) => {
+      void upsertLabelOptionMutation({ columnKey, optionKey, name, abbreviation: abbreviation || '', color, order, branchKey, email, address, addressPlaceId, addressLat, addressLng }).catch((error) => {
+        console.error('Failed to persist label option', error);
+      });
+    };
 
   const removeLabelOption = (columnKey, optionKey) => {
     void removeLabelOptionMutation({ columnKey, optionKey }).catch((error) => {
@@ -1199,13 +1558,24 @@ function DashboardApp() {
   };
 
   const updateEventLocationText = (eventId, value) => {
-    updateEvent(eventId, (event) => ({
-      ...event,
-      location: value,
-      locationPlaceId: '',
-      locationLat: null,
-      locationLng: null,
-    }));
+    updateEvent(eventId, (event) => {
+      const nextLocation = String(value || '');
+      const currentLocation = String(event.location || '');
+      const shouldPreserveLocationMeta =
+        nextLocation.trim() !== '' &&
+        nextLocation.trim() === currentLocation.trim() &&
+        (Boolean(event.locationPlaceId) ||
+          typeof event.locationLat === 'number' ||
+          typeof event.locationLng === 'number');
+
+      return {
+        ...event,
+        location: nextLocation,
+        locationPlaceId: shouldPreserveLocationMeta ? event.locationPlaceId : '',
+        locationLat: shouldPreserveLocationMeta ? event.locationLat : null,
+        locationLng: shouldPreserveLocationMeta ? event.locationLng : null,
+      };
+    });
   };
 
   const applyEventLocation = (eventId, nextLocation) => {
@@ -1260,8 +1630,7 @@ function DashboardApp() {
     eventFileInputRef.current?.click();
   };
 
-  const handleEventFileSelection = async (changeEvent) => {
-    const file = changeEvent.target.files?.[0];
+  const uploadEventFile = async (file) => {
     if (!selectedEvent || !file) {
       return;
     }
@@ -1299,9 +1668,26 @@ function DashboardApp() {
     } catch (error) {
       console.error('Failed to upload file', error);
       window.alert('The file could not be uploaded. Please try again.');
+    }
+  };
+
+  const handleEventFileSelection = async (changeEvent) => {
+    const file = changeEvent.target.files?.[0];
+    try {
+      await uploadEventFile(file);
     } finally {
       changeEvent.target.value = '';
     }
+  };
+
+  const handleFileDrop = async (dropEvent) => {
+    dropEvent.preventDefault();
+    setIsFileDropActive(false);
+    const file = dropEvent.dataTransfer?.files?.[0];
+    if (!file) {
+      return;
+    }
+    await uploadEventFile(file);
   };
 
   const deleteEventFile = async (fileId) => {
@@ -1675,6 +2061,14 @@ function DashboardApp() {
   };
 
   const closeCommissionDialog = () => {
+    commissionOverridesLoadedKeyRef.current = '';
+    commissionOverrideSaveTimeoutsRef.current.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId);
+    });
+    commissionOverrideSaveTimeoutsRef.current.clear();
+    setShowCommissionRatesModal(false);
+    setShowCommissionSnapshotsModal(false);
+    setShowChangelogModal(false);
     setCommissionDialog({
       isOpen: false,
       month: '',
@@ -1695,6 +2089,192 @@ function DashboardApp() {
         },
       },
     }));
+    if (!commissionDialog.month || !commissionDialog.attendant) {
+      return;
+    }
+    const currentOverride = commissionDialog.overrides[eventId] || {};
+    const nextOverride = {
+      ...currentOverride,
+      [field]: value,
+    };
+    const pendingTimeout = commissionOverrideSaveTimeoutsRef.current.get(eventId);
+    if (pendingTimeout) {
+      window.clearTimeout(pendingTimeout);
+    }
+    const timeoutId = window.setTimeout(() => {
+      commissionOverrideSaveTimeoutsRef.current.delete(eventId);
+      void saveCommissionOverrideMutation({
+        month: commissionDialog.month,
+        year: selectedWorkspaceYear,
+        attendant: commissionDialog.attendant,
+        eventId,
+        hoursPayable: String(nextOverride.hoursPayable ?? ''),
+        amount: String(nextOverride.amount ?? ''),
+        car: String(nextOverride.car ?? ''),
+        km: String(nextOverride.km ?? ''),
+        note: String(nextOverride.note ?? ''),
+      }).catch((error) => {
+        console.error('Failed to save commission override', error);
+        openNotice('The commission changes could not be saved right now.');
+      });
+    }, field === 'note' ? 500 : 250);
+    commissionOverrideSaveTimeoutsRef.current.set(eventId, timeoutId);
+  };
+
+  const autoCalculateCommissionKm = async (row) => {
+    if (!row?.id) {
+      return;
+    }
+    if (!row.canAutoCalculateKm) {
+      const branchLabel = row.routeBranchKey ? (branchFullNames[row.routeBranchKey] || row.routeBranchKey) : 'the branch';
+      openNotice(`A branch address and event map location are both needed before ${branchLabel} can auto-calculate the travel distance.`);
+      return;
+    }
+    try {
+      const routeOrigin = row.routeBranchKey ? branchAddressMap[row.routeBranchKey] : null;
+      const nextKm = await calculateCommissionRoundTripKm({
+        location: row.location,
+        locationLat: row.locationLat,
+        locationLng: row.locationLng,
+      }, routeOrigin);
+      updateCommissionOverride(row.id, 'km', String(nextKm));
+    } catch (error) {
+      console.error('Failed to auto-calculate commission KM', error);
+      openNotice('The driving distance could not be calculated right now.');
+    }
+  };
+
+  const openCommissionRatesModal = () => {
+    setCommissionRatesForm({
+      twoHours: String(commissionRates.twoHours),
+      threeHours: String(commissionRates.threeHours),
+      fourHours: String(commissionRates.fourHours),
+      fiveHours: String(commissionRates.fiveHours),
+      sixPlusHours: String(commissionRates.sixPlusHours),
+      perKmRate: String(commissionRates.perKmRate),
+    });
+    setShowCommissionRatesModal(true);
+  };
+
+  const saveCommissionRates = async () => {
+    try {
+      await saveCommissionRatesMutation({
+        twoHours: Math.max(0, parseNumericCellValue(commissionRatesForm.twoHours)),
+        threeHours: Math.max(0, parseNumericCellValue(commissionRatesForm.threeHours)),
+        fourHours: Math.max(0, parseNumericCellValue(commissionRatesForm.fourHours)),
+        fiveHours: Math.max(0, parseNumericCellValue(commissionRatesForm.fiveHours)),
+        sixPlusHours: Math.max(0, parseNumericCellValue(commissionRatesForm.sixPlusHours)),
+        perKmRate: Math.max(0, parseNumericCellValue(commissionRatesForm.perKmRate)),
+      });
+      setShowCommissionRatesModal(false);
+      openNotice('Commission rates saved.');
+    } catch (error) {
+      console.error('Failed to save commission rates', error);
+      openNotice('The commission rates could not be saved right now.');
+    }
+  };
+
+  const openLogisticsDialog = (month) => {
+    if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
+      return;
+    }
+    const monthEvents = events
+      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+      .filter((event) => getEventMonth(event) === month)
+      .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
+      .sort((left, right) => sortEvents(left, right));
+    const initialDate = monthEvents[0]?.date || buildMonthDateKey(month, selectedWorkspaceYear, 1);
+    const initialIds = monthEvents.filter((event) => event.date === initialDate).map((event) => event.id);
+    const initialOrdersByDate = { ...savedLogisticsDayOrders };
+    if (initialDate && !initialOrdersByDate[initialDate]) {
+      initialOrdersByDate[initialDate] = initialIds;
+    }
+    setLogisticsDialog({
+      isOpen: true,
+      month,
+      selectedDate: initialDate,
+      ordersByDate: initialOrdersByDate,
+    });
+  };
+
+  const closeLogisticsDialog = async () => {
+    const ordersToSave = logisticsDialog.ordersByDate || {};
+    setDraggedLogisticsRowId('');
+    setDragOverLogisticsRowId('');
+    setLogisticsDialog({
+      isOpen: false,
+      month: '',
+      selectedDate: '',
+      ordersByDate: {},
+    });
+    if (!currentUser) {
+      return;
+    }
+    try {
+      await updateLogisticsDayOrdersMutation({
+        logisticsDayOrders: ordersToSave,
+      });
+    } catch (error) {
+      console.error('Failed to save logistics order', error);
+      openNotice('The logistics order could not be saved right now.');
+    }
+  };
+
+  const changeLogisticsDay = (direction) => {
+    setLogisticsDialog((current) => {
+      if (!current.selectedDate || !current.month) {
+        return current;
+      }
+      const nextDate = shiftMonthDate(current.selectedDate, current.month, selectedWorkspaceYear, direction);
+      if (!nextDate) {
+        return current;
+      }
+      const nextDayIds = events
+        .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+        .filter((event) => getEventMonth(event) === current.month)
+        .filter((event) => event.status === 'In Progress' || event.status === 'Event Completed')
+        .filter((event) => event.date === nextDate)
+        .sort((left, right) => sortEvents(left, right))
+        .map((event) => event.id);
+      return {
+        ...current,
+        selectedDate: nextDate,
+        ordersByDate: current.ordersByDate[nextDate]
+          ? current.ordersByDate
+          : { ...current.ordersByDate, [nextDate]: nextDayIds },
+      };
+    });
+  };
+
+  const handleLogisticsRowDrop = (targetEventId) => {
+    if (!draggedLogisticsRowId || draggedLogisticsRowId === targetEventId) {
+      setDraggedLogisticsRowId('');
+      setDragOverLogisticsRowId('');
+      return;
+    }
+    setLogisticsDialog((current) => {
+      if (!current.selectedDate) {
+        return current;
+      }
+      const fallbackOrder = logisticsRows.map((row) => row.id);
+      const nextOrder = [...((current.ordersByDate[current.selectedDate] || fallbackOrder))];
+      const fromIndex = nextOrder.indexOf(draggedLogisticsRowId);
+      const toIndex = nextOrder.indexOf(targetEventId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return current;
+      }
+      const [moved] = nextOrder.splice(fromIndex, 1);
+      nextOrder.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        ordersByDate: {
+          ...current.ordersByDate,
+          [current.selectedDate]: nextOrder,
+        },
+      };
+    });
+    setDraggedLogisticsRowId('');
+    setDragOverLogisticsRowId('');
   };
 
   const exportCommissionSheet = async () => {
@@ -1707,12 +2287,35 @@ function DashboardApp() {
       return;
     }
     try {
-      await exportCommissionPdf({
+      const { blob, fileName } = await exportCommissionPdf({
         month: commissionDialog.month,
         year: selectedWorkspaceYear,
         period: commissionDialog.period,
         attendant: commissionDialog.attendant,
         rows: commissionRows,
+        totals: commissionTotals,
+      });
+      downloadBlobFile(fileName, blob, 'application/pdf');
+
+      const uploadUrl = await generateEventFileUploadUrl({});
+      const uploadResult = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/pdf',
+        },
+        body: blob,
+      });
+      if (!uploadResult.ok) {
+        throw new Error('Failed to upload the saved commission PDF.');
+      }
+      const { storageId } = await uploadResult.json();
+      await saveCommissionSnapshotMutation({
+        month: commissionDialog.month,
+        year: selectedWorkspaceYear,
+        period: commissionDialog.period,
+        attendant: commissionDialog.attendant,
+        storageId,
+        fileName,
       });
     } catch (error) {
       console.error('Failed to export commission PDF', error);
@@ -1773,6 +2376,15 @@ function DashboardApp() {
     setEditingUserId(userId);
   };
 
+  const toggleManagedUserBranch = (branchKey) => {
+    setManagedUserForm((current) => ({
+      ...current,
+      assignedBranches: (current.assignedBranches || []).includes(branchKey)
+        ? (current.assignedBranches || []).filter((item) => item !== branchKey)
+        : [...(current.assignedBranches || []), branchKey],
+    }));
+  };
+
   const saveManagedUser = async () => {
     if (!editingUser) {
       return;
@@ -1787,6 +2399,7 @@ function DashboardApp() {
       role: managedUserForm.role,
       profilePic: managedUserForm.profilePic || '',
       isApproved: Boolean(managedUserForm.isApproved),
+      assignedBranches: [...new Set((managedUserForm.assignedBranches || []).filter(Boolean))],
     });
     setEditingUserId('');
   };
@@ -2230,14 +2843,29 @@ function DashboardApp() {
 
   const openBranchManager = () => {
     setAdminMenuColumn(null);
-    setBranchDrafts(Object.fromEntries(branchOptions.map((option) => [option.abbreviation, { abbreviation: option.abbreviation, fullName: option.fullName, color: option.color }])));
+    setBranchDrafts(Object.fromEntries(branchOptions.map((option) => [option.abbreviation, {
+      abbreviation: option.abbreviation,
+      fullName: option.fullName,
+      color: option.color,
+      email: option.email || '',
+      address: option.address || '',
+      addressPlaceId: option.addressPlaceId || '',
+      addressLat: typeof option.addressLat === 'number' ? option.addressLat : null,
+      addressLng: typeof option.addressLng === 'number' ? option.addressLng : null,
+    }])));
     setBranchManagerOpen(true);
   };
 
   const addBranchOption = () => {
     const fullName = newBranchFullName.trim();
     const abbreviation = newBranchAbbreviation.trim().toUpperCase();
+    const email = newBranchEmail.trim().toLowerCase();
+    const address = newBranchAddress.trim();
     if (!fullName || !abbreviation || abbreviation.length > 7) {
+      return;
+    }
+    if (!isValidCoZaEmail(email)) {
+      openNotice('Please enter a valid .co.za email address.');
       return;
     }
     if (branchOptions.some((option) => option.abbreviation.toLowerCase() === abbreviation.toLowerCase())) {
@@ -2248,20 +2876,43 @@ function DashboardApp() {
       openNotice('That branch name already exists.');
       return;
     }
-    const newOption = { abbreviation, fullName, color: newBranchColor };
-    persistLabelOption('branch', abbreviation, fullName, abbreviation, newBranchColor, branchOptions.length);
+    const newOption = {
+      abbreviation,
+      fullName,
+      color: newBranchColor,
+      email,
+      address,
+      addressPlaceId: newBranchAddressPlaceId,
+      addressLat: newBranchAddressLat,
+      addressLng: newBranchAddressLng,
+    };
+    persistLabelOption('branch', abbreviation, fullName, abbreviation, newBranchColor, branchOptions.length, '', email, address, newBranchAddressPlaceId, newBranchAddressLat, newBranchAddressLng);
     setBranchOptions((current) => [...current, newOption]);
     setBranchDrafts((current) => ({ ...current, [abbreviation]: newOption }));
     setNewBranchFullName('');
     setNewBranchAbbreviation('');
     setNewBranchColor('#b8d9ff');
+    setNewBranchEmail('');
+    setNewBranchAddress('');
+    setNewBranchAddressPlaceId('');
+    setNewBranchAddressLat(null);
+    setNewBranchAddressLng(null);
   };
 
   const updateBranchDraft = (branchKey, key, value) => {
     setBranchDrafts((current) => ({
       ...current,
       [branchKey]: {
-        ...(current[branchKey] || { abbreviation: branchKey, fullName: branchKey, color: '#b8d9ff' }),
+        ...(current[branchKey] || {
+          abbreviation: branchKey,
+          fullName: branchKey,
+          color: '#b8d9ff',
+          email: '',
+          address: '',
+          addressPlaceId: '',
+          addressLat: null,
+          addressLng: null,
+        }),
         [key]: key === 'abbreviation' ? value.toUpperCase().slice(0, 7) : value,
       },
     }));
@@ -2272,8 +2923,17 @@ function DashboardApp() {
     const nextFullName = draft?.fullName?.trim();
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
     const nextColor = draft?.color || '#b8d9ff';
+    const nextEmail = String(draft?.email || '').trim().toLowerCase();
+    const nextAddress = String(draft?.address || '').trim();
+    const nextAddressPlaceId = String(draft?.addressPlaceId || '').trim();
+    const nextAddressLat = typeof draft?.addressLat === 'number' ? draft.addressLat : null;
+    const nextAddressLng = typeof draft?.addressLng === 'number' ? draft.addressLng : null;
     if (!nextFullName || !nextAbbreviation || nextAbbreviation.length > 7) {
       openNotice('Please enter a full name and an abbreviation of 7 characters or less.');
+      return;
+    }
+    if (!isValidCoZaEmail(nextEmail)) {
+      openNotice('Please enter a valid .co.za email address.');
       return;
     }
     const duplicateAbbreviation = branchOptions.some((option) => option.abbreviation !== branchKey && option.abbreviation.toLowerCase() === nextAbbreviation.toLowerCase());
@@ -2287,11 +2947,20 @@ function DashboardApp() {
       return;
     }
 
-    persistLabelOption('branch', nextAbbreviation, nextFullName, nextAbbreviation, nextColor, branchOptions.findIndex((option) => option.abbreviation === branchKey));
+    persistLabelOption('branch', nextAbbreviation, nextFullName, nextAbbreviation, nextColor, branchOptions.findIndex((option) => option.abbreviation === branchKey), '', nextEmail, nextAddress, nextAddressPlaceId, nextAddressLat, nextAddressLng);
       if (nextAbbreviation !== branchKey) {
         removeLabelOption('branch', branchKey);
       }
-      setBranchOptions((current) => current.map((option) => (option.abbreviation === branchKey ? { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } : option)));
+      setBranchOptions((current) => current.map((option) => (option.abbreviation === branchKey ? {
+        abbreviation: nextAbbreviation,
+        fullName: nextFullName,
+        color: nextColor,
+        email: nextEmail,
+        address: nextAddress,
+        addressPlaceId: nextAddressPlaceId,
+        addressLat: nextAddressLat,
+        addressLng: nextAddressLng,
+      } : option)));
     if (nextAbbreviation !== branchKey) {
       replaceEvents((current) => current.map((event) => ({
         ...event,
@@ -2305,12 +2974,33 @@ function DashboardApp() {
       setBranchDrafts((current) => {
         const nextDrafts = { ...current };
         delete nextDrafts[branchKey];
-        nextDrafts[nextAbbreviation] = { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor };
+        nextDrafts[nextAbbreviation] = {
+          abbreviation: nextAbbreviation,
+          fullName: nextFullName,
+          color: nextColor,
+          email: nextEmail,
+          address: nextAddress,
+          addressPlaceId: nextAddressPlaceId,
+          addressLat: nextAddressLat,
+          addressLng: nextAddressLng,
+        };
         return nextDrafts;
       });
       return;
     }
-    setBranchDrafts((current) => ({ ...current, [branchKey]: { abbreviation: nextAbbreviation, fullName: nextFullName, color: nextColor } }));
+    setBranchDrafts((current) => ({
+      ...current,
+      [branchKey]: {
+        abbreviation: nextAbbreviation,
+        fullName: nextFullName,
+        color: nextColor,
+        email: nextEmail,
+        address: nextAddress,
+        addressPlaceId: nextAddressPlaceId,
+        addressLat: nextAddressLat,
+        addressLng: nextAddressLng,
+      },
+    }));
   };
 
   const deleteBranchOption = async (branchKey) => {
@@ -2767,9 +3457,14 @@ function DashboardApp() {
   };
 
   const toggleAttendantOnEvent = (eventId, attendantName) => {
+    const attendantBranchKey = attendantBranchMap[attendantName] || '';
+    const canManageThisAttendant = !hasUserAttendantBranchRestrictions || (attendantBranchKey && currentUserAssignedBranches.includes(attendantBranchKey));
     updateEvent(eventId, (event) => {
       const currentAttendants = event.attendants || [];
       const hasAttendant = currentAttendants.includes(attendantName);
+      if (!canManageThisAttendant) {
+        return event;
+      }
       return {
         ...event,
         attendants: hasAttendant ? currentAttendants.filter((item) => item !== attendantName) : [...currentAttendants, attendantName],
@@ -2819,12 +3514,17 @@ function DashboardApp() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar compact">
-        <div>
-          <div className="topbar-kicker">Events Dashboard</div>
-          <h1>SelfieBox Events {selectedWorkspaceYear}</h1>
-        </div>
+      <div className="app-shell">
+        <header className="topbar compact">
+          <div>
+            <div className="topbar-kicker-row">
+              <div className="topbar-kicker">Events Dashboard</div>
+              <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
+                V1.2002
+              </button>
+            </div>
+            <h1>SelfieBox Events {selectedWorkspaceYear}</h1>
+          </div>
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
             <span className="workspace-prefix">Workspace for</span>
@@ -2927,7 +3627,7 @@ function DashboardApp() {
               <section className={`month-section ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
                 <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main"><strong>{month} {selectedWorkspaceYear}</strong><span>{monthItems.length} events</span><span>{upcomingCount} Upcoming Events</span><span>{completedCount} Completed Events</span><span>{fullyPaidCount} Fully Paid</span></div>
-                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{currentUser.role === 'admin' ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -2949,22 +3649,464 @@ function DashboardApp() {
         <div className="drawer-header"><div><div className="topbar-kicker">Activities</div><h3>Board activities</h3></div><button className="drawer-close" type="button" onClick={() => setActivitiesOpen(false)}>x</button></div>
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
-      <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'activity', label: 'Activity Log' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
-      </aside>
+        <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update stream</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Accepted uploads</h4><p>PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop a file here</p><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files gallery</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><p>{file.size || file.uploadedAt}</p></div><button className="file-delete" type="button" onClick={() => deleteEventFile(file.id)}>Delete</button></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions"><button className="primary-button" type="button" onClick={() => void generateBookingLink()}>Generate Booking Link</button>{selectedEventBooking?.token ? <button className="ghost-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : null}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays available until the event day, when the form becomes read-only.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {new Date(selectedEventBooking.submittedAt).toLocaleString()}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">No booking link generated yet.</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+        </aside>
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={previewFile.url} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
 
-      {locationPreview ? <div className="modal-scrim" onClick={closeLocationPreview}><div className="modal-panel map-preview-panel" role="dialog" aria-modal="true" aria-label={locationPreview.title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><h3>{locationPreview.title}</h3><p className="map-preview-address" title={locationPreview.address}>{locationPreview.address}</p></div></div><LocationMapPreview location={locationPreview} /><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => void shareLocationPreview()}>Share</button><a className="ghost-button file-preview-link" href={buildGoogleMapsExternalUrl(locationPreview)} target="_blank" rel="noreferrer">Open in Google Maps</a></div></div></div> : null}
+      {locationPreview ? <div className="modal-scrim" onClick={closeLocationPreview}><div className="modal-panel map-preview-panel" role="dialog" aria-modal="true" aria-label={locationPreview.title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><h3>{locationPreview.title}</h3><p className="map-preview-address" title={locationPreview.address}>{locationPreview.address}</p></div><button className="modal-close-x" type="button" onClick={closeLocationPreview}>x</button></div><LocationMapPreview location={locationPreview} /><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => void shareLocationPreview()}>Share</button><a className="ghost-button file-preview-link" href={buildGoogleMapsExternalUrl(locationPreview)} target="_blank" rel="noreferrer">Open in Google Maps</a></div></div></div> : null}
 
       {renameDialog.isOpen ? <ModalShell title="Rename header" onClose={closeRenameDialog}><div className="simple-stack"><label className="full-span"><span>Header name</span><input className="text-input" value={renameDialog.value} onChange={(event) => setRenameDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveRenamedColumn(); } }} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeRenameDialog}>Cancel</button><button className="primary-button" type="button" onClick={saveRenamedColumn}>Save</button></div></div></ModalShell> : null}
 
-      {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4>{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</section><section className="rights-section"><h4>Users</h4>{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</section></div></ModalShell> : null}
-      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={attendantOptions.map((option) => option.fullName)} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
+      {rightsColumnKey ? <ModalShell title={`Manage rights for ${displayColumnLabel(allColumns.find((column) => column.key === rightsColumnKey) || { key: rightsColumnKey, label: rightsColumnKey, isCustom: false })}`} onClose={() => setRightsColumnKey('')}><div className="rights-modal"><section className="rights-section"><h4>Roles</h4><div className="rights-scroll">{['manager', 'user'].map((role) => { const permission = getColumnPermission(rightsColumnKey, 'role', role); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={role}><div className="rights-subject"><strong>{formatRole(role)}</strong><small>{permission ? 'Override active' : 'Inherited'}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'role', role, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'role', role)} disabled={!permission}>Clear</button></div>; })}</div></section><section className="rights-section"><h4>Users</h4><div className="rights-scroll">{users.filter((user) => user.role !== 'admin').map((user) => { const permission = getColumnPermission(rightsColumnKey, 'user', user.id); const canView = permission?.canView ?? true; const canEdit = permission?.canEdit ?? true; return <div className="rights-row" key={user.id}><div className="rights-subject"><strong>{user.firstName} {user.surname}</strong><small>{permission ? 'Override active' : 'Inherited'} ? {formatRole(user.role)}</small></div><label><input type="checkbox" checked={canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canView: event.target.checked })} />View</label><label><input type="checkbox" checked={canEdit} disabled={!canView} onChange={(event) => void saveColumnPermission(rightsColumnKey, 'user', user.id, { canEdit: event.target.checked })} />Edit</label><button className="ghost-button compact-manager-button" type="button" onClick={() => void clearColumnPermission(rightsColumnKey, 'user', user.id)} disabled={!permission}>Clear</button></div>; })}</div></section></div></ModalShell> : null}
+      {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={branchScopedAttendantOptions.map((option) => option.fullName)} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
-      {commissionDialog.isOpen ? <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog}><div className="commission-sheet"><div className="commission-toolbar"><label><span>Attendant</span><select value={commissionDialog.attendant} onChange={(event) => setCommissionDialog((current) => ({ ...current, attendant: event.target.value }))}><option value="">Select attendant</option>{commissionAttendantNames.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><div className="commission-periods"><button className={["ghost-button", commissionDialog.period === 'all' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}>All events</button><button className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}>1-15</button><button className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()} type="button" onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}>16-end</button></div></div><div className="commission-subhead"><strong>SelfieBox commission sheet for:</strong><span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span><span>Attendant: {commissionDialog.attendant || '-'}</span></div><div className="commission-table-wrap"><div className="commission-table commission-table-header"><span>Event Name</span><span>Date</span><span>Hours</span><span>Hours Payable</span><span>Amount</span></div>{commissionRows.length ? commissionRows.map((row) => <div className="commission-table commission-table-row" key={row.id}><span title={row.eventName}>{row.eventName}</span><span>{formatDateDisplay(row.date || '') || '-'}</span><span>{row.hours}</span><input className="text-input commission-input" inputMode="numeric" value={row.hoursPayable} onChange={(event) => updateCommissionOverride(row.id, 'hoursPayable', event.target.value)} /><input className="text-input commission-input" inputMode="numeric" value={row.amount} onChange={(event) => updateCommissionOverride(row.id, 'amount', event.target.value)} /></div>) : <div className="empty-month">No commission rows for this selection.</div>}</div><div className="commission-signoff"><div><span>Signature</span><div className="commission-line" /></div><div><span>Date</span><div className="commission-line" /></div></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={closeCommissionDialog}>Close</button><button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>Export to PDF</button></div></div></ModalShell> : null}
+      {showChangelogModal ? (
+        <ModalShell title="Changelog - V1.2002" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
+          <div className="changelog-modal">
+            {CHANGELOG_ENTRIES.map((section) => (
+              <section className="changelog-section" key={section.title}>
+                <h4>{section.title}</h4>
+                <ul>
+                  {section.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <div className="modal-actions">
+              <button className="primary-button" type="button" onClick={() => setShowChangelogModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {commissionDialog.isOpen ? (
+        <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog} closeOnScrimClick={false} panelClassName="commission-modal-panel">
+          <div className="commission-sheet">
+            <div className="commission-toolbar">
+              <label>
+                <span>Attendant</span>
+                <select
+                  value={commissionDialog.attendant}
+                  onChange={(event) => {
+                    commissionOverridesLoadedKeyRef.current = '';
+                    setCommissionDialog((current) => ({ ...current, attendant: event.target.value, overrides: {} }));
+                  }}
+                >
+                  <option value="">Select attendant</option>
+                  {commissionAttendantNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="commission-periods">
+                <button
+                  className={["ghost-button", commissionDialog.period === 'all' ? 'is-active' : ''].join(' ').trim()}
+                  type="button"
+                  onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}
+                >
+                  Whole Month
+                </button>
+                <button
+                  className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
+                  type="button"
+                  onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}
+                >
+                  1st to 15th
+                </button>
+                <button
+                  className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()}
+                  type="button"
+                  onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}
+                >
+                  16th to last day
+                </button>
+              </div>
+            </div>
+            <div className="commission-subhead">
+              <strong>SelfieBox commission sheet for:</strong>
+              <span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
+              <span>Attendant: {commissionDialog.attendant || '-'}</span>
+              {currentUser?.role === 'admin' ? (
+                <button
+                  className="commission-link-action commission-link-action-spacer"
+                  type="button"
+                  onClick={openCommissionRatesModal}
+                >
+                  Commision rates
+                </button>
+              ) : null}
+              <button
+                className="commission-link-action"
+                type="button"
+                onClick={() => {
+                  if (!commissionDialog.attendant) {
+                    openNotice('Please choose an attendant first.');
+                    return;
+                  }
+                  setShowCommissionSnapshotsModal(true);
+                }}
+              >
+                Saved PDF's
+              </button>
+            </div>
+            <div className="commission-table-wrap">
+              <div className="commission-table commission-table-header">
+                <span>Event</span>
+                <span>Date</span>
+                <span>Times</span>
+                <span>Hrs</span>
+                <span>Comm</span>
+                <span>Car</span>
+                <span>KM</span>
+                <span>Travel</span>
+                <span>Note</span>
+              </div>
+              {commissionRows.length ? (
+                commissionRows.map((row) => (
+                  <div className="commission-table commission-table-row" key={row.id}>
+                    <div className="commission-event-cell" title={[row.eventLabel, row.addressLabel].filter(Boolean).join(' - ')}>
+                      <strong>{row.eventLabel}</strong>
+                      <small>{row.addressLabel || 'No address set'}</small>
+                    </div>
+                    <span>{formatDateDisplay(row.date || '') || '-'}</span>
+                    <span>{row.hours}</span>
+                    <input
+                      className="text-input commission-input"
+                      inputMode="numeric"
+                      value={row.hoursPayable}
+                      onChange={(event) => updateCommissionOverride(row.id, 'hoursPayable', event.target.value)}
+                    />
+                    <div className="commission-currency-field">
+                      <span>R</span>
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.amount}
+                        onChange={(event) => updateCommissionOverride(row.id, 'amount', event.target.value)}
+                      />
+                    </div>
+                    <div className="commission-currency-field">
+                      <span>R</span>
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.car}
+                        onChange={(event) => updateCommissionOverride(row.id, 'car', event.target.value)}
+                      />
+                    </div>
+                    <div className="commission-km-field">
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.km}
+                        onChange={(event) => updateCommissionOverride(row.id, 'km', event.target.value)}
+                      />
+                      <button
+                        className="commission-km-auto-button"
+                        type="button"
+                        onClick={() => autoCalculateCommissionKm(row)}
+                        title={row.canAutoCalculateKm ? `Auto-calculate from ${branchFullNames[row.routeBranchKey] || row.routeBranchKey}` : 'Branch address or event location not available yet'}
+                      >
+                        Auto
+                      </button>
+                    </div>
+                    <div className="commission-currency-value">
+                      <span>R</span>
+                      <strong>{(Number(row.travel) || 0).toLocaleString('en-ZA')}</strong>
+                    </div>
+                    <input
+                      className="text-input commission-input"
+                      value={row.note}
+                      onChange={(event) => updateCommissionOverride(row.id, 'note', event.target.value)}
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="empty-month">No commission rows for this selection.</div>
+              )}
+            </div>
+            <div className="commission-summary">
+              <div className="commission-summary-grid">
+                <div>
+                  <span>Commission</span>
+                  <strong>{currencyFormatter.format(commissionTotals.amount)}</strong>
+                </div>
+                <div>
+                  <span>Vehicle compensation</span>
+                  <strong>{currencyFormatter.format(commissionTotals.car)}</strong>
+                </div>
+                <div>
+                  <span>Travel Compensation</span>
+                  <strong>{currencyFormatter.format(commissionTotals.travel)}</strong>
+                </div>
+                <div>
+                  <span>Total</span>
+                  <strong>{currencyFormatter.format(commissionTotals.grand)}</strong>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={closeCommissionDialog}>
+                Close
+              </button>
+              <button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>
+                Export to PDF
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {showCommissionRatesModal ? (
+        <ModalShell title="Commision rates" onClose={() => setShowCommissionRatesModal(false)} closeOnScrimClick={false}>
+          <div className="simple-stack">
+            <div className="commission-rates-grid">
+              <label>
+                <span>2 hours and less</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.twoHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, twoHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>3 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.threeHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, threeHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>4 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.fourHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, fourHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>5 hours</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.fiveHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, fiveHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>6 hours and more</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.sixPlusHours}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, sixPlusHours: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Rate P/KM</span>
+                <input
+                  className="text-input"
+                  inputMode="decimal"
+                  value={commissionRatesForm.perKmRate}
+                  onChange={(event) => setCommissionRatesForm((current) => ({ ...current, perKmRate: event.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={() => setShowCommissionRatesModal(false)}>
+                Cancel
+              </button>
+              <button className="primary-button" type="button" onClick={() => void saveCommissionRates()}>
+                Save
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
+      {showCommissionSnapshotsModal ? (
+        <ModalShell
+          title={`Saved PDF's - ${commissionDialog.attendant || '-'}`}
+          onClose={() => setShowCommissionSnapshotsModal(false)}
+          panelClassName="commission-snapshots-modal-panel"
+        >
+          <div className="commission-snapshot-list">
+            {commissionSnapshots === undefined ? (
+              <div className="empty-month">Loading saved PDFs...</div>
+            ) : commissionSnapshots.length ? (
+              commissionSnapshots.map((snapshot) => (
+                <article className="commission-snapshot-item" key={snapshot.id}>
+                  <a className="commission-snapshot-link" href={snapshot.url} target="_blank" rel="noreferrer">
+                    {snapshot.fileName}
+                  </a>
+                  <small className="commission-snapshot-log">
+                    Created {new Date(snapshot.createdAt).toLocaleString()}
+                    {snapshot.createdByLabel ? ` by ${snapshot.createdByLabel}` : ''}
+                  </small>
+                </article>
+              ))
+            ) : (
+              <div className="empty-month">No saved PDFs for this attendant this month yet.</div>
+            )}
+          </div>
+          <div className="modal-actions">
+            <button className="primary-button" type="button" onClick={() => setShowCommissionSnapshotsModal(false)}>
+              Close
+            </button>
+          </div>
+        </ModalShell>
+      ) : null}
+      {logisticsDialog.isOpen ? (
+        <ModalShell title={`Manager - Logistics manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={() => { void closeLogisticsDialog(); }} panelClassName="logistics-modal-panel">
+          <div className="logistics-sheet">
+            <div className="logistics-toolbar">
+              <div className="logistics-day-nav">
+                <button className="ghost-button" type="button" onClick={() => changeLogisticsDay(-1)}>
+                  Previous day
+                </button>
+                <strong>{formatDateDisplay(logisticsDialog.selectedDate) || '-'}</strong>
+                <button className="ghost-button" type="button" onClick={() => changeLogisticsDay(1)}>
+                  Next day
+                </button>
+              </div>
+            </div>
+            <div className="logistics-scale-wrap">
+              <div className="logistics-scale-spacer" />
+              <div className="logistics-scale">
+                {Array.from({ length: 24 }, (_, hour) => (
+                  <span key={hour}>{String(hour).padStart(2, '0')}:00</span>
+                ))}
+              </div>
+            </div>
+            <div className="logistics-rows">
+              {logisticsRows.length ? (
+                logisticsRows.map((row) => (
+                  <div
+                    className={["logistics-row", draggedLogisticsRowId === row.id ? 'is-dragging-logistics' : '', dragOverLogisticsRowId === row.id ? 'is-drag-over-logistics' : ''].join(' ').trim()}
+                    key={row.id}
+                    draggable
+                    onDragStart={() => {
+                      setDraggedLogisticsRowId(row.id);
+                      setDragOverLogisticsRowId(row.id);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (dragOverLogisticsRowId !== row.id) {
+                        setDragOverLogisticsRowId(row.id);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleLogisticsRowDrop(row.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedLogisticsRowId('');
+                      setDragOverLogisticsRowId('');
+                    }}
+                  >
+                    <div className="logistics-event-card">
+                      <div className="logistics-event-copy">
+                        <strong title={row.clientName}>{row.clientName}</strong>
+                        <span title={[row.eventName || 'No event name', row.addressLabel || 'No address set'].join(' - ')}>{row.eventName || 'No event name'} - {row.addressLabel || 'No address set'}</span>
+                        <small title={`${row.productLabel} | ${row.attendantLabel}`}>
+                          <span style={{ color: row.productColor }}>{row.productLabel}</span>
+                          {' | '}
+                          <span className="logistics-attendant-line">{row.attendantLabel}</span>
+                        </small>
+                      </div>
+                    </div>
+                    <div className="logistics-timeline" title={row.timelineLabel}>
+                      {row.timeRange ? (
+                        <div
+                          className="logistics-bar"
+                          style={{ left: row.barLeft, width: row.barWidth, background: row.color, color: row.textColor }}
+                        >
+                          <span>{row.timelineLabel}</span>
+                        </div>
+                      ) : (
+                        <div className="logistics-bar logistics-bar-empty">
+                          <span>No time set</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-month">No events for this day yet.</div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="ghost-button" type="button" onClick={() => { void closeLogisticsDialog(); }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
       {exportDialog.isOpen ? <ModalShell title={exportDialog.title} onClose={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}><div className="simple-stack export-dialog"><p>Select the columns to include in this export.</p><div className="export-column-grid">{visibleColumns.map((column) => <label className="export-column-option" key={column.key}><input type="checkbox" checked={exportDialog.selectedKeys.includes(column.key)} onChange={() => toggleExportColumn(column.key)} /><span>{displayColumnLabel(column)}</span></label>)}</div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setExportDialog((current) => ({ ...current, selectedKeys: visibleColumns.map((column) => column.key) }))}>Select all</button><button className="ghost-button" type="button" onClick={() => setExportDialog({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] })}>Cancel</button><button className="primary-button" type="button" onClick={runExport}>Export</button></div></div></ModalShell> : null}
-        {branchManagerOpen ? <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-branch-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button></div><div className="branch-preview-list is-editor">{branchOptions.map((option) => <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: branchDrafts[option.abbreviation]?.color ?? option.color, color: getContrastColor(branchDrafts[option.abbreviation]?.color ?? option.color) }} title={branchDrafts[option.abbreviation]?.fullName ?? option.fullName}>{branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
+        {branchManagerOpen ? (
+          <ModalShell title="Manage branch items" onClose={() => setBranchManagerOpen(false)} closeOnScrimClick={false} panelClassName="branch-manager-modal-panel">
+            <div className="branch-manager compact-branch-manager">
+              <div className="branch-manager-form compact-branch-manager-form">
+                <input className="text-input compact-text-input" placeholder="Full name" value={newBranchFullName} onChange={(event) => setNewBranchFullName(event.target.value)} />
+                <input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newBranchAbbreviation} onChange={(event) => setNewBranchAbbreviation(event.target.value.toUpperCase().slice(0, 7))} />
+                <ColorSwatchPicker value={newBranchColor} onChange={setNewBranchColor} className="compact-color-picker" />
+                <input className="text-input compact-text-input compact-branch-email-input" inputMode="email" autoComplete="off" placeholder="branch@company.co.za" value={newBranchEmail} onChange={(event) => setNewBranchEmail(event.target.value.toLowerCase())} />
+                <LocationInputField
+                  value={newBranchAddress}
+                  title={newBranchAddress}
+                  placeholder="Start typing address"
+                  className="text-input compact-text-input compact-branch-address-input"
+                  compact
+                  onTextChange={(nextValue) => setNewBranchAddress(nextValue)}
+                  onPlaceSelect={(place) => {
+                    setNewBranchAddress(place.location || '');
+                    setNewBranchAddressPlaceId(place.locationPlaceId || '');
+                    setNewBranchAddressLat(typeof place.locationLat === 'number' ? place.locationLat : null);
+                    setNewBranchAddressLng(typeof place.locationLng === 'number' ? place.locationLng : null);
+                  }}
+                />
+                <button className="primary-button compact-manager-button" type="button" onClick={addBranchOption}>Add</button>
+              </div>
+              <div className="branch-preview-list is-editor">
+                {branchOptions.map((option) => (
+                  <div className="branch-editor-row compact-branch-editor-row" key={option.optionKey || option.abbreviation}>
+                    <input className="text-input compact-text-input compact-name-input" value={branchDrafts[option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateBranchDraft(option.abbreviation, 'fullName', event.target.value)} />
+                    <input className="text-input compact-text-input" maxLength={7} value={branchDrafts[option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateBranchDraft(option.abbreviation, 'abbreviation', event.target.value)} />
+                    <ColorSwatchPicker value={branchDrafts[option.abbreviation]?.color ?? option.color} onChange={(value) => updateBranchDraft(option.abbreviation, 'color', value)} className="compact-color-picker" />
+                    <input className="text-input compact-text-input compact-branch-email-input" inputMode="email" autoComplete="off" placeholder="branch@company.co.za" value={branchDrafts[option.abbreviation]?.email ?? option.email ?? ''} onChange={(event) => updateBranchDraft(option.abbreviation, 'email', event.target.value.toLowerCase())} />
+                    <LocationInputField
+                      value={branchDrafts[option.abbreviation]?.address ?? option.address ?? ''}
+                      title={branchDrafts[option.abbreviation]?.address ?? option.address ?? ''}
+                      placeholder="Start typing address"
+                      className="text-input compact-text-input compact-branch-address-input"
+                      compact
+                      onTextChange={(nextValue) => updateBranchDraft(option.abbreviation, 'address', nextValue)}
+                      onPlaceSelect={(place) => {
+                        updateBranchDraft(option.abbreviation, 'address', place.location || '');
+                        updateBranchDraft(option.abbreviation, 'addressPlaceId', place.locationPlaceId || '');
+                        updateBranchDraft(option.abbreviation, 'addressLat', typeof place.locationLat === 'number' ? place.locationLat : null);
+                        updateBranchDraft(option.abbreviation, 'addressLng', typeof place.locationLng === 'number' ? place.locationLng : null);
+                      }}
+                    />
+                    <div className="manager-action-group">
+                      <button className="ghost-button compact-manager-button" type="button" onClick={() => saveBranchOption(option.abbreviation)}>Save</button>
+                      <button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteBranchOption(option.abbreviation)}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ModalShell>
+        ) : null}
       {branchEditorEventId && selectedBranchEvent ? <ModalShell title="Select branch" onClose={() => setBranchEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{branchOptions.map((option) => <button className={["branch-selector-item", selectedBranchEvent.branch.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleBranchOnEvent(selectedBranchEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.abbreviation}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setBranchEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
         {productManagerOpen ? <ModalShell title="Manage product items" onClose={() => setProductManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-product-manager-form"><input className="text-input compact-text-input" placeholder="Full name" value={newProductFullName} onChange={(event) => { const value = event.target.value; setNewProductFullName(value); setNewProductAbbreviation((current) => (current ? current : abbreviateLabel(value))); }} /><input className="text-input compact-text-input" maxLength={7} placeholder="Abbrev." value={newProductAbbreviation || abbreviateLabel(newProductFullName)} onChange={(event) => setNewProductAbbreviation(event.target.value.toUpperCase().slice(0, 7))} /><ColorSwatchPicker value={newProductColor} onChange={setNewProductColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addProductOption}>Add</button></div><div className="branch-preview-list is-editor">{productOptions.map((option) => <div className="branch-editor-row compact-product-editor-row" key={option.optionKey || option.abbreviation}><input className="text-input compact-text-input compact-name-input" value={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'fullName', event.target.value)} /><input className="text-input compact-text-input" maxLength={7} value={productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation} onChange={(event) => updateProductDraft(option.optionKey || option.abbreviation, 'abbreviation', event.target.value)} /><ColorSwatchPicker value={productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color} onChange={(value) => updateProductDraft(option.optionKey || option.abbreviation, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color, color: getContrastColor(productDrafts[option.optionKey || option.abbreviation]?.color ?? option.color) }} title={productDrafts[option.optionKey || option.abbreviation]?.fullName ?? option.fullName}>{productDrafts[option.optionKey || option.abbreviation]?.abbreviation ?? option.abbreviation}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveProductOption(option.optionKey || option.abbreviation)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteProductOption(option.optionKey || option.abbreviation)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
       {productEditorEventId && selectedProductEvent ? <ModalShell title="Select product" onClose={() => setProductEditorEventId(null)}><div className="branch-manager"><div className="branch-selector-list">{productOptions.map((option) => <button className={["branch-selector-item", selectedProductEvent.products.includes(option.abbreviation) ? "is-selected" : ""].join(" ").trim()} key={option.optionKey || option.abbreviation} type="button" title={option.fullName} onClick={() => toggleProductOnEvent(selectedProductEvent.id, option.abbreviation)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.fullName}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setProductEditorEventId(null)}>Done</button></div></div></ModalShell> : null}
@@ -2973,11 +4115,11 @@ function DashboardApp() {
       {managedSingleManagerKey ? <ModalShell title={`Manage ${columnTitle(managedSingleManagerKey)} items`} onClose={() => setManagedSingleManagerKey('')} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-status-manager-form"><input className="text-input compact-text-input" maxLength={15} placeholder="Name" value={newManagedOptionName} onChange={(event) => setNewManagedOptionName(event.target.value.slice(0, 15))} /><ColorSwatchPicker value={newManagedOptionColor} onChange={setNewManagedOptionColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addManagedSingleOption}>Add</button></div><div className="branch-preview-list is-editor">{(managedSingleOptions[managedSingleManagerKey] || []).map((option) => <div className="branch-editor-row compact-status-editor-row" key={option.name}><input className="text-input compact-text-input" maxLength={15} value={((managedSingleDrafts[managedSingleManagerKey] || {})[option.name]?.name) ?? option.name} onChange={(event) => updateManagedSingleDraft(managedSingleManagerKey, option.name, 'name', event.target.value)} /><ColorSwatchPicker value={((managedSingleDrafts[managedSingleManagerKey] || {})[option.name]?.color) ?? option.color} onChange={(value) => updateManagedSingleDraft(managedSingleManagerKey, option.name, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: ((managedSingleDrafts[managedSingleManagerKey] || {})[option.name]?.color) ?? option.color, color: getContrastColor(((managedSingleDrafts[managedSingleManagerKey] || {})[option.name]?.color) ?? option.color) }}>{((managedSingleDrafts[managedSingleManagerKey] || {})[option.name]?.name) ?? option.name}</span><button className="ghost-button compact-manager-button" type="button" onClick={() => saveManagedSingleOption(managedSingleManagerKey, option.name)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteManagedSingleOption(managedSingleManagerKey, option.name)}>Delete</button></div>)}</div></div></ModalShell> : null}
       {managedSingleEditor.columnKey && selectedManagedSingleEvent ? <ModalShell title={`Select ${columnTitle(managedSingleEditor.columnKey)}`} onClose={() => setManagedSingleEditor({ columnKey: '', eventId: '' })}><div className="branch-manager"><div className="branch-selector-list">{(managedSingleOptions[managedSingleEditor.columnKey] || []).map((option) => <button className={["branch-selector-item", selectedManagedSingleEvent[managedSingleEditor.columnKey] === option.name ? "is-selected" : ""].join(" ").trim()} key={option.name} type="button" onClick={() => selectManagedSingleValue(managedSingleEditor.columnKey, selectedManagedSingleEvent.id, option.name)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.name}</span></button>)}</div></div></ModalShell> : null}{customOptionManagerKey ? <ModalShell title={`Manage ${displayColumnLabel(customColumns.find((column) => column.key === customOptionManagerKey) || { label: customOptionManagerKey, isCustom: true })} items`} onClose={() => setCustomOptionManagerKey('')} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-status-manager-form"><input className="text-input compact-text-input" maxLength={40} placeholder="Name" value={newCustomOptionName} onChange={(event) => setNewCustomOptionName(event.target.value.slice(0, 40))} /><ColorSwatchPicker value={newCustomOptionColor} onChange={setNewCustomOptionColor} className="compact-color-picker" /><button className="primary-button compact-manager-button" type="button" onClick={addCustomOption}>Add</button></div><div className="branch-preview-list is-editor">{(customItemOptionsByColumn[customOptionManagerKey] || []).map((option) => <div className="branch-editor-row compact-status-editor-row" key={option.optionKey}><input className="text-input compact-text-input" maxLength={40} value={((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.name) ?? option.name} onChange={(event) => updateCustomOptionDraft(customOptionManagerKey, option.optionKey, 'name', event.target.value)} /><ColorSwatchPicker value={((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color} onChange={(value) => updateCustomOptionDraft(customOptionManagerKey, option.optionKey, 'color', value)} className="compact-color-picker" /><span className="branch-color-chip compact-branch-color-chip" style={{ background: ((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color, color: getContrastColor(((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.color) ?? option.color) }}>{((customOptionDrafts[customOptionManagerKey] || {})[option.optionKey]?.name) ?? option.name}</span><button className="ghost-button compact-manager-button" type="button" onClick={() => saveCustomOption(customOptionManagerKey, option.optionKey)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteCustomOption(customOptionManagerKey, option.optionKey)}>Delete</button></div>)}</div></div></ModalShell> : null}{customOptionEditor.columnKey && selectedCustomOptionEvent ? <ModalShell title={`Select ${displayColumnLabel(customColumns.find((column) => column.key === customOptionEditor.columnKey) || { label: customOptionEditor.columnKey, isCustom: true })}`} onClose={() => setCustomOptionEditor({ columnKey: '', eventId: '' })}><div className="branch-manager"><div className="branch-selector-list">{(customItemOptionsByColumn[customOptionEditor.columnKey] || []).map((option) => <button className={["branch-selector-item", customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? (((selectedCustomOptionEvent.customFields || {})[customOptionEditor.columnKey] || []).includes(option.name) ? "is-selected" : "") : (((selectedCustomOptionEvent.customFields || {})[customOptionEditor.columnKey] === option.name) ? "is-selected" : "")].join(" ").trim()} key={option.optionKey} type="button" onClick={() => customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? toggleCustomMultiValue(customOptionEditor.columnKey, selectedCustomOptionEvent.id, option.name) : selectCustomSingleValue(customOptionEditor.columnKey, selectedCustomOptionEvent.id, option.name)}><span className="branch-color-chip" style={{ background: option.color, color: getContrastColor(option.color) }}>{option.name}</span></button>)}</div>{customColumns.find((column) => column.key === customOptionEditor.columnKey)?.type === 'multiItem' ? <div className="modal-actions"><button className="primary-button" type="button" onClick={() => setCustomOptionEditor({ columnKey: '', eventId: '' })}>Done</button></div> : null}</div></ModalShell> : null}
       {attendantManagerOpen ? <ModalShell title="Manage attendant items" onClose={() => setAttendantManagerOpen(false)} closeOnScrimClick={false}><div className="branch-manager compact-branch-manager"><div className="branch-manager-form compact-attendant-manager-form"><input className="text-input compact-text-input" maxLength={100} placeholder="Full name" value={newAttendantName} onChange={(event) => setNewAttendantName(event.target.value.slice(0, 100))} /><select value={newAttendantBranch} onChange={(event) => setNewAttendantBranch(event.target.value)}><option value="">Branch</option>{branchOptions.map((option) => <option key={option.abbreviation} value={option.abbreviation}>{option.abbreviation}</option>)}</select><button className="primary-button compact-manager-button" type="button" onClick={addAttendantOption}>Add</button></div><div className="branch-preview-list is-editor">{attendantOptions.map((option) => <div className="branch-editor-row compact-attendant-editor-row" key={option.fullName}><input className="text-input compact-text-input" maxLength={100} value={attendantDrafts[option.fullName]?.fullName ?? option.fullName} onChange={(event) => updateAttendantDraft(option.fullName, 'fullName', event.target.value)} /><select value={attendantDrafts[option.fullName]?.branchKey ?? option.branchKey ?? ''} onChange={(event) => updateAttendantDraft(option.fullName, 'branchKey', event.target.value)}><option value="">Branch</option>{branchOptions.map((branchOption) => <option key={branchOption.abbreviation} value={branchOption.abbreviation}>{branchOption.abbreviation}</option>)}</select><span className="attendant-preview-chip" style={attendantStyles[attendantDrafts[option.fullName]?.fullName ?? option.fullName] || branchStyles[attendantDrafts[option.fullName]?.branchKey ?? option.branchKey ?? ''] || undefined} title={attendantDrafts[option.fullName]?.fullName ?? option.fullName}>{truncateName(attendantDrafts[option.fullName]?.fullName ?? option.fullName)}</span><div className="manager-action-group"><button className="ghost-button compact-manager-button" type="button" onClick={() => saveAttendantOption(option.fullName)}>Save</button><button className="branch-delete-button compact-manager-button" type="button" onClick={() => deleteAttendantOption(option.fullName)}>Delete</button></div></div>)}</div></div></ModalShell> : null}
-      {attendantEditorEventId && selectedAttendantEvent ? <ModalShell title="Select attendant/s" onClose={() => setAttendantEditorEventId('')}><div className="branch-manager"><div className="branch-selector-list">{filteredAttendantOptions.map((option) => <button className={["branch-selector-item", (selectedAttendantEvent.attendants || []).includes(option.fullName) ? "is-selected" : ""].join(" ").trim()} key={option.fullName} type="button" title={option.fullName} onClick={() => toggleAttendantOnEvent(selectedAttendantEvent.id, option.fullName)}><span className="attendant-selector-name" style={attendantStyles[option.fullName] || undefined}>{truncateName(option.fullName)}</span></button>)}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setAttendantEditorEventId('')}>Done</button></div></div></ModalShell> : null}
-      {showAddColumnModal ? <ModalShell title="Add new column" onClose={() => setShowAddColumnModal(false)} closeOnScrimClick={false}><form className="simple-stack" onSubmit={handleAddCustomColumn}><label><span>Column name</span><input className="text-input" value={newColumnName} onChange={(event) => setNewColumnName(event.target.value)} autoFocus /></label><label><span>Column type</span><select value={newColumnType} onChange={(event) => setNewColumnType(event.target.value)}>{CUSTOM_COLUMN_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddColumnModal(false)}>Cancel</button><button className="primary-button" type="submit">Add column</button></div></form></ModalShell> : null}{showAddModal ? <ModalShell title="Add new event" onClose={() => setShowAddModal(false)} closeOnScrimClick={false}><form className="modal-form" onSubmit={handleAddEvent}>{renderEventFields(eventForm, setEventForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, getManagedOptionNames(managedSingleOptions, 'paymentStatus'), getManagedOptionNames(managedSingleOptions, 'accounts'), getManagedOptionNames(managedSingleOptions, 'vinyl'), attendantNames, openLocationPreview, mainNameSuggestions, hoursSuggestions)}<div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddModal(false)}>Cancel</button><button className="primary-button" type="submit">Save event</button></div></form></ModalShell> : null}
-      {showProfileModal ? <ModalShell title="Profile" onClose={() => setShowProfileModal(false)} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{profileForm.profilePic ? <img className="profile-avatar-image" src={profileForm.profilePic} alt="Profile" /> : <div className="profile-avatar-fallback">{`${profileForm.firstName?.[0] || currentUser.firstName?.[0] || ''}${profileForm.surname?.[0] || currentUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{profileForm.firstName || currentUser.firstName} {profileForm.surname || currentUser.surname}</strong><span>{profileForm.designation || currentUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{profileForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setProfileForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={profileForm.firstName} onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={profileForm.surname} onChange={(event) => setProfileForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={profileForm.designation} onChange={(event) => setProfileForm((current) => ({ ...current, designation: event.target.value }))} /></label><label><span>Email</span><input className="text-input locked-input" value={profileForm.email} readOnly /></label><label><span>Role</span><input className="text-input locked-input" value={profileForm.role} readOnly /></label><label className="full-span"><span>Theme</span><select className="text-input" value={profileForm.theme} onChange={(event) => setProfileForm((current) => ({ ...current, theme: event.target.value === 'dark' ? 'dark' : 'light' }))}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => { setShowProfileModal(false); void signOut(); }}>Logout</button><button className="ghost-button" type="button" onClick={() => setShowProfileModal(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveProfile}>Save profile</button></div></div></ModalShell> : null}
+      {attendantEditorEventId && selectedAttendantEvent ? <ModalShell title="Select attendant/s" onClose={() => setAttendantEditorEventId('')}><div className="branch-manager"><div className="branch-selector-list">{selectableAttendantOptionsForEvent.map((option) => { const isSelected = (selectedAttendantEvent.attendants || []).includes(option.fullName); const optionBranchKey = option.branchKey || ''; const canManageOption = !hasUserAttendantBranchRestrictions || (optionBranchKey && currentUserAssignedBranches.includes(optionBranchKey)); return <button className={["branch-selector-item", isSelected ? "is-selected" : "", !canManageOption ? "is-disabled" : ""].join(" ").trim()} key={option.fullName} type="button" title={canManageOption ? option.fullName : `${option.fullName} (${branchFullNames[optionBranchKey] || optionBranchKey || 'Restricted'})`} onClick={() => toggleAttendantOnEvent(selectedAttendantEvent.id, option.fullName)} disabled={!canManageOption}><span className="attendant-selector-name" style={attendantStyles[option.fullName] || undefined}>{truncateName(option.fullName)}</span></button>; })}</div><div className="modal-actions"><button className="primary-button" type="button" onClick={() => setAttendantEditorEventId('')}>Done</button></div></div></ModalShell> : null}
+        {showAddColumnModal ? <ModalShell title="Add new column" onClose={() => setShowAddColumnModal(false)} closeOnScrimClick={false}><form className="simple-stack" onSubmit={handleAddCustomColumn}><label><span>Column name</span><input className="text-input" value={newColumnName} onChange={(event) => setNewColumnName(event.target.value)} autoFocus /></label><label><span>Column type</span><select value={newColumnType} onChange={(event) => setNewColumnType(event.target.value)}>{CUSTOM_COLUMN_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddColumnModal(false)}>Cancel</button><button className="primary-button" type="submit">Add column</button></div></form></ModalShell> : null}{showAddModal ? <ModalShell title="Add new event" onClose={() => setShowAddModal(false)} closeOnScrimClick={false}><form className="modal-form" onSubmit={handleAddEvent}>{renderEventFields(eventForm, setEventForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, getManagedOptionNames(managedSingleOptions, 'paymentStatus'), getManagedOptionNames(managedSingleOptions, 'accounts'), getManagedOptionNames(managedSingleOptions, 'vinyl'), branchScopedAttendantOptions, openLocationPreview, mainNameSuggestions, hoursSuggestions)}<div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowAddModal(false)}>Cancel</button><button className="primary-button" type="submit">Save event</button></div></form></ModalShell> : null}
+      {showProfileModal ? <ModalShell title="Profile" onClose={() => setShowProfileModal(false)} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{profileForm.profilePic ? <img className="profile-avatar-image" src={profileForm.profilePic} alt="Profile" /> : <div className="profile-avatar-fallback">{`${profileForm.firstName?.[0] || currentUser.firstName?.[0] || ''}${profileForm.surname?.[0] || currentUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{profileForm.firstName || currentUser.firstName} {profileForm.surname || currentUser.surname}</strong><span>{profileForm.designation || currentUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{profileForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setProfileForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={profileForm.firstName} onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={profileForm.surname} onChange={(event) => setProfileForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={profileForm.designation} onChange={(event) => setProfileForm((current) => ({ ...current, designation: event.target.value }))} /></label><label><span>Email</span><input className="text-input locked-input" value={profileForm.email} readOnly /></label><label><span>Role</span><input className="text-input locked-input" value={profileForm.role} readOnly /></label><label className="full-span"><span>Branches</span><div className="profile-branch-list">{(profileForm.assignedBranches || []).length ? (profileForm.assignedBranches || []).map((branchKey) => <span key={branchKey} className="profile-branch-chip" style={branchStyles[branchKey] || undefined}>{branchKey}</span>) : <input className="text-input locked-input" value="All branches" readOnly />}</div></label><label className="full-span"><span>Theme</span><select className="text-input" value={profileForm.theme} onChange={(event) => setProfileForm((current) => ({ ...current, theme: event.target.value === 'dark' ? 'dark' : 'light' }))}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => { setShowProfileModal(false); void signOut(); }}>Logout</button><button className="ghost-button" type="button" onClick={() => setShowProfileModal(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveProfile}>Save profile</button></div></div></ModalShell> : null}
       {showUsersModal ? <ModalShell title="Manage users" onClose={() => setShowUsersModal(false)}><div className="users-modal">{users.map((user) => <button className="user-list-card" type="button" key={user.id} onClick={() => openUserEditor(user.id)}><div className="user-list-avatar">{`${user.firstName?.[0] || ''}${user.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div><div className="user-list-copy"><strong>{user.firstName} {user.surname}</strong><span>{user.email}</span></div><div className="user-list-meta"><span className={`role-pill role-${user.role}`}>{formatRole(user.role)}</span><small>{user.isApproved ? 'Approved' : 'Pending'}</small></div></button>)}</div></ModalShell> : null}
-      {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
+      {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label><label className="full-span"><span>Assigned Branches</span><div className="profile-branch-selector">{branchOptions.map((option) => <label key={option.abbreviation} className="profile-branch-option"><input type="checkbox" checked={(managedUserForm.assignedBranches || []).includes(option.abbreviation)} onChange={() => toggleManagedUserBranch(option.abbreviation)} /><span className="profile-branch-chip" style={branchStyles[option.abbreviation] || undefined}>{option.abbreviation}</span></label>)}</div><small>Leave all unchecked to allow all branches.</small></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
       {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace}>Yes</button></div></div></div></div> : null}
       {confirmDialog.isOpen ? <ModalShell title={confirmDialog.title} onClose={() => closeConfirmation(false)}><div className="simple-stack"><p>{confirmDialog.message}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => closeConfirmation(false)}>Cancel</button><button className={confirmDialog.tone === 'danger' ? 'branch-delete-button danger-button' : 'primary-button'} type="button" onClick={() => closeConfirmation(true)}>{confirmDialog.confirmLabel}</button></div></div></ModalShell> : null}
       {noticeDialog.isOpen ? <ModalShell title={noticeDialog.title} onClose={closeNotice}><div className="simple-stack"><p>{noticeDialog.message}</p><div className="modal-actions"><button className="primary-button" type="button" onClick={closeNotice}>OK</button></div></div></ModalShell> : null}
@@ -2989,10 +4131,6 @@ function renderPinIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-5.5-5.64-5.5-10A5.5 5.5 0 0 1 12 5.5 5.5 5.5 0 0 1 17.5 11c0 4.36-5.5 10-5.5 10Zm0-7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill="currentColor" /></svg>;
 }
 
-function renderSearchIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm8.91 11.5 2.3 2.29-1.42 1.42-2.29-2.3 1.41-1.41Z" fill="currentColor" /></svg>;
-}
-
 function buildGoogleMapsExternalUrl(location) {
   if (typeof location?.locationLat === 'number' && typeof location?.locationLng === 'number') {
     return 'https://www.google.com/maps/search/?api=1&query=' + location.locationLat + ',' + location.locationLng;
@@ -3001,124 +4139,93 @@ function buildGoogleMapsExternalUrl(location) {
 }
 
 function LocationInputField({ value, title, placeholder, readOnly, className = 'inline-input', compact = false, onFocus, onTextChange, onPlaceSelect, onOpenMap, hasCoordinates }) {
-  const wrapperRef = useRef(null);
-  const autocompleteContainerRef = useRef(null);
-  const autocompleteElementRef = useRef(null);
-  const placeSelectHandlerRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const inputRef = useRef(null);
+  const autocompleteRef = useRef(null);
+  const listenerRef = useRef(null);
+  const initPromiseRef = useRef(null);
+  const textChangeRef = useRef(onTextChange);
+  const placeSelectRef = useRef(onPlaceSelect);
+
+  useEffect(() => {
+    textChangeRef.current = onTextChange;
+    placeSelectRef.current = onPlaceSelect;
+  }, [onPlaceSelect, onTextChange]);
+
+  const ensureAutocomplete = useCallback(() => {
+    if (readOnly || !hasGoogleMapsApiKey() || !inputRef.current) {
+      return Promise.resolve();
+    }
+    if (autocompleteRef.current) {
+      return Promise.resolve();
+    }
+    if (initPromiseRef.current) {
+      return initPromiseRef.current;
+    }
+
+    initPromiseRef.current = loadGoogleMapsApi()
+      .then((google) => {
+        if (!google?.maps?.places || !inputRef.current || autocompleteRef.current) {
+          return;
+        }
+        autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
+          componentRestrictions: { country: 'za' },
+          fields: ['formatted_address', 'geometry', 'place_id', 'name'],
+          types: ['geocode'],
+        });
+        listenerRef.current = autocompleteRef.current.addListener('place_changed', () => {
+          const place = autocompleteRef.current?.getPlace?.();
+          const parsed = extractPlaceResult(place, '');
+          window.setTimeout(() => {
+            const committedAddress =
+              inputRef.current?.value ||
+              parsed.location ||
+              place?.formatted_address ||
+              place?.name ||
+              '';
+            if (inputRef.current && committedAddress) {
+              inputRef.current.value = committedAddress;
+            }
+            textChangeRef.current?.(committedAddress);
+            placeSelectRef.current?.({
+              ...parsed,
+              location: committedAddress,
+            });
+          }, 0);
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to mount board address autocomplete', error);
+      })
+      .finally(() => {
+        initPromiseRef.current = null;
+      });
+
+    return initPromiseRef.current;
+  }, [readOnly]);
 
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
-    void loadGooglePlacesLibrary().catch((error) => {
-      console.error('Google Places library failed to preload', error);
-    });
-  }, [readOnly]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      if (wrapperRef.current?.contains(event.target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isOpen]);
-
-  useEffect(() => () => {
-    if (autocompleteElementRef.current && placeSelectHandlerRef.current) {
-      autocompleteElementRef.current.removeEventListener('gmp-select', placeSelectHandlerRef.current);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen || readOnly || !hasGoogleMapsApiKey()) {
-      return undefined;
-    }
-
-    let isMounted = true;
-    let mountTimeoutId = null;
-    let focusTimeoutId = null;
-
-    const mountAutocomplete = async () => {
-      try {
-        const placesLibrary = await loadGooglePlacesLibrary();
-        if (!isMounted || !autocompleteContainerRef.current) {
-          return;
-        }
-
-        const PlaceAutocompleteElement = placesLibrary?.PlaceAutocompleteElement;
-        if (!PlaceAutocompleteElement || !autocompleteContainerRef.current) {
-          return;
-        }
-
-        if (!autocompleteElementRef.current) {
-          const element = new PlaceAutocompleteElement();
-          element.className = compact ? 'sb-place-autocomplete compact' : 'sb-place-autocomplete';
-          element.setAttribute('aria-label', 'Search address');
-          element.includedRegionCodes = ['za'];
-          if (placeholder) {
-            element.setAttribute('placeholder', placeholder);
-          }
-
-          const handlePlaceSelect = async (event) => {
-            try {
-              const prediction = event.placePrediction;
-              const place = prediction?.toPlace ? prediction.toPlace() : null;
-              if (!place) {
-                return;
-              }
-              if (place.fetchFields) {
-                await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-              }
-              onPlaceSelect?.(extractPlaceResult(place, value || '', prediction?.placeId || ''));
-              setIsOpen(false);
-            } catch (error) {
-              console.error('Google place selection failed', error);
-            }
-          };
-
-          autocompleteElementRef.current = element;
-          placeSelectHandlerRef.current = handlePlaceSelect;
-          element.addEventListener('gmp-select', handlePlaceSelect);
-        }
-
-        if (!autocompleteContainerRef.current.contains(autocompleteElementRef.current)) {
-          autocompleteContainerRef.current.innerHTML = '';
-          autocompleteContainerRef.current.appendChild(autocompleteElementRef.current);
-        }
-
-        focusTimeoutId = window.setTimeout(() => {
-          autocompleteElementRef.current?.focus?.();
-        }, 30);
-      } catch (error) {
-        console.error('Google Maps autocomplete failed to load', error);
-      }
-    };
-
-    mountTimeoutId = window.setTimeout(() => {
-      void mountAutocomplete();
-    }, 30);
+    void ensureAutocomplete();
 
     return () => {
-      isMounted = false;
-      if (mountTimeoutId != null) {
-        window.clearTimeout(mountTimeoutId);
+      if (listenerRef.current && window.google?.maps?.event) {
+        window.google.maps.event.removeListener(listenerRef.current);
+        listenerRef.current = null;
       }
-      if (focusTimeoutId != null) {
-        window.clearTimeout(focusTimeoutId);
-      }
+      autocompleteRef.current = null;
+      initPromiseRef.current = null;
     };
-  }, [compact, isOpen, onPlaceSelect, placeholder, readOnly, value]);
+  }, [ensureAutocomplete, readOnly]);
 
-  return <div ref={wrapperRef} className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : '', isOpen ? 'is-open' : ''].join(' ').trim()}><input className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} placeholder={placeholder} onFocus={onFocus} onChange={(event) => onTextChange?.(event.target.value)} />{!readOnly && hasGoogleMapsApiKey() ? <button className="location-search-button" type="button" title="Search with Google Maps" onClick={() => setIsOpen((current) => !current)}>{renderSearchIcon()}</button> : null}{hasCoordinates ? <button className="location-pin-button" type="button" title="View map" onClick={onOpenMap}>{renderPinIcon()}</button> : null}{isOpen ? <div className="location-autocomplete-popover"><div ref={autocompleteContainerRef} className="location-autocomplete-host" /><button className="ghost-button location-autocomplete-close" type="button" onClick={() => setIsOpen(false)}>Close</button></div> : null}</div>;
+  return <div className={[compact ? 'location-field compact' : 'location-field', hasCoordinates ? 'has-pin' : ''].join(' ').trim()}><input ref={inputRef} className={className} title={title || value || ''} value={value || ''} readOnly={readOnly} autoComplete="new-password" spellCheck={false} placeholder={placeholder} onFocus={(event) => {
+    void ensureAutocomplete();
+    onFocus?.(event);
+  }} onChange={(event) => onTextChange?.(event.target.value)} onBlur={() => {
+    const nextValue = inputRef.current?.value || '';
+    onTextChange?.(nextValue);
+  }} />{typeof onOpenMap === 'function' ? <button className="location-pin-button" type="button" title={hasCoordinates ? 'View map' : 'Select an address first'} disabled={!hasCoordinates} onClick={onOpenMap}>{renderPinIcon()}</button> : null}</div>;
 }
 
 function LocationMapPreview({ location }) {
@@ -3182,8 +4289,228 @@ function LocationMapPreview({ location }) {
   return <div className="map-preview-canvas" ref={mapRef} />;
 }
 
-function renderEventFields(form, setForm, branchAbbreviations, branchFullNames, productAbbreviations, productFullNames, statusNames, paymentNames, accountNames, yesNoNames, attendantNames, openLocationPreview, mainNameSuggestions, hoursSuggestions) {
-  return <><label><span>Name / Item</span><AutocompleteTextInput className="text-input" required value={form.name} suggestions={mainNameSuggestions} minMenuWidth={320} onChange={(nextValue) => setForm((current) => ({ ...current, name: nextValue }))} /></label><label><span>Event name</span><input className="text-input" placeholder="Event Name" value={form.eventTitle || ''} onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))} /></label><label><span>Date</span><input className="text-input" type="date" required value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Hours</span><AutocompleteTextInput className="text-input" value={form.hours} suggestions={hoursSuggestions} minMenuWidth={160} onChange={(nextValue) => setForm((current) => ({ ...current, hours: nextValue }))} /></label><label><span>Branch</span><select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>{branchAbbreviations.map((option) => <option key={option} value={option} title={branchFullNames[option] || option}>{option}</option>)}</select></label><label><span>Product</span><select value={form.products[0] || ''} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}><option value=''>Select product</option>{productAbbreviations.map((option) => <option key={option} value={option} title={productFullNames[option] || option}>{productFullNames[option] || option}</option>)}</select></label><label><span>Status</span><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{statusNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label className="full-span"><span>Location</span><LocationInputField value={form.location || ''} placeholder='Start typing address' className='text-input' onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: '', locationLat: null, locationLng: null }))} onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))} onOpenMap={() => openLocationPreview({ name: form.name || 'New event', location: form.location || '', locationLat: form.locationLat, locationLng: form.locationLng })} hasCoordinates={typeof form.locationLat === 'number' && typeof form.locationLng === 'number'} /></label><label><span>Payment</span><select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>{paymentNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Accounts</span><select value={form.accounts} onChange={(event) => setForm((current) => ({ ...current, accounts: event.target.value }))}>{accountNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Vinyl</span><select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>GS / AI</span><select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Images sent</span><select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Snappic</span><select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>{yesNoNames.map((option) => <option key={option} value={option}>{option}</option>)}</select></label><label><span>Attendant/s</span><select value={form.attendants[0] || ''} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}><option value="">Select attendant</option>{attendantNames.map((option) => <option key={option} value={option} title={option}>{option}</option>)}</select></label><label><span>Ex. VAT</span><input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} /></label><label><span>Package only</span><input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} /></label></>;
+function renderEventFields(
+  form,
+  setForm,
+  branchAbbreviations,
+  branchFullNames,
+  productAbbreviations,
+  productFullNames,
+  statusNames,
+  paymentNames,
+  accountNames,
+  yesNoNames,
+  attendantOptions,
+  openLocationPreview,
+  mainNameSuggestions,
+  hoursSuggestions
+) {
+  const groupedAttendants = [];
+  const branchBuckets = new Map();
+  const ungrouped = [];
+
+  (attendantOptions || []).forEach((option) => {
+    const fullName = String(option?.fullName || "").trim();
+    if (!fullName) {
+      return;
+    }
+    const branchKey = String(option?.branchKey || "").trim();
+    if (!branchKey) {
+      ungrouped.push(fullName);
+      return;
+    }
+    const list = branchBuckets.get(branchKey) || [];
+    list.push(fullName);
+    branchBuckets.set(branchKey, list);
+  });
+
+  branchAbbreviations.forEach((branchKey) => {
+    const names = (branchBuckets.get(branchKey) || []).slice().sort((left, right) => left.localeCompare(right));
+    if (names.length) {
+      groupedAttendants.push({
+        label: branchFullNames[branchKey] || branchKey,
+        options: names,
+      });
+    }
+  });
+
+  if (ungrouped.length) {
+    groupedAttendants.push({
+      label: "Other",
+      options: ungrouped.slice().sort((left, right) => left.localeCompare(right)),
+    });
+  }
+
+  return (
+    <>
+      <label>
+        <span>Name / Item</span>
+        <AutocompleteTextInput
+          className="text-input"
+          required
+          value={form.name}
+          suggestions={mainNameSuggestions}
+          minMenuWidth={320}
+          onChange={(nextValue) => setForm((current) => ({ ...current, name: nextValue }))}
+        />
+      </label>
+      <label>
+        <span>Event name</span>
+        <input
+          className="text-input"
+          placeholder="Event Name"
+          value={form.eventTitle || ""}
+          onChange={(event) => setForm((current) => ({ ...current, eventTitle: event.target.value }))}
+        />
+      </label>
+      <label>
+        <span>Date</span>
+        <input
+          className="text-input"
+          type="date"
+          required
+          value={form.date}
+          onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+        />
+      </label>
+      <label>
+        <span>Hours</span>
+        <AutocompleteTextInput
+          className="text-input"
+          value={form.hours}
+          suggestions={hoursSuggestions}
+          minMenuWidth={160}
+          onChange={(nextValue) => setForm((current) => ({ ...current, hours: nextValue }))}
+        />
+      </label>
+      <label>
+        <span>Branch</span>
+        <select value={form.branch[0]} onChange={(event) => setForm((current) => ({ ...current, branch: [event.target.value] }))}>
+          {branchAbbreviations.map((option) => (
+            <option key={option} value={option} title={branchFullNames[option] || option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Product</span>
+        <select value={form.products[0] || ""} onChange={(event) => setForm((current) => ({ ...current, products: event.target.value ? [event.target.value] : [] }))}>
+          <option value="">Select product</option>
+          {productAbbreviations.map((option) => (
+            <option key={option} value={option} title={productFullNames[option] || option}>
+              {productFullNames[option] || option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Status</span>
+        <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+          {statusNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+        <label className="full-span">
+          <span>Location</span>
+          <LocationInputField
+            value={form.location || ""}
+            placeholder="Start typing address"
+            className="text-input"
+            onTextChange={(nextValue) => setForm((current) => ({ ...current, location: nextValue, locationPlaceId: "", locationLat: null, locationLng: null }))}
+            onPlaceSelect={(place) => setForm((current) => ({ ...current, ...place }))}
+            onOpenMap={() => openLocationPreview({ name: form.name || "New event", location: form.location || "", locationLat: form.locationLat, locationLng: form.locationLng })}
+            hasCoordinates={typeof form.locationLat === "number" && typeof form.locationLng === "number"}
+          />
+        </label>
+      <label>
+        <span>Payment</span>
+        <select value={form.paymentStatus} onChange={(event) => setForm((current) => ({ ...current, paymentStatus: event.target.value }))}>
+          {paymentNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Accounts</span>
+        <select value={form.accounts} onChange={(event) => setForm((current) => ({ ...current, accounts: event.target.value }))}>
+          {accountNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Vinyl</span>
+        <select value={form.vinyl} onChange={(event) => setForm((current) => ({ ...current, vinyl: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>GS / AI</span>
+        <select value={form.gsAi} onChange={(event) => setForm((current) => ({ ...current, gsAi: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Images sent</span>
+        <select value={form.imagesSent} onChange={(event) => setForm((current) => ({ ...current, imagesSent: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Snappic</span>
+        <select value={form.snappic} onChange={(event) => setForm((current) => ({ ...current, snappic: event.target.value }))}>
+          {yesNoNames.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Attendant/s</span>
+        <select value={form.attendants[0] || ""} onChange={(event) => setForm((current) => ({ ...current, attendants: event.target.value ? [event.target.value] : [] }))}>
+          <option value="">Select attendant</option>
+          {groupedAttendants.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((option) => (
+                <option key={option} value={option} title={option}>
+                  {option}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Ex. VAT</span>
+        <input className="text-input" value={form.exVat} onChange={(event) => setForm((current) => ({ ...current, exVat: event.target.value }))} />
+      </label>
+      <label>
+        <span>Package only</span>
+        <input className="text-input" value={form.packageOnly} onChange={(event) => setForm((current) => ({ ...current, packageOnly: event.target.value }))} />
+      </label>
+    </>
+  );
 }
 function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit }) {
     if (columnKey === 'name') return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-creator-avatar" title={event.createdByName || 'Created by user'}>{event.createdByProfilePic ? <img src={event.createdByProfilePic} alt={event.createdByName || 'Creator'} /> : getInitials(event.createdByName || '')}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
@@ -3694,7 +5021,12 @@ function LoadingShell() {
 }
 
 function App() {
+  const bookingToken = getBookingTokenFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
   const [authMode, setAuthMode] = useState('login');
+
+  if (bookingToken) {
+    return <BookingPage token={bookingToken} />;
+  }
 
   return (
     <>
@@ -3711,8 +5043,51 @@ function App() {
   );
 }
 
-function ModalShell({ title, onClose, children, hideCloseButton = false, closeOnScrimClick = true }) {
-  return <div className="modal-scrim" onClick={closeOnScrimClick ? onClose : undefined}><div className="modal-panel" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>{title}</h3>{!hideCloseButton ? <button className="modal-close-x" type="button" onClick={onClose}>x</button> : null}</div>{children}</div></div>;
+function BookingDrawerSummary({ booking }) {
+  const formData = booking?.formData || {};
+  const snapshots = Array.isArray(booking?.snapshots) ? booking.snapshots : [];
+  const rows = [
+    ['Product', formData.product],
+    ['Booking Type', formData.customerType],
+    ['Company Name', formData.companyName],
+    ['Event Name', formData.eventName],
+    ['Contact Person', formData.contactPerson],
+    ['Cell', formData.cell],
+    ['Email', formData.email],
+    ['Date of Event', formData.eventDate],
+    ['Region', formData.region],
+    ['Address', formData.address],
+    ['Point of Contact', formData.pointOfContactName],
+    ['Point of Contact Number', formData.pointOfContactNumber],
+    ['Setup Time', formData.setupTime],
+    ['Event Start Time', formData.eventStartTime],
+    ['Event Finish Time', formData.eventFinishTime],
+    ['Optional Extras', Array.isArray(formData.optionalExtras) ? formData.optionalExtras.join(', ') : ''],
+    ['Design Yourself', formData.designYourself],
+    ['Notes / Special Instructions', formData.notes],
+    ['Ts and Cs', formData.acceptedTerms ? 'Accepted' : 'Pending'],
+  ];
+
+  const visibleRows = rows.filter(([, value]) => String(value || '').trim());
+  if (!visibleRows.length) {
+    return <div className="empty-month">No booking details submitted yet.</div>;
+  }
+
+  return (
+    <div className="booking-summary-grid">
+      {visibleRows.map(([label, value]) => (
+        <div className="booking-summary-row" key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+      {snapshots.length ? <div className="booking-summary-row booking-summary-submissions"><span>Saved Forms</span><div className="booking-submission-list">{snapshots.map((snapshot) => <a key={snapshot.id} className="booking-submission-link" href={snapshot.url} target="_blank" rel="noreferrer">{`${new Date(snapshot.submittedAt).toLocaleString()}${snapshot.sourceIp ? ` · ${snapshot.sourceIp}` : ''}`}</a>)}</div></div> : null}
+    </div>
+  );
+}
+
+function ModalShell({ title, onClose, children, hideCloseButton = false, closeOnScrimClick = true, panelClassName = '' }) {
+  return <div className="modal-scrim" onClick={closeOnScrimClick ? onClose : undefined}><div className={["modal-panel", panelClassName].join(' ').trim()} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>{title}</h3>{!hideCloseButton ? <button className="modal-close-x" type="button" onClick={onClose}>x</button> : null}</div>{children}</div></div>;
 }
 
 function ActivityEntry({ entry, title, eventName = '' }) {
@@ -3966,7 +5341,12 @@ async function buildWorkbookXlsxBuffer({ sheets, columns }) {
 
 function downloadWorkbookFile(filename, contents) {
   const blob = new Blob([contents], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
+  downloadBlobFile(filename, blob, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+function downloadBlobFile(filename, blob, type = 'application/octet-stream') {
+  const safeBlob = blob instanceof Blob ? blob : new Blob([blob], { type });
+  const url = URL.createObjectURL(safeBlob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -4003,14 +5383,45 @@ function parseCommissionHours(value) {
   return 0;
 }
 
-function calculateCommissionAmount(hoursPayable) {
+const DEFAULT_COMMISSION_RATES = {
+  twoHours: 500,
+  threeHours: 550,
+  fourHours: 600,
+  fiveHours: 650,
+  sixPlusHours: 1000,
+  perKmRate: 3,
+};
+
+function normalizeCommissionRates(rates) {
+  return {
+    twoHours: typeof rates?.twoHours === 'number' ? rates.twoHours : DEFAULT_COMMISSION_RATES.twoHours,
+    threeHours: typeof rates?.threeHours === 'number' ? rates.threeHours : DEFAULT_COMMISSION_RATES.threeHours,
+    fourHours: typeof rates?.fourHours === 'number' ? rates.fourHours : DEFAULT_COMMISSION_RATES.fourHours,
+    fiveHours: typeof rates?.fiveHours === 'number' ? rates.fiveHours : DEFAULT_COMMISSION_RATES.fiveHours,
+    sixPlusHours: typeof rates?.sixPlusHours === 'number' ? rates.sixPlusHours : DEFAULT_COMMISSION_RATES.sixPlusHours,
+    perKmRate: typeof rates?.perKmRate === 'number' ? rates.perKmRate : DEFAULT_COMMISSION_RATES.perKmRate,
+  };
+}
+
+function calculateCommissionAmount(hoursPayable, rates = DEFAULT_COMMISSION_RATES) {
+  const normalizedRates = normalizeCommissionRates(rates);
   const hours = Number(hoursPayable) || 0;
   if (hours <= 0) return 0;
-  if (hours <= 2) return 500;
-  if (hours === 3) return 550;
-  if (hours === 4) return 600;
-  if (hours === 5) return 650;
-  return 1000;
+  if (hours <= 2) return normalizedRates.twoHours;
+  if (hours === 3) return normalizedRates.threeHours;
+  if (hours === 4) return normalizedRates.fourHours;
+  if (hours === 5) return normalizedRates.fiveHours;
+  return normalizedRates.sixPlusHours;
+}
+
+function calculateCommissionTotals(rows) {
+  return rows.reduce((totals, row) => {
+    totals.amount += Number(row.amount) || 0;
+    totals.car += Number(row.car) || 0;
+    totals.travel += Number(row.travel) || 0;
+    totals.grand = totals.amount + totals.car + totals.travel;
+    return totals;
+  }, { amount: 0, car: 0, travel: 0, grand: 0 });
 }
 
 function getCommissionPeriodLabel(month, year, period) {
@@ -4024,18 +5435,140 @@ function getCommissionPeriodLabel(month, year, period) {
   return `All ${monthLabel}`;
 }
 
-async function exportCommissionPdf({ month, year, period, attendant, rows }) {
+function sanitizeFilenamePart(value, fallback = 'Sheet') {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/[<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || fallback;
+}
+
+function buildCommissionPdfFilename(month, year, period, attendant) {
+  const periodLabel = sanitizeFilenamePart(
+    period === 'firstHalf'
+      ? `1st to 15th ${month} ${year}`
+      : period === 'secondHalf'
+        ? `16th to last day ${month} ${year}`
+        : `Whole Month ${month} ${year}`,
+    'Period'
+  );
+  return `Commission_${sanitizeFilenamePart(attendant, 'Attendant')}_${periodLabel}.pdf`;
+}
+
+function buildMonthDateKey(month, year, day) {
+  const monthIndex = monthNames.indexOf(month);
+  if (monthIndex < 0) {
+    return '';
+  }
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function shiftMonthDate(currentDate, month, year, direction) {
+  if (!currentDate) {
+    return '';
+  }
+  const monthIndex = monthNames.indexOf(month);
+  if (monthIndex < 0) {
+    return '';
+  }
+  const nextDate = new Date(`${currentDate}T00:00:00`);
+  nextDate.setDate(nextDate.getDate() + direction);
+  if (nextDate.getFullYear() !== year || nextDate.getMonth() !== monthIndex) {
+    return '';
+  }
+  return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
+}
+
+function parseLogisticsTimeRange(value) {
+  const text = String(value || '').trim().replace(/\u2013|\u2014/g, '-');
+  if (!text) {
+    return null;
+  }
+  const timeRangeMatch = text.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  if (!timeRangeMatch) {
+    return null;
+  }
+  const startMinutes = Number(timeRangeMatch[1]) * 60 + Number(timeRangeMatch[2]);
+  let endMinutes = Number(timeRangeMatch[3]) * 60 + Number(timeRangeMatch[4]);
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60;
+  }
+  return {
+    startMinutes: Math.max(0, Math.min(startMinutes, 1439)),
+    endMinutes: Math.max(startMinutes + 1, Math.min(endMinutes, 1440)),
+  };
+}
+
+function getLogisticsPalette(index) {
+  const hue = Math.round((index * 137.508) % 360);
+  return {
+    background: `hsl(${hue} 78% 46%)`,
+    color: '#ffffff',
+  };
+}
+
+function getCommissionRoutePoint(location) {
+  if (typeof location?.lat === 'number' && typeof location?.lng === 'number') {
+    return { lat: location.lat, lng: location.lng };
+  }
+  if (typeof location?.locationLat === 'number' && typeof location?.locationLng === 'number') {
+    return { lat: location.locationLat, lng: location.locationLng };
+  }
+  const address = String(location?.address || location?.location || '').trim();
+  return address || null;
+}
+
+function canAutoCalculateCommissionRoute(event, origin) {
+  return Boolean(getCommissionRoutePoint(origin) && getCommissionRoutePoint(event));
+}
+
+async function calculateCommissionRoundTripKm(event, origin) {
+  const originPoint = getCommissionRoutePoint(origin);
+  const eventPoint = getCommissionRoutePoint(event);
+  if (!originPoint || !eventPoint) {
+    return 0;
+  }
+  const google = await loadGoogleMapsApi();
+  if (!google?.maps?.DirectionsService) {
+    return 0;
+  }
+  const directionsService = new google.maps.DirectionsService();
+  const response = await directionsService.route({
+    origin: originPoint,
+    destination: originPoint,
+    waypoints: [{ location: eventPoint, stopover: true }],
+    travelMode: google.maps.TravelMode.DRIVING,
+    optimizeWaypoints: false,
+    provideRouteAlternatives: false,
+    unitSystem: google.maps.UnitSystem.METRIC,
+  });
+  const totalMeters = (response?.routes?.[0]?.legs || []).reduce((sum, leg) => sum + (Number(leg?.distance?.value) || 0), 0);
+  return Math.max(0, Math.round(totalMeters / 1000));
+}
+
+function calculateCommissionTravel(km, rates = DEFAULT_COMMISSION_RATES) {
+  const normalizedRates = normalizeCommissionRates(rates);
+  return Math.max(0, Math.round((Number(km) || 0) * normalizedRates.perKmRate));
+}
+
+async function exportCommissionPdf({ month, year, period, attendant, rows, totals }) {
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
   const left = 44;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const colX = {
     event: left,
-    date: 280,
-    hours: 352,
-    payable: 432,
-    amount: 510,
+    date: 238,
+    times: 302,
+    hours: 386,
+    amount: 432,
+    car: 488,
+    km: 544,
+    travel: 598,
+    note: 664,
   };
   let y = 56;
 
@@ -4046,27 +5579,37 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
     doc.addPage();
     y = 56;
   };
+  const summaryTotals = totals || calculateCommissionTotals(rows);
+  const periodLabel = getCommissionPeriodLabel(month, year, period);
+  const formatCommissionCurrency = (value) => currencyFormatter.format(Number(value) || 0);
+  const truncatePdfText = (value, maxLength) => {
+    const text = String(value || '-').trim();
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  };
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text('SelfieBox commission sheet for:', left, y);
+  doc.text(`SelfieBox commission sheet for: ${attendant || '-'}`, left, y);
   y += 22;
 
   doc.setFontSize(12);
-  doc.text(getCommissionPeriodLabel(month, year, period), left, y);
-  y += 22;
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Attendant: ${attendant || '-'}`, left, y);
+  doc.text(periodLabel, left, y);
   y += 24;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Event Name', colX.event, y);
+  doc.text('Event', colX.event, y);
   doc.text('Date', colX.date, y);
-  doc.text('Hours', colX.hours, y);
-  doc.text('Hours Payable', colX.payable, y);
-  doc.text('Amount', colX.amount, y);
+  doc.text('Times', colX.times, y);
+  doc.text('Hrs', colX.hours, y);
+  doc.text('Comm', colX.amount, y);
+  doc.text('Car', colX.car, y);
+  doc.text('KM', colX.km, y);
+  doc.text('Travel', colX.travel, y);
+  doc.text('Note', colX.note, y);
   y += 8;
   doc.setLineWidth(0.8);
   doc.line(left, y, pageWidth - left, y);
@@ -4074,17 +5617,39 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
 
   doc.setFont('helvetica', 'normal');
   rows.forEach((row) => {
-    ensureSpace(28);
-    doc.text(String(row.eventName || '-').slice(0, 32), colX.event, y);
+    ensureSpace(40);
+    doc.setFontSize(10);
+    doc.setTextColor(27, 34, 48);
+    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 33), colX.event, y);
+    doc.setFontSize(8);
+    doc.setTextColor(108, 119, 138);
+    doc.text(truncatePdfText(row.addressLabel || 'No address set', 40), colX.event, y + 11);
+    doc.setFontSize(10);
+    doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
-    doc.text(String(row.hours || '-').slice(0, 12), colX.hours, y);
-    doc.text(String(row.hoursPayable ?? 0), colX.payable + 14, y, { align: 'right' });
-    doc.text(String(row.amount ?? 0), colX.amount + 24, y, { align: 'right' });
-    y += 18;
+    doc.text(String(row.hours || '-').slice(0, 18), colX.times, y);
+    doc.text(String(row.hoursPayable ?? 0), colX.hours + 16, y, { align: 'right' });
+    doc.text(String(row.amount ?? 0), colX.amount + 22, y, { align: 'right' });
+    doc.text(String(row.car ?? 0), colX.car + 16, y, { align: 'right' });
+    doc.text(String(row.km ?? 0), colX.km + 12, y, { align: 'right' });
+    doc.text(String(row.travel ?? 0), colX.travel + 20, y, { align: 'right' });
+    doc.text(truncatePdfText(row.note || '-', 32), colX.note, y);
+    y += 28;
   });
 
-  ensureSpace(90);
-  y += 24;
+  ensureSpace(118);
+  y += 14;
+  doc.line(left, y, pageWidth - left, y);
+  y += 18;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Commission: ${formatCommissionCurrency(summaryTotals.amount)}`, left, y);
+  doc.text(`Vehicle compensation: ${formatCommissionCurrency(summaryTotals.car)}`, left + 190, y);
+  doc.text(`Travel Compensation: ${formatCommissionCurrency(summaryTotals.travel)}`, left + 400, y);
+  y += 20;
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Total: ${formatCommissionCurrency(summaryTotals.grand)}`, left, y);
+  y += 40;
   doc.line(left, y, left + 180, y);
   doc.line(left + 240, y, left + 360, y);
   y += 14;
@@ -4092,9 +5657,12 @@ async function exportCommissionPdf({ month, year, period, attendant, rows }) {
   doc.text('Signature', left, y);
   doc.text('Date', left + 240, y);
 
-  doc.save(`selfiebox-commission-${year}-${month.toLowerCase()}-${String(attendant || 'sheet').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`);
+  const fileName = buildCommissionPdfFilename(month, year, period, attendant);
+  const blob = doc.output('blob');
+  return { blob, fileName };
 }
 export default App;
+
 
 
 
