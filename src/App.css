@@ -68,7 +68,7 @@ button { cursor: pointer; }
 .profile-pill-image { width: 100%; height: 100%; object-fit: cover; }
 .profile-pill, .profile-field small, .month-header span, .activity-item p, .file-card p, .auth-card p { color: var(--muted); }
 .board-shell, .auth-card, .modal-panel, .drawer-card, .profile-field { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
-.profile-modal { display: grid; gap: 18px; }
+.profile-modal { display: grid; gap: 18px; max-height: min(82vh, 860px); overflow: auto; padding-right: 4px; }
 .profile-hero { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, #eef4ff 0%, #f8fbff 100%); border: 1px solid #d9e4fb; }
 .profile-avatar-shell { width: 96px; height: 96px; border-radius: 24px; overflow: hidden; background: #dce7ff; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(53, 81, 144, 0.1); }
 .profile-avatar-image { width: 100%; height: 100%; object-fit: cover; }
@@ -586,6 +586,9 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-option span { display: inline-block; max-width: 19ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .filter-option input { transform: scale(0.85); }
 .changelog-modal { display: grid; gap: 12px; max-height: min(72vh, 700px); overflow: auto; padding-right: 4px; }
+.changelog-version { display: grid; gap: 10px; padding-top: 4px; }
+.changelog-version + .changelog-version { padding-top: 14px; border-top: 1px solid var(--line); }
+.changelog-version h3 { margin: 0; font-size: 0.9rem; color: var(--text); }
 .changelog-section { display: grid; gap: 6px; }
 .changelog-section h4 { margin: 0; font-size: 0.82rem; color: var(--text); }
 .changelog-section ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -749,6 +752,10 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .branch-selector-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  padding-right: 4px;
+  align-content: start;
 }
 .branch-selector-item {
   display: flex;
