@@ -313,7 +313,7 @@ textarea { resize: vertical; min-height: 110px; }
 .modal-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
 .modal-panel { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
 .logistics-modal-panel { width: min(96vw, 1680px); max-height: 94vh; }
-.commission-modal-panel { width: min(calc(100vw - 24px), 1820px); max-height: 94vh; display: flex; flex-direction: column; }
+.commission-modal-panel { width: min(calc(100vw - 12px), 1920px); max-height: 96vh; display: flex; flex-direction: column; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .modal-close-x { width: 24px; height: 24px; border: 0; border-radius: 999px; background: #eef2ff; color: #26427b; font-size: 0.82rem; line-height: 1; }
 .modal-close-x:hover { background: #dfe7ff; }

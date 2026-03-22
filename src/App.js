@@ -620,6 +620,8 @@ function DashboardApp() {
   const filesMigratedRef = useRef(false);
   const eventsRef = useRef(events);
   const persistTimeoutsRef = useRef(new Map());
+  const commissionOverrideSaveTimeoutsRef = useRef(new Map());
+  const commissionOverridesLoadedKeyRef = useRef('');
   const eventSyncLocksRef = useRef(new Map());
   const eventFileInputRef = useRef(null);
   const confirmResolverRef = useRef(null);
@@ -807,6 +809,10 @@ function DashboardApp() {
     if (!commissionDialog.isOpen || !commissionDialog.month || !commissionDialog.attendant || commissionOverrideRecords === undefined) {
       return;
     }
+    const overrideKey = `${selectedWorkspaceYear}|${commissionDialog.month}|${commissionDialog.attendant}`;
+    if (commissionOverridesLoadedKeyRef.current === overrideKey) {
+      return;
+    }
     const nextOverrides = Object.fromEntries(
       commissionOverrideRecords.map((record) => [
         record.eventId,
@@ -819,6 +825,7 @@ function DashboardApp() {
         },
       ])
     );
+    commissionOverridesLoadedKeyRef.current = overrideKey;
     setCommissionDialog((current) => {
       if (!current.isOpen || current.month !== commissionDialog.month || current.attendant !== commissionDialog.attendant) {
         return current;
@@ -828,7 +835,7 @@ function DashboardApp() {
         overrides: nextOverrides,
       };
     });
-  }, [commissionDialog.attendant, commissionDialog.isOpen, commissionDialog.month, commissionOverrideRecords]);
+  }, [commissionDialog.attendant, commissionDialog.isOpen, commissionDialog.month, commissionOverrideRecords, selectedWorkspaceYear]);
   const savedLogisticsDayOrders = currentUser?.logisticsDayOrders && typeof currentUser.logisticsDayOrders === 'object'
     ? currentUser.logisticsDayOrders
     : {};
@@ -1937,6 +1944,11 @@ function DashboardApp() {
   };
 
   const closeCommissionDialog = () => {
+    commissionOverridesLoadedKeyRef.current = '';
+    commissionOverrideSaveTimeoutsRef.current.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId);
+    });
+    commissionOverrideSaveTimeoutsRef.current.clear();
     setShowCommissionSnapshotsModal(false);
     setCommissionDialog({
       isOpen: false,
@@ -1966,20 +1978,28 @@ function DashboardApp() {
       ...currentOverride,
       [field]: value,
     };
-    void saveCommissionOverrideMutation({
-      month: commissionDialog.month,
-      year: selectedWorkspaceYear,
-      attendant: commissionDialog.attendant,
-      eventId,
-      hoursPayable: String(nextOverride.hoursPayable ?? ''),
-      amount: String(nextOverride.amount ?? ''),
-      car: String(nextOverride.car ?? ''),
-      km: String(nextOverride.km ?? ''),
-      note: String(nextOverride.note ?? ''),
-    }).catch((error) => {
-      console.error('Failed to save commission override', error);
-      openNotice('The commission changes could not be saved right now.');
-    });
+    const pendingTimeout = commissionOverrideSaveTimeoutsRef.current.get(eventId);
+    if (pendingTimeout) {
+      window.clearTimeout(pendingTimeout);
+    }
+    const timeoutId = window.setTimeout(() => {
+      commissionOverrideSaveTimeoutsRef.current.delete(eventId);
+      void saveCommissionOverrideMutation({
+        month: commissionDialog.month,
+        year: selectedWorkspaceYear,
+        attendant: commissionDialog.attendant,
+        eventId,
+        hoursPayable: String(nextOverride.hoursPayable ?? ''),
+        amount: String(nextOverride.amount ?? ''),
+        car: String(nextOverride.car ?? ''),
+        km: String(nextOverride.km ?? ''),
+        note: String(nextOverride.note ?? ''),
+      }).catch((error) => {
+        console.error('Failed to save commission override', error);
+        openNotice('The commission changes could not be saved right now.');
+      });
+    }, field === 'note' ? 500 : 250);
+    commissionOverrideSaveTimeoutsRef.current.set(eventId, timeoutId);
   };
 
   const openLogisticsDialog = (month) => {
@@ -3407,7 +3427,10 @@ function DashboardApp() {
                 <span>Attendant</span>
                 <select
                   value={commissionDialog.attendant}
-                  onChange={(event) => setCommissionDialog((current) => ({ ...current, attendant: event.target.value, overrides: {} }))}
+                  onChange={(event) => {
+                    commissionOverridesLoadedKeyRef.current = '';
+                    setCommissionDialog((current) => ({ ...current, attendant: event.target.value, overrides: {} }));
+                  }}
                 >
                   <option value="">Select attendant</option>
                   {commissionAttendantNames.map((name) => (
