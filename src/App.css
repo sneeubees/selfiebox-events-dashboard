@@ -445,7 +445,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .commission-saved-trigger:hover { color: #1a315f; }
 .commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: min(56vh, 680px); }
-.commission-table { display: grid; grid-template-columns: minmax(0, 3.3fr) 84px 118px 64px 84px 96px 66px 96px minmax(140px, 1.4fr); align-items: center; }
+.commission-table { display: grid; grid-template-columns: minmax(0, 3.3fr) 84px 118px 64px 84px 96px 112px 96px minmax(140px, 1.4fr); align-items: center; }
 .commission-table > span,
 .commission-table > input,
 .commission-table > div { min-width: 0; }
@@ -491,6 +491,30 @@ textarea { resize: vertical; min-height: 110px; }
   color: var(--text);
   font-size: 0.82rem;
   font-weight: 700;
+}
+.commission-km-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-right: 1px solid var(--line);
+  padding: 4px 8px;
+}
+.commission-km-field .commission-input {
+  padding: 5px 8px;
+}
+.commission-km-auto-button {
+  border: 1px solid #d6e1f8;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #2a4c90;
+  padding: 4px 8px;
+  font-size: 0.66rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.commission-km-auto-button:hover {
+  background: #e3ecff;
 }
 .commission-summary { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .commission-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -1086,6 +1110,14 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .commission-toolbar select option {
   background: #15243a;
   color: #eef4ff;
+}
+:root[data-theme="dark"] .commission-km-auto-button {
+  background: #223556;
+  border-color: #34517c;
+  color: #d6e5ff;
+}
+:root[data-theme="dark"] .commission-km-auto-button:hover {
+  background: #294066;
 }
 :root[data-theme="dark"] .commission-summary {
   background: var(--panel);

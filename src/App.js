@@ -661,6 +661,14 @@ function DashboardApp() {
   const branchAbbreviations = useMemo(() => branchOptions.map((option) => option.abbreviation), [branchOptions]);
   const branchStyles = useMemo(() => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, { background: option.color, color: getContrastColor(option.color) }])), [branchOptions]);
   const branchFullNames = useMemo(() => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, option.fullName])), [branchOptions]);
+  const branchAddressMap = useMemo(
+    () => Object.fromEntries(branchOptions.map((option) => [option.abbreviation, {
+      address: option.address || '',
+      lat: typeof option.addressLat === 'number' ? option.addressLat : null,
+      lng: typeof option.addressLng === 'number' ? option.addressLng : null,
+    }])),
+    [branchOptions]
+  );
   const currentUserAssignedBranches = useMemo(() => Array.isArray(currentUser?.assignedBranches) ? currentUser.assignedBranches : [], [currentUser?.assignedBranches]);
   const hasUserAttendantBranchRestrictions = currentUserAssignedBranches.length > 0;
   const attendantBranchMap = useMemo(() => Object.fromEntries(attendantOptions.map((option) => [option.fullName, option.branchKey || ''])), [attendantOptions]);
@@ -776,7 +784,10 @@ function DashboardApp() {
       .map((event) => {
         const automaticHoursPayable = parseCommissionHours(event.hours);
         const automaticAmount = calculateCommissionAmount(automaticHoursPayable);
-        const automaticKm = calculateCommissionRoundTripKm(event);
+        const routeBranchKey = (event.branch || []).find((branchKey) => typeof branchAddressMap[branchKey]?.lat === 'number' && typeof branchAddressMap[branchKey]?.lng === 'number')
+          || (event.branch || []).find((branchKey) => branchAddressMap[branchKey])
+          || '';
+        const automaticKm = routeBranchKey ? calculateCommissionRoundTripKm(event, branchAddressMap[routeBranchKey]) : 0;
         const override = commissionDialog.overrides[event.id] || {};
         const hoursPayable = override.hoursPayable === '' || override.hoursPayable === undefined
           ? automaticHoursPayable
@@ -788,7 +799,7 @@ function DashboardApp() {
           ? 0
           : Math.max(0, parseNumericCellValue(override.car));
         const km = override.km === '' || override.km === undefined
-          ? automaticKm
+          ? 0
           : Math.max(0, Number(override.km) || 0);
         const note = override.note === undefined ? '' : String(override.note);
         return {
@@ -803,11 +814,14 @@ function DashboardApp() {
           amount,
           car,
           km,
+          autoKm: automaticKm,
+          canAutoCalculateKm: automaticKm > 0,
+          routeBranchKey,
           travel: calculateCommissionTravel(km),
           note,
         };
       });
-  }, [commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
+  }, [branchAddressMap, commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents]);
   const commissionTotals = useMemo(() => calculateCommissionTotals(commissionRows), [commissionRows]);
   useEffect(() => {
     if (!commissionDialog.isOpen || !commissionDialog.month || !commissionDialog.attendant || commissionOverrideRecords === undefined) {
@@ -2026,6 +2040,18 @@ function DashboardApp() {
       });
     }, field === 'note' ? 500 : 250);
     commissionOverrideSaveTimeoutsRef.current.set(eventId, timeoutId);
+  };
+
+  const autoCalculateCommissionKm = (row) => {
+    if (!row?.id) {
+      return;
+    }
+    if (!row.canAutoCalculateKm) {
+      const branchLabel = row.routeBranchKey ? (branchFullNames[row.routeBranchKey] || row.routeBranchKey) : 'the branch';
+      openNotice(`A branch address and event map location are both needed before ${branchLabel} can auto-calculate the travel distance.`);
+      return;
+    }
+    updateCommissionOverride(row.id, 'km', String(row.autoKm));
   };
 
   const openLogisticsDialog = (month) => {
@@ -3619,12 +3645,22 @@ function DashboardApp() {
                         onChange={(event) => updateCommissionOverride(row.id, 'car', event.target.value)}
                       />
                     </div>
-                    <input
-                      className="text-input commission-input"
-                      inputMode="numeric"
-                      value={row.km}
-                      onChange={(event) => updateCommissionOverride(row.id, 'km', event.target.value)}
-                    />
+                    <div className="commission-km-field">
+                      <input
+                        className="text-input commission-input"
+                        inputMode="numeric"
+                        value={row.km}
+                        onChange={(event) => updateCommissionOverride(row.id, 'km', event.target.value)}
+                      />
+                      <button
+                        className="commission-km-auto-button"
+                        type="button"
+                        onClick={() => autoCalculateCommissionKm(row)}
+                        title={row.canAutoCalculateKm ? `Auto-calculate from ${branchFullNames[row.routeBranchKey] || row.routeBranchKey}` : 'Branch address or event location not available yet'}
+                      >
+                        Auto
+                      </button>
+                    </div>
                     <div className="commission-currency-value">
                       <span>R</span>
                       <strong>{(Number(row.travel) || 0).toLocaleString('en-ZA')}</strong>
@@ -5164,13 +5200,15 @@ function sanitizeFilenamePart(value, fallback = 'Sheet') {
 }
 
 function buildCommissionPdfFilename(month, year, period, attendant) {
-  const shortMonth = String(month || '').slice(0, 3);
-  const periodPrefix = period === 'firstHalf'
-    ? '1-15'
-    : period === 'secondHalf'
-      ? '16-lastDay'
-      : 'WholeMonth';
-  return `${periodPrefix}${shortMonth}${year}_${sanitizeFilenamePart(attendant, 'Attendant')}.pdf`;
+  const periodLabel = sanitizeFilenamePart(
+    period === 'firstHalf'
+      ? `1st to 15th ${month} ${year}`
+      : period === 'secondHalf'
+        ? `16th to last day ${month} ${year}`
+        : `Whole Month ${month} ${year}`,
+    'Period'
+  );
+  return `Commission_${sanitizeFilenamePart(attendant, 'Attendant')}_${periodLabel}.pdf`;
 }
 
 function buildMonthDateKey(month, year, day) {
@@ -5225,11 +5263,6 @@ function getLogisticsPalette(index) {
   };
 }
 
-const COMMISSION_HOME_BASE = {
-  lat: -33.873228,
-  lng: 18.639741,
-};
-
 function calculateHaversineDistanceKm(start, end) {
   if (!start || !end) {
     return 0;
@@ -5246,12 +5279,12 @@ function calculateHaversineDistanceKm(start, end) {
   return earthRadiusKm * c;
 }
 
-function calculateCommissionRoundTripKm(event) {
-  if (typeof event?.locationLat !== 'number' || typeof event?.locationLng !== 'number') {
+function calculateCommissionRoundTripKm(event, origin) {
+  if (typeof origin?.lat !== 'number' || typeof origin?.lng !== 'number' || typeof event?.locationLat !== 'number' || typeof event?.locationLng !== 'number') {
     return 0;
   }
   const oneWayKm = calculateHaversineDistanceKm(
-    COMMISSION_HOME_BASE,
+    origin,
     { lat: event.locationLat, lng: event.locationLng }
   );
   return Math.max(0, Math.round(oneWayKm * 2));
