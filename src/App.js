@@ -3637,15 +3637,6 @@ function DashboardApp() {
                 >
                   Whole Month
                 </button>
-                {currentUser?.role === 'admin' ? (
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={openCommissionRatesModal}
-                  >
-                    Commision rates
-                  </button>
-                ) : null}
                 <button
                   className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
                   type="button"
@@ -3666,8 +3657,17 @@ function DashboardApp() {
               <strong>SelfieBox commission sheet for:</strong>
               <span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
               <span>Attendant: {commissionDialog.attendant || '-'}</span>
+              {currentUser?.role === 'admin' ? (
+                <button
+                  className="commission-link-action commission-link-action-spacer"
+                  type="button"
+                  onClick={openCommissionRatesModal}
+                >
+                  Commision rates
+                </button>
+              ) : null}
               <button
-                className="commission-saved-trigger"
+                className="commission-link-action"
                 type="button"
                 onClick={() => {
                   if (!commissionDialog.attendant) {
