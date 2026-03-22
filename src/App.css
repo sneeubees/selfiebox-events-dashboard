@@ -444,6 +444,7 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-periods .ghost-button.is-active { background: #dfe8ff; color: #23427f; }
 .commission-subhead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; font-size: 0.82rem; color: var(--muted); }
 .commission-subhead strong { color: var(--text); }
+.commission-subhead-spacer { flex: 1 1 auto; min-width: 0; }
 .commission-link-action {
   padding: 0;
   border: 0;
@@ -455,7 +456,6 @@ textarea { resize: vertical; min-height: 110px; }
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.commission-link-action-spacer { margin-left: auto; }
 .commission-link-action:hover { color: #1a315f; }
 .commission-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: min(56vh, 680px); }
 .commission-table { display: grid; grid-template-columns: minmax(0, 3.3fr) 84px 118px 64px 84px 96px 112px 96px minmax(140px, 1.4fr); align-items: center; }
