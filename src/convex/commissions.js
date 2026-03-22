@@ -29,9 +29,6 @@ async function requireCurrentUser(ctx) {
   if (!user.isApproved || !user.isActive) {
     throw new Error("User access is pending approval.");
   }
-  if (user.role !== "admin") {
-    throw new Error("Only admins can manage commission exports.");
-  }
 
   return user;
 }
