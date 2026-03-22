@@ -65,12 +65,16 @@ export const listSnapshots = query({
       .withIndex("by_month_attendant", (q) => q.eq("year", args.year).eq("month", args.month).eq("attendant", args.attendant))
       .collect();
 
+    const users = await ctx.db.query("users").collect();
+    const userById = new Map(users.map((record) => [String(record._id), record]));
+
     const enriched = await Promise.all(rows.map(async (row) => ({
       id: row._id,
       fileName: row.fileName,
       period: row.period,
       createdAt: row.createdAt,
       url: (await ctx.storage.getUrl(row.storageId)) || "",
+      createdByLabel: row.createdByUserId ? (userById.get(String(row.createdByUserId))?.fullName || "") : "",
     })));
 
     return enriched.sort((left, right) => right.createdAt - left.createdAt);

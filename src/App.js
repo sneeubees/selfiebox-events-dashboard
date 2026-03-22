@@ -3596,6 +3596,7 @@ function DashboardApp() {
                   </a>
                   <small className="commission-snapshot-log">
                     Created {new Date(snapshot.createdAt).toLocaleString()}
+                    {snapshot.createdByLabel ? ` by ${snapshot.createdByLabel}` : ''}
                   </small>
                 </article>
               ))
@@ -5122,14 +5123,14 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
   const pageHeight = doc.internal.pageSize.getHeight();
   const colX = {
     event: left,
-    date: 286,
-    times: 350,
-    hours: 434,
-    amount: 480,
-    car: 536,
-    km: 592,
-    travel: 646,
-    note: 712,
+    date: 238,
+    times: 302,
+    hours: 386,
+    amount: 432,
+    car: 488,
+    km: 544,
+    travel: 598,
+    note: 664,
   };
   let y = 56;
 
@@ -5181,10 +5182,10 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
     ensureSpace(40);
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
-    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 42), colX.event, y);
+    doc.text(truncatePdfText(row.eventLabel || row.eventName || '-', 33), colX.event, y);
     doc.setFontSize(8);
     doc.setTextColor(108, 119, 138);
-    doc.text(truncatePdfText(row.addressLabel || 'No address set', 50), colX.event, y + 11);
+    doc.text(truncatePdfText(row.addressLabel || 'No address set', 40), colX.event, y + 11);
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
@@ -5194,7 +5195,7 @@ async function exportCommissionPdf({ month, year, period, attendant, rows, total
     doc.text(String(row.car ?? 0), colX.car + 16, y, { align: 'right' });
     doc.text(String(row.km ?? 0), colX.km + 12, y, { align: 'right' });
     doc.text(String(row.travel ?? 0), colX.travel + 20, y, { align: 'right' });
-    doc.text(truncatePdfText(row.note || '-', 18), colX.note, y);
+    doc.text(truncatePdfText(row.note || '-', 32), colX.note, y);
     y += 28;
   });
 
