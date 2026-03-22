@@ -784,10 +784,9 @@ function DashboardApp() {
       .map((event) => {
         const automaticHoursPayable = parseCommissionHours(event.hours);
         const automaticAmount = calculateCommissionAmount(automaticHoursPayable);
-        const routeBranchKey = (event.branch || []).find((branchKey) => typeof branchAddressMap[branchKey]?.lat === 'number' && typeof branchAddressMap[branchKey]?.lng === 'number')
+        const routeBranchKey = (event.branch || []).find((branchKey) => canAutoCalculateCommissionRoute(event, branchAddressMap[branchKey]))
           || (event.branch || []).find((branchKey) => branchAddressMap[branchKey])
           || '';
-        const automaticKm = routeBranchKey ? calculateCommissionRoundTripKm(event, branchAddressMap[routeBranchKey]) : 0;
         const override = commissionDialog.overrides[event.id] || {};
         const hoursPayable = override.hoursPayable === '' || override.hoursPayable === undefined
           ? automaticHoursPayable
@@ -814,8 +813,10 @@ function DashboardApp() {
           amount,
           car,
           km,
-          autoKm: automaticKm,
-          canAutoCalculateKm: automaticKm > 0,
+          location: event.location || '',
+          locationLat: typeof event.locationLat === 'number' ? event.locationLat : null,
+          locationLng: typeof event.locationLng === 'number' ? event.locationLng : null,
+          canAutoCalculateKm: routeBranchKey ? canAutoCalculateCommissionRoute(event, branchAddressMap[routeBranchKey]) : false,
           routeBranchKey,
           travel: calculateCommissionTravel(km),
           note,
@@ -2042,7 +2043,7 @@ function DashboardApp() {
     commissionOverrideSaveTimeoutsRef.current.set(eventId, timeoutId);
   };
 
-  const autoCalculateCommissionKm = (row) => {
+  const autoCalculateCommissionKm = async (row) => {
     if (!row?.id) {
       return;
     }
@@ -2051,7 +2052,18 @@ function DashboardApp() {
       openNotice(`A branch address and event map location are both needed before ${branchLabel} can auto-calculate the travel distance.`);
       return;
     }
-    updateCommissionOverride(row.id, 'km', String(row.autoKm));
+    try {
+      const routeOrigin = row.routeBranchKey ? branchAddressMap[row.routeBranchKey] : null;
+      const nextKm = await calculateCommissionRoundTripKm({
+        location: row.location,
+        locationLat: row.locationLat,
+        locationLng: row.locationLng,
+      }, routeOrigin);
+      updateCommissionOverride(row.id, 'km', String(nextKm));
+    } catch (error) {
+      console.error('Failed to auto-calculate commission KM', error);
+      openNotice('The driving distance could not be calculated right now.');
+    }
   };
 
   const openLogisticsDialog = (month) => {
@@ -5263,31 +5275,43 @@ function getLogisticsPalette(index) {
   };
 }
 
-function calculateHaversineDistanceKm(start, end) {
-  if (!start || !end) {
-    return 0;
+function getCommissionRoutePoint(location) {
+  if (typeof location?.lat === 'number' && typeof location?.lng === 'number') {
+    return { lat: location.lat, lng: location.lng };
   }
-  const toRadians = (value) => (Number(value) * Math.PI) / 180;
-  const earthRadiusKm = 6371;
-  const deltaLat = toRadians(end.lat - start.lat);
-  const deltaLng = toRadians(end.lng - start.lng);
-  const startLat = toRadians(start.lat);
-  const endLat = toRadians(end.lat);
-  const a = Math.sin(deltaLat / 2) ** 2
-    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
+  if (typeof location?.locationLat === 'number' && typeof location?.locationLng === 'number') {
+    return { lat: location.locationLat, lng: location.locationLng };
+  }
+  const address = String(location?.address || location?.location || '').trim();
+  return address || null;
 }
 
-function calculateCommissionRoundTripKm(event, origin) {
-  if (typeof origin?.lat !== 'number' || typeof origin?.lng !== 'number' || typeof event?.locationLat !== 'number' || typeof event?.locationLng !== 'number') {
+function canAutoCalculateCommissionRoute(event, origin) {
+  return Boolean(getCommissionRoutePoint(origin) && getCommissionRoutePoint(event));
+}
+
+async function calculateCommissionRoundTripKm(event, origin) {
+  const originPoint = getCommissionRoutePoint(origin);
+  const eventPoint = getCommissionRoutePoint(event);
+  if (!originPoint || !eventPoint) {
     return 0;
   }
-  const oneWayKm = calculateHaversineDistanceKm(
-    origin,
-    { lat: event.locationLat, lng: event.locationLng }
-  );
-  return Math.max(0, Math.round(oneWayKm * 2));
+  const google = await loadGoogleMapsApi();
+  if (!google?.maps?.DirectionsService) {
+    return 0;
+  }
+  const directionsService = new google.maps.DirectionsService();
+  const response = await directionsService.route({
+    origin: originPoint,
+    destination: originPoint,
+    waypoints: [{ location: eventPoint, stopover: true }],
+    travelMode: google.maps.TravelMode.DRIVING,
+    optimizeWaypoints: false,
+    provideRouteAlternatives: false,
+    unitSystem: google.maps.UnitSystem.METRIC,
+  });
+  const totalMeters = (response?.routes?.[0]?.legs || []).reduce((sum, leg) => sum + (Number(leg?.distance?.value) || 0), 0);
+  return Math.max(0, Math.round(totalMeters / 1000));
 }
 
 function calculateCommissionTravel(km) {
