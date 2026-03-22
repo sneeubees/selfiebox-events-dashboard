@@ -138,49 +138,92 @@ const monthAccentClass = {
   December: 'month-accent-12',
 };
 
-const CHANGELOG_ENTRIES = [
+const CHANGELOG_VERSIONS = [
   {
-    title: 'Booking workflow',
-    items: [
-      'A Booking section was added in the drawer with unique client booking links per event.',
-      'Booking forms now update the main event fields, save PDF snapshots, write into Logs, and send confirmation emails.',
-      'Booking emails now go to the form email, BCC info@selfiebox.co.za, and CC the selected branch contact emails.',
-      'Booking PDFs, validation, terms popup, quote and invoice references, and product-based optional extras were refined.',
+    version: 'V1.2002',
+    sections: [
+      {
+        title: 'Booking workflow',
+        items: [
+          'A Booking section was added in the drawer with unique client booking links per event.',
+          'Booking forms now update the main event fields, save PDF snapshots, write into Logs, and send confirmation emails.',
+          'Booking emails now go to the form email, BCC info@selfiebox.co.za, and CC the selected branch contact emails.',
+          'Booking PDFs, validation, terms popup, quote and invoice references, and product-based optional extras were refined.',
+        ],
+      },
+      {
+        title: 'Commission and logistics',
+        items: [
+          'Commission sheets were added with saved overrides, notes, totals, saved PDF history, and landscape PDF export.',
+          'Commission rates can now be edited by admins, including the per-kilometre travel rate.',
+          'Travel auto-calculation now uses driving directions from the branch address to the event and back.',
+          'A Logistics manager view was added with timeline bars, drag-to-order rows, and saved day planning per user.',
+        ],
+      },
+      {
+        title: 'Users, branches, and operations',
+        items: [
+          'Admins can assign one or more branches to each user, while users see their branches as read-only in Profile.',
+          'Branch manager now stores both branch email addresses and branch addresses.',
+          'Branch assignments now control which attendants users can assign, commission against, and see in logistics views.',
+          'Scrollable user-rights and manage-users popups were improved for larger teams.',
+        ],
+      },
+      {
+        title: 'Board and UI improvements',
+        items: [
+          'Direct Google address autocomplete was improved on the board and in booking forms, while map preview remains available.',
+          'Month header summaries stay visible while horizontally scrolling, with actions still reachable to the right.',
+          'Drag-and-drop file upload was added in the drawer, and active-row styling and map popup controls were refined.',
+          'A version badge and in-app changelog were added to the dashboard header.',
+        ],
+      },
+      {
+        title: 'Data and exports',
+        items: [
+          'Numeric totals were corrected for imported local currency formats and dot-decimal values such as ExVAT Auto.',
+          'Commission and booking exports now save cleaner filenames and include richer PDF layouts.',
+          'This release is code-only: live custom columns, label names, colors, and event data remain untouched.',
+        ],
+      },
     ],
   },
   {
-    title: 'Commission and logistics',
-    items: [
-      'Commission sheets were added with saved overrides, notes, totals, saved PDF history, and landscape PDF export.',
-      'Commission rates can now be edited by admins, including the per-kilometre travel rate.',
-      'Travel auto-calculation now uses driving directions from the branch address to the event and back.',
-      'A Logistics manager view was added with timeline bars, drag-to-order rows, and saved day planning per user.',
-    ],
-  },
-  {
-    title: 'Users, branches, and operations',
-    items: [
-      'Admins can assign one or more branches to each user, while users see their branches as read-only in Profile.',
-      'Branch manager now stores both branch email addresses and branch addresses.',
-      'Branch assignments now control which attendants users can assign, commission against, and see in logistics views.',
-      'Scrollable user-rights and manage-users popups were improved for larger teams.',
-    ],
-  },
-  {
-    title: 'Board and UI improvements',
-    items: [
-      'Direct Google address autocomplete was improved on the board and in booking forms, while map preview remains available.',
-      'Month header summaries stay visible while horizontally scrolling, with actions still reachable to the right.',
-      'Drag-and-drop file upload was added in the drawer, and active-row styling and map popup controls were refined.',
-      'A version badge and in-app changelog were added to the dashboard header.',
-    ],
-  },
-  {
-    title: 'Data and exports',
-    items: [
-      'Numeric totals were corrected for imported local currency formats and dot-decimal values such as ExVAT Auto.',
-      'Commission and booking exports now save cleaner filenames and include richer PDF layouts.',
-      'This release is code-only: live custom columns, label names, colors, and event data remain untouched.',
+    version: 'V1.2001',
+    sections: [
+      {
+        title: 'Dashboard and workflow',
+        items: [
+          'Dark mode was added as a saved user preference.',
+          'Saved custom filter views, drag-and-drop month ordering, and drag-and-drop column ordering after Payment were added.',
+          'Excel export was upgraded with filtered exports, month exports, column selection, and styled .xlsx output.',
+          'Search, filter, row highlighting, and header layout were refined across the board.',
+        ],
+      },
+      {
+        title: 'Events and board data',
+        items: [
+          'Optional Event Name was added under the main Client name.',
+          'Automatic PDF extraction was added for quote numbers, invoice numbers, and ExVAT Auto values.',
+          'Accounts was added alongside Payment, with matching items and monthly Fully Paid counts.',
+          'Custom columns, totals for numeric columns, and import tooling were improved for final data imports.',
+        ],
+      },
+      {
+        title: 'Users, rights, and profiles',
+        items: [
+          'Registration now captures first name, surname, and designation, with refreshed auth styling.',
+          'Managers can configure more of the board, while user rights and branch restrictions were expanded.',
+          'Users can be assigned to branch groups, which affects attendants, commission views, and logistics visibility.',
+        ],
+      },
+      {
+        title: 'Environment and rollout',
+        items: [
+          'A dedicated staging site was created so new work can be tested safely before any live release.',
+          'Live data was cloned into staging to keep testing realistic while protecting production changes.',
+        ],
+      },
     ],
   },
 ];
@@ -3665,14 +3708,19 @@ function DashboardApp() {
       {showChangelogModal ? (
         <ModalShell title="Changelog - V1.2002" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
           <div className="changelog-modal">
-            {CHANGELOG_ENTRIES.map((section) => (
-              <section className="changelog-section" key={section.title}>
-                <h4>{section.title}</h4>
-                <ul>
-                  {section.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+            {CHANGELOG_VERSIONS.map((release) => (
+              <section className="changelog-version" key={release.version}>
+                <h3>{release.version}</h3>
+                {release.sections.map((section) => (
+                  <section className="changelog-section" key={`${release.version}-${section.title}`}>
+                    <h4>{section.title}</h4>
+                    <ul>
+                      {section.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
               </section>
             ))}
             <div className="modal-actions">

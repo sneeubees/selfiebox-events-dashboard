@@ -85,7 +85,6 @@ function getFriendlyBookingValidationMessage(form, pageState) {
   if (!payload.cell) return "Please complete Cell.";
   if (!payload.email) return "Please complete Email.";
   if (!payload.email.includes("@")) return "Please enter a valid Email address.";
-  if (!payload.designYourself) return "Please complete Design yourself.";
   if (!payload.acceptedTerms) return "Please accept the Terms and Conditions.";
   return "";
 }
