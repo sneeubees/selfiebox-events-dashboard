@@ -3,9 +3,9 @@ import { v } from "convex/values";
 import { PAYMENT_OPTIONS, PAYMENT_STYLES, PRODUCT_OPTIONS, PRODUCT_STYLES, seedEvents, STATUS_OPTIONS, STATUS_STYLES } from "../seedData";
 
 const defaultBranchOptions = [
-  { optionKey: "CT", name: "Cape Town", abbreviation: "CT", color: "#d7e5f5", email: "", order: 0 },
-  { optionKey: "KZN", name: "KwaZulu-Natal", abbreviation: "KZN", color: "#ffe1b8", email: "", order: 1 },
-  { optionKey: "GP", name: "Gauteng", abbreviation: "GP", color: "#c8ddf7", email: "", order: 2 },
+  { optionKey: "CT", name: "Cape Town", abbreviation: "CT", color: "#d7e5f5", email: "", address: "", addressPlaceId: "", addressLat: null, addressLng: null, order: 0 },
+  { optionKey: "KZN", name: "KwaZulu-Natal", abbreviation: "KZN", color: "#ffe1b8", email: "", address: "", addressPlaceId: "", addressLat: null, addressLng: null, order: 1 },
+  { optionKey: "GP", name: "Gauteng", abbreviation: "GP", color: "#c8ddf7", email: "", address: "", addressPlaceId: "", addressLat: null, addressLng: null, order: 2 },
 ];
 
 const defaultProductOptions = PRODUCT_OPTIONS.map((fullName, index) => ({
@@ -56,13 +56,17 @@ function toLabelDto(record) {
     id: record._id,
     columnKey: record.columnKey,
     optionKey: record.optionKey,
-    name: record.name,
-    abbreviation: record.abbreviation || "",
-    branchKey: record.branchKey || "",
-    email: record.email || "",
-    color: record.color,
-    order: record.order,
-  };
+      name: record.name,
+      abbreviation: record.abbreviation || "",
+      branchKey: record.branchKey || "",
+      email: record.email || "",
+      address: record.address || "",
+      addressPlaceId: record.addressPlaceId || "",
+      addressLat: typeof record.addressLat === "number" ? record.addressLat : null,
+      addressLng: typeof record.addressLng === "number" ? record.addressLng : null,
+      color: record.color,
+      order: record.order,
+    };
 }
 
 function normalizeValue(value) {
@@ -152,13 +156,17 @@ export const seedInitialData = mutation({
         await ctx.db.insert("labelOptions", {
           columnKey,
           optionKey: option.optionKey,
-          name: option.name,
-          abbreviation: option.abbreviation || "",
-          branchKey: option.branchKey || "",
-          email: option.email || "",
-          color: option.color,
-          order: option.order,
-          isActive: true,
+            name: option.name,
+            abbreviation: option.abbreviation || "",
+            branchKey: option.branchKey || "",
+            email: option.email || "",
+            address: option.address || "",
+            addressPlaceId: option.addressPlaceId || "",
+            addressLat: typeof option.addressLat === "number" ? option.addressLat : null,
+            addressLng: typeof option.addressLng === "number" ? option.addressLng : null,
+            color: option.color,
+            order: option.order,
+            isActive: true,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -292,6 +300,10 @@ export const upsert = mutation({
     abbreviation: v.optional(v.string()),
     branchKey: v.optional(v.string()),
     email: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressPlaceId: v.optional(v.string()),
+    addressLat: v.optional(v.union(v.number(), v.null())),
+    addressLng: v.optional(v.union(v.number(), v.null())),
     color: v.string(),
     order: v.number(),
   },
@@ -326,6 +338,10 @@ export const upsert = mutation({
       abbreviation: args.abbreviation || "",
       branchKey: args.branchKey || "",
       email: args.email || "",
+      address: args.address || "",
+      addressPlaceId: args.addressPlaceId || "",
+      addressLat: typeof args.addressLat === "number" ? args.addressLat : null,
+      addressLng: typeof args.addressLng === "number" ? args.addressLng : null,
       color: args.color,
       order: args.order,
       isActive: true,
