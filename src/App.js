@@ -3780,9 +3780,10 @@ function DashboardApp() {
               <strong>SelfieBox commission sheet for:</strong>
               <span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
               <span>Attendant: {commissionDialog.attendant || '-'}</span>
+              <span className="commission-subhead-spacer" aria-hidden="true" />
               {currentUser?.role === 'admin' ? (
                 <button
-                  className="commission-link-action commission-link-action-spacer"
+                  className="commission-link-action"
                   type="button"
                   onClick={openCommissionRatesModal}
                 >
