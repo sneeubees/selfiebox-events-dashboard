@@ -108,7 +108,7 @@ export const saveOverride = mutation({
     month: v.string(),
     year: v.number(),
     attendant: v.string(),
-    eventId: v.id("events"),
+    eventId: v.string(),
     hoursPayable: v.optional(v.string()),
     amount: v.optional(v.string()),
     car: v.optional(v.string()),
