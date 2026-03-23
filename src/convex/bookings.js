@@ -452,7 +452,6 @@ function validateFormData(formData) {
   if (!formData.contactPerson) return "Please enter a contact person.";
   if (!formData.cell) return "Please enter a contact cell number.";
   if (!formData.email || !formData.email.includes("@")) return "Please enter a valid email address.";
-  if (!formData.designYourself) return "Please choose a design yourself option.";
   if (!formData.acceptedTerms) return "Please accept the terms and conditions before submitting.";
   return "";
 }
