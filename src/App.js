@@ -396,7 +396,11 @@ function DashboardApp() {
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const canAccessDashboard = Boolean(currentUser?.isApproved && currentUser?.isActive);
   const workspaceRecords = useQuery(api.workspaces.list, canAccessDashboard ? {} : 'skip');
-  const liveEvents = useQuery(api.events.listAll, canAccessDashboard ? {} : 'skip');
+  const liveEvents = useQuery(
+    api.events.listByWorkspaceYear,
+    canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip'
+  );
+  const hasAnyEvents = useQuery(api.events.hasAny, canAccessDashboard ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
   const customColumnRecords = useQuery(api.columns.listAll, canAccessDashboard ? {} : 'skip');
   const staticColumnLabelRecords = useQuery(api.staticColumnLabels.listAll, canAccessDashboard ? {} : 'skip');
@@ -650,7 +654,10 @@ function DashboardApp() {
   useEffect(() => {
     setColumnOrderAfterPaymentDraft(currentUser?.columnOrderAfterPayment || []);
   }, [currentUser?.columnOrderAfterPayment]);
-  const workspaceActivityEntries = useQuery(api.collaboration.listWorkspaceActivity, canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip');
+  const workspaceActivityEntries = useQuery(
+    api.collaboration.listWorkspaceActivity,
+    canAccessDashboard ? { workspaceYear: selectedWorkspaceYear, limit: 200 } : 'skip'
+  );
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
@@ -1325,7 +1332,7 @@ function DashboardApp() {
   }, [liveEvents]);
 
   useEffect(() => {
-    if (!canAccessDashboard || liveEvents === undefined || liveEvents.length || eventsSeededRef.current) {
+    if (!canAccessDashboard || liveEvents === undefined || hasAnyEvents === undefined || hasAnyEvents || eventsSeededRef.current) {
       return;
     }
 
@@ -1334,7 +1341,7 @@ function DashboardApp() {
       console.error('Failed to seed initial events', error);
       eventsSeededRef.current = false;
     });
-  }, [canAccessDashboard, liveEvents, seedInitialEvents]);
+  }, [canAccessDashboard, hasAnyEvents, liveEvents, seedInitialEvents]);
 
   useEffect(() => {
     if (!canAccessDashboard || liveEvents === undefined || collaborationMigratedRef.current) {
