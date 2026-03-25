@@ -85,6 +85,58 @@ function toEventDto(record, creator = null) {
   };
 }
 
+function toEventListDto(record, creator = null) {
+  return {
+    id: record.eventKey,
+    workspaceYear: record.workspaceYear,
+    name: record.name,
+    eventTitle: record.eventTitle || "",
+    date: record.date || "",
+    draftMonth: record.draftMonth || "",
+    hours: record.hours || "",
+    branch: record.branch || [],
+    products: record.products || [],
+    status: record.status || "",
+    location: record.location || "",
+    locationPlaceId: record.locationPlaceId || "",
+    locationLat: typeof record.locationLat === 'number' ? record.locationLat : null,
+    locationLng: typeof record.locationLng === 'number' ? record.locationLng : null,
+    paymentStatus: record.paymentStatus || "",
+    accounts: record.accounts || "",
+    quoteNumber: record.quoteNumber || "",
+    invoiceNumber: record.invoiceNumber || "",
+    exVatAuto: record.exVatAuto ?? "",
+    vinyl: record.vinyl || "",
+    gsAi: record.gsAi || "",
+    imagesSent: record.imagesSent || "",
+    snappic: record.snappic || "",
+    attendants: record.attendants || [],
+    exVat: record.exVat ?? "",
+    packageOnly: record.packageOnly || "",
+    notes: record.notes || "",
+    customFields: record.customFields || {},
+    createdByUserId: record.createdByUserId || null,
+    createdByName: creator?.fullName || "",
+    createdByProfilePic: creator?.profilePic || "",
+  };
+}
+
+async function attachCreatorDetails(ctx, events, dtoMapper) {
+  const creatorIdsByKey = new Map();
+  events.forEach((record) => {
+    if (record.createdByUserId) {
+      creatorIdsByKey.set(String(record.createdByUserId), record.createdByUserId);
+    }
+  });
+  const creatorEntries = await Promise.all(
+    Array.from(creatorIdsByKey.entries()).map(async ([creatorKey, creatorId]) => [creatorKey, await ctx.db.get(creatorId)])
+  );
+  const userById = new Map(creatorEntries);
+  return events.map((record) =>
+    dtoMapper(record, userById.get(String(record.createdByUserId || "")) || null)
+  );
+}
+
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
@@ -117,11 +169,46 @@ export const listAll = query({
     }
 
     const events = await ctx.db.query("events").collect();
-    const users = await ctx.db.query("users").collect();
-    const userById = new Map(users.map((record) => [String(record._id), record]));
-    return events
-      .sort((left, right) => String(left.eventKey).localeCompare(String(right.eventKey)))
-      .map((record) => toEventDto(record, userById.get(String(record.createdByUserId || "")) || null));
+    const sortedEvents = events
+      .slice()
+      .sort((left, right) => String(left.eventKey).localeCompare(String(right.eventKey)));
+    return attachCreatorDetails(ctx, sortedEvents, toEventListDto);
+  },
+});
+
+export const listByWorkspaceYear = query({
+  args: {
+    workspaceYear: v.number(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      await requireCurrentUser(ctx);
+    } catch {
+      return [];
+    }
+
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", args.workspaceYear))
+      .collect();
+    const sortedEvents = events
+      .slice()
+      .sort((left, right) => String(left.eventKey).localeCompare(String(right.eventKey)));
+    return attachCreatorDetails(ctx, sortedEvents, toEventListDto);
+  },
+});
+
+export const hasAny = query({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await requireCurrentUser(ctx);
+    } catch {
+      return false;
+    }
+
+    const existing = await ctx.db.query("events").take(1);
+    return existing.length > 0;
   },
 });
 
