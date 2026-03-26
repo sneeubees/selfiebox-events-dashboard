@@ -39,6 +39,7 @@ function normalizePhone(value) {
 function formatActivityTimestamp(timestamp) {
   try {
     return new Date(timestamp).toLocaleString("en-ZA", {
+      timeZone: "Africa/Johannesburg",
       day: "numeric",
       month: "short",
       year: "numeric",

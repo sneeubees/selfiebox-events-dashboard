@@ -14,6 +14,7 @@ import type * as bookingPdf from "../bookingPdf.js";
 import type * as bookings from "../bookings.js";
 import type * as collaboration from "../collaboration.js";
 import type * as columns from "../columns.js";
+import type * as commissions from "../commissions.js";
 import type * as documentNumbers from "../documentNumbers.js";
 import type * as events from "../events.js";
 import type * as files from "../files.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   collaboration: typeof collaboration;
   columns: typeof columns;
+  commissions: typeof commissions;
   documentNumbers: typeof documentNumbers;
   events: typeof events;
   files: typeof files;
