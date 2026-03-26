@@ -207,6 +207,10 @@ export const upsert = mutation({
       .query("events")
       .withIndex("by_event_key", (q) => q.eq("eventKey", args.event.id))
       .unique();
+    const deletedMarker = await ctx.db
+      .query("deletedEventKeys")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.event.id))
+      .unique();
 
     const payload = {
       eventKey: args.event.id,
@@ -248,6 +252,10 @@ export const upsert = mutation({
       return toEventDto(await ctx.db.get(existing._id));
     }
 
+    if (deletedMarker) {
+      return null;
+    }
+
     const eventId = await ctx.db.insert("events", {
       ...payload,
       createdByUserId: currentUser._id,
@@ -266,12 +274,26 @@ export const remove = mutation({
       .query("events")
       .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventId))
       .unique();
+    const deletedMarker = await ctx.db
+      .query("deletedEventKeys")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventId))
+      .unique();
 
     if (!existing) {
       return null;
     }
 
     await ctx.db.delete(existing._id);
+    if (deletedMarker) {
+      await ctx.db.patch(deletedMarker._id, {
+        deletedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("deletedEventKeys", {
+        eventKey: args.eventId,
+        deletedAt: Date.now(),
+      });
+    }
     return args.eventId;
   },
 });
