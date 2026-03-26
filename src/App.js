@@ -386,6 +386,10 @@ function serializeEventForConvex(event) {
   };
 }
 
+function createEventKey() {
+  return `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function DashboardApp() {
 
   const [events, setEvents] = useState(() => seedEvents.map((event) => ({ ...event, products: (event.products || []).map((product) => abbreviateLabel(product)) })));
@@ -733,6 +737,8 @@ function DashboardApp() {
   const filesMigratedRef = useRef(false);
   const eventsRef = useRef(events);
   const persistTimeoutsRef = useRef(new Map());
+  const eventPersistVersionsRef = useRef(new Map());
+  const eventDeleteVersionsRef = useRef(new Map());
   const commissionOverrideSaveTimeoutsRef = useRef(new Map());
   const commissionOverridesLoadedKeyRef = useRef('');
   const eventSyncLocksRef = useRef(new Map());
@@ -1302,7 +1308,7 @@ function DashboardApp() {
     const mergedEvents = [];
 
     for (const [eventId, lock] of eventSyncLocksRef.current.entries()) {
-      if (lock.expiresAt <= now) {
+      if (!lock.pending && lock.expiresAt <= now) {
         eventSyncLocksRef.current.delete(eventId);
       }
     }
@@ -1545,11 +1551,33 @@ function DashboardApp() {
       clearTimeout(pendingTimeout);
     }
 
+    const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
+    eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
+
     const timeoutId = window.setTimeout(() => {
       persistTimeoutsRef.current.delete(event.id);
-      void upsertEventMutation({ event: serializeEventForConvex(event) }).catch((error) => {
-        console.error('Failed to persist event', error);
-      });
+      void upsertEventMutation({ event: serializeEventForConvex(event) })
+        .then(() => {
+          if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
+            return;
+          }
+          eventSyncLocksRef.current.set(event.id, {
+            expiresAt: Date.now() + 2000,
+            deleted: false,
+            pending: false,
+          });
+        })
+        .catch((error) => {
+          console.error('Failed to persist event', error);
+          if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
+            return;
+          }
+          eventSyncLocksRef.current.set(event.id, {
+            expiresAt: Date.now() + 1000,
+            deleted: false,
+            pending: false,
+          });
+        });
     }, 250);
 
     persistTimeoutsRef.current.set(event.id, timeoutId);
@@ -1561,20 +1589,19 @@ function DashboardApp() {
     const previousById = new Map(previousEvents.map((event) => [event.id, event]));
     const nextIds = new Set(nextEvents.map((event) => event.id));
     const changedEvents = [];
-    const now = Date.now();
 
     nextEvents.forEach((event) => {
       const previousEvent = previousById.get(event.id);
       const hasChanged = !previousEvent || JSON.stringify(previousEvent) !== JSON.stringify(event);
       if (hasChanged) {
         changedEvents.push(event);
-        eventSyncLocksRef.current.set(event.id, { expiresAt: now + 2000, deleted: false });
+        eventSyncLocksRef.current.set(event.id, { expiresAt: Number.POSITIVE_INFINITY, deleted: false, pending: true });
       }
     });
 
     previousEvents.forEach((event) => {
       if (!nextIds.has(event.id)) {
-        eventSyncLocksRef.current.set(event.id, { expiresAt: now + 2000, deleted: true });
+        eventSyncLocksRef.current.set(event.id, { expiresAt: Number.POSITIVE_INFINITY, deleted: true, pending: true });
       }
     });
 
@@ -1592,9 +1619,28 @@ function DashboardApp() {
           clearTimeout(pendingTimeout);
           persistTimeoutsRef.current.delete(event.id);
         }
-        void removeEventMutation({ eventId: event.id }).catch((error) => {
-          console.error('Failed to delete event', error);
-        });
+        const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
+        eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
+        const nextDeleteVersion = (eventDeleteVersionsRef.current.get(event.id) || 0) + 1;
+        eventDeleteVersionsRef.current.set(event.id, nextDeleteVersion);
+        void removeEventMutation({ eventId: event.id })
+          .then(() => {
+            if (eventDeleteVersionsRef.current.get(event.id) !== nextDeleteVersion) {
+              return;
+            }
+            eventSyncLocksRef.current.set(event.id, {
+              expiresAt: Date.now() + 300000,
+              deleted: true,
+              pending: false,
+            });
+          })
+          .catch((error) => {
+            console.error('Failed to delete event', error);
+            if (eventDeleteVersionsRef.current.get(event.id) !== nextDeleteVersion) {
+              return;
+            }
+            eventSyncLocksRef.current.delete(event.id);
+          });
       }
     });
   };
@@ -1828,7 +1874,7 @@ function DashboardApp() {
       const source = current[index];
       const copy = {
         ...source,
-        id: `evt-${Date.now()}`,
+        id: createEventKey(),
         name: `Copy: ${source.name || 'Untitled event'}`,
         updates: [...(source.updates || [])],
         files: [...(source.files || [])],
@@ -1873,7 +1919,7 @@ function DashboardApp() {
   const addBlankEvent = (monthName) => {
     const newEvent = {
       ...eventDefaults,
-      id: `evt-${Date.now()}`,
+      id: createEventKey(),
       date: '',
       draftMonth: monthName,
       workspaceYear: selectedWorkspaceYear,
@@ -1956,7 +2002,7 @@ function DashboardApp() {
       monthNames[new Date().getMonth()];
     const newEvent = {
       ...eventDefaults,
-      id: `evt-${String(events.length + 1).padStart(3, '0')}`,
+      id: createEventKey(),
       name: eventForm.name,
       eventTitle: eventForm.eventTitle || '',
       date: eventForm.date,

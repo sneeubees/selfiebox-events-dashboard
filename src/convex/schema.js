@@ -109,6 +109,10 @@ export default defineSchema({
     .index("by_event_key", ["eventKey"])
     .index("by_workspace_year", ["workspaceYear"])
     .index("by_date", ["date"]),
+  deletedEventKeys: defineTable({
+    eventKey: v.string(),
+    deletedAt: v.number(),
+  }).index("by_event_key", ["eventKey"]),
   labelOptions: defineTable({
     columnKey: v.string(),
     optionKey: v.string(),
