@@ -16,35 +16,6 @@ function abbreviateActivity(eventName, text) {
   return summary.length > 64 ? `${summary.slice(0, 61)}...` : summary;
 }
 
-function formatDisplayTimestamp(timestamp) {
-  try {
-    return new Intl.DateTimeFormat("en-ZA", {
-      timeZone: "Africa/Johannesburg",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    })
-      .formatToParts(new Date(timestamp))
-      .reduce((accumulator, part) => {
-        accumulator[part.type] = part.value;
-        return accumulator;
-      }, {});
-  } catch {
-    return null;
-  }
-}
-
-function formatLogDate(timestamp) {
-  const parts = formatDisplayTimestamp(timestamp);
-  if (parts) {
-    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
-  }
-  return new Date(timestamp).toISOString().slice(0, 16).replace("T", " ");
-}
-
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
@@ -99,7 +70,7 @@ export const listEventUpdates = query({
         id: String(entry._id),
         text: entry.body,
         user: entry.actorName,
-        date: formatLogDate(entry.createdAt),
+        date: new Date(entry.createdAt).toISOString().slice(0, 16).replace("T", " "),
       }));
   },
 });
@@ -129,7 +100,7 @@ export const listEventActivity = query({
         id: String(entry._id),
         text: entry.text,
         user: entry.actorName,
-        date: formatLogDate(entry.createdAt),
+        date: new Date(entry.createdAt).toISOString().slice(0, 16).replace("T", " "),
       }));
   },
 });
@@ -155,7 +126,7 @@ export const listWorkspaceActivity = query({
         text: entry.text,
         shortText: entry.shortText,
         user: entry.actorName,
-        date: formatLogDate(entry.createdAt),
+        date: new Date(entry.createdAt).toISOString().slice(0, 16).replace("T", " "),
         eventName: entry.eventName || "Untitled event",
       }));
   },
@@ -204,7 +175,7 @@ export const addUpdate = mutation({
       id: String(updateId),
       text: trimmedBody,
       user: actorName,
-      date: formatLogDate(now),
+      date: new Date(now).toISOString().slice(0, 16).replace("T", " "),
     };
   },
 });
