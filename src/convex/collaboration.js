@@ -135,7 +135,7 @@ export const listEventActivity = query({
 });
 
 export const listWorkspaceActivity = query({
-  args: { workspaceYear: v.number(), limit: v.optional(v.number()) },
+  args: { workspaceYear: v.number() },
   handler: async (ctx, args) => {
     try {
       await requireCurrentUser(ctx);
@@ -143,14 +143,13 @@ export const listWorkspaceActivity = query({
       return [];
     }
 
-    const safeLimit = Math.max(1, Math.min(args.limit || 200, 500));
     const activity = await ctx.db
       .query("activityLog")
       .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", args.workspaceYear))
-      .order("desc")
-      .take(safeLimit);
+      .collect();
 
     return activity
+      .sort((left, right) => right.createdAt - left.createdAt)
       .map((entry) => ({
         id: String(entry._id),
         text: entry.text,
