@@ -166,14 +166,15 @@ button { cursor: pointer; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 0 10px 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
-.month-header { position: sticky; top: 41px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
+.month-header { position: sticky; top: 41px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
 .month-header:hover { background: #e5eeff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
-.month-header-main { position: sticky; left: 0; z-index: 27; display: flex; align-items: center; gap: 10px; flex: 0 0 auto; min-width: max-content; padding-right: 18px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
+.month-header-main { position: sticky; left: 0; z-index: 27; display: grid; gap: 6px; align-items: start; flex: 0 0 auto; min-width: max-content; padding-right: 18px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
+.month-header-stats { display: flex; flex-wrap: wrap; gap: 10px; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
-.month-header-actions { display: inline-flex; align-items: center; gap: 8px; }
+.month-header-actions { position: sticky; right: 0; z-index: 28; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding-left: 18px; background: inherit; box-shadow: -16px 0 14px -14px rgba(237, 243, 255, 0.98); }
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 4px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 .month-commission-button { background: #eef8ef; border-color: #cde6cf; color: #2b6b3b; }
