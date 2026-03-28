@@ -140,8 +140,8 @@ button { cursor: pointer; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
-.board-header { position: sticky; top: 0; z-index: 40; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
-.board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 40px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5c4a25; background: #f3f5f9; }
+.board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: hidden; }
+.board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5c4a25; background: #f3f5f9; }
 .column-header-label { line-height: 1.1; }
 .board-header .cell[draggable="true"] { cursor: grab; }
 .board-header .cell.is-dragging-column { opacity: 0.55; }
@@ -166,7 +166,7 @@ button { cursor: pointer; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 0 10px 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
-.month-header { position: sticky; top: 41px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
+.month-header { position: sticky; top: 0; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
 .month-header:hover { background: #e5eeff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
@@ -175,6 +175,7 @@ button { cursor: pointer; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { position: sticky; right: 0; z-index: 28; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding: 2px 0 2px 18px; background: inherit; box-shadow: -16px 0 14px -14px rgba(237, 243, 255, 0.98); }
+.month-board-header { z-index: 2; }
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 2px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 .month-commission-button { background: #eef8ef; border-color: #cde6cf; color: #2b6b3b; }
