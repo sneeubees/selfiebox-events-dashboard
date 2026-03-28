@@ -165,7 +165,7 @@ button { cursor: pointer; }
 .admin-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 6px 8px; border-radius: 8px; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
-.month-header { position: sticky; top: 47px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
+.month-header { position: sticky; top: 47px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; margin-top: -1px; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
 .month-header:hover { background: #e5eeff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
