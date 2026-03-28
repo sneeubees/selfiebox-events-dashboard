@@ -46,6 +46,60 @@ function normalizeSeedEvent(event) {
   };
 }
 
+const ACTIVITY_FIELD_LABELS = {
+  name: "Client name",
+  eventTitle: "Event name",
+  date: "Date",
+  hours: "Hours",
+  branch: "Branch",
+  products: "Products",
+  status: "Status",
+  location: "Location",
+  paymentStatus: "Payment",
+  accounts: "Accounts",
+  quoteNumber: "Quote number",
+  invoiceNumber: "Invoice number",
+  exVatAuto: "ExVAT Auto",
+  vinyl: "Vinyl",
+  gsAi: "GS AI",
+  imagesSent: "Images sent",
+  snappic: "Snappic",
+  attendants: "Attendants",
+  exVat: "Ex VAT",
+  packageOnly: "Package only",
+  notes: "Notes",
+};
+
+function normalizeComparableValue(value) {
+  if (Array.isArray(value)) {
+    return JSON.stringify([...value].sort());
+  }
+  if (value && typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value ?? "");
+}
+
+function getChangedEventFields(previousRecord, nextRecord) {
+  const changed = [];
+  Object.entries(ACTIVITY_FIELD_LABELS).forEach(([fieldKey, label]) => {
+    if (normalizeComparableValue(previousRecord?.[fieldKey]) !== normalizeComparableValue(nextRecord?.[fieldKey])) {
+      changed.push(label);
+    }
+  });
+
+  const previousCustom = previousRecord?.customFields || {};
+  const nextCustom = nextRecord?.customFields || {};
+  const allCustomKeys = new Set([...Object.keys(previousCustom), ...Object.keys(nextCustom)]);
+  allCustomKeys.forEach((customKey) => {
+    if (normalizeComparableValue(previousCustom[customKey]) !== normalizeComparableValue(nextCustom[customKey])) {
+      changed.push(customKey);
+    }
+  });
+
+  return changed;
+}
+
 function toEventDto(record, creator = null) {
   return {
     id: record.eventKey,
@@ -118,7 +172,29 @@ function toEventListDto(record, creator = null) {
     createdByUserId: record.createdByUserId || null,
     createdByName: creator?.fullName || "",
     createdByProfilePic: creator?.profilePic || "",
+    duplicatedFromEventKey: record.duplicatedFromEventKey || "",
+    duplicatedFromEventName: record.duplicatedFromEventName || "",
   };
+}
+
+function createUniqueEventKey() {
+  return `evt-${crypto.randomUUID()}`;
+}
+
+async function generateUniqueBookingToken(ctx) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    const existing = await ctx.db
+      .query("eventBookings")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    if (!existing) {
+      return token;
+    }
+  }
+  throw new Error("Unable to create a unique booking link right now.");
 }
 
 async function attachCreatorDetails(ctx, events, dtoMapper) {
@@ -244,6 +320,8 @@ export const upsert = mutation({
       workspaceYear: v.number(),
       name: v.string(),
       eventTitle: v.optional(v.string()),
+      duplicatedFromEventKey: v.optional(v.string()),
+      duplicatedFromEventName: v.optional(v.string()),
       date: v.optional(v.string()),
       draftMonth: v.optional(v.string()),
       hours: v.optional(v.string()),
@@ -304,6 +382,8 @@ export const upsert = mutation({
       workspaceYear: args.event.workspaceYear,
       name: args.event.name,
       eventTitle: args.event.eventTitle || "",
+      duplicatedFromEventKey: args.event.duplicatedFromEventKey || "",
+      duplicatedFromEventName: args.event.duplicatedFromEventName || "",
       date: args.event.date || "",
       draftMonth: args.event.draftMonth || "",
       hours: args.event.hours || "",
@@ -336,7 +416,24 @@ export const upsert = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, payload);
-      return toEventDto(await ctx.db.get(existing._id));
+      const refreshed = await ctx.db.get(existing._id);
+      const changedFields = getChangedEventFields(existing, refreshed);
+      if (changedFields.length) {
+        const actorName = currentUser.fullName || currentUser.firstName || currentUser.email;
+        const eventName = refreshed.name || "Untitled event";
+        const text = `Updated ${changedFields.join(", ")}.`;
+        await ctx.db.insert("activityLog", {
+          workspaceYear: refreshed.workspaceYear,
+          eventId: existing._id,
+          eventName,
+          text,
+          shortText: `${eventName}: ${text}`.slice(0, 120),
+          actorName,
+          actorUserId: currentUser._id,
+          createdAt: Date.now(),
+        });
+      }
+      return toEventDto(refreshed);
     }
 
     if (deletedMarker) {
@@ -350,6 +447,171 @@ export const upsert = mutation({
     });
 
     return toEventDto(await ctx.db.get(eventId));
+  },
+});
+
+export const cloneEvent = mutation({
+  args: {
+    sourceEventKey: v.string(),
+    includeDrawerInfo: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCurrentUser(ctx);
+    const source = await ctx.db
+      .query("events")
+      .withIndex("by_event_key", (q) => q.eq("eventKey", args.sourceEventKey))
+      .unique();
+    if (!source) {
+      throw new Error("Source event not found.");
+    }
+
+    const now = Date.now();
+    const nextEventKey = createUniqueEventKey();
+    const createdId = await ctx.db.insert("events", {
+      eventKey: nextEventKey,
+      workspaceYear: source.workspaceYear,
+      name: source.name || "",
+      eventTitle: source.eventTitle || "",
+      duplicatedFromEventKey: source.eventKey,
+      duplicatedFromEventName: source.eventTitle
+        ? `${source.name || "Untitled event"} - ${source.eventTitle}`
+        : (source.name || "Untitled event"),
+      date: source.date || "",
+      draftMonth: source.draftMonth || "",
+      hours: source.hours || "",
+      branch: source.branch || [],
+      products: source.products || [],
+      status: source.status || "",
+      location: source.location || "",
+      locationPlaceId: source.locationPlaceId || "",
+      locationLat: typeof source.locationLat === "number" ? source.locationLat : undefined,
+      locationLng: typeof source.locationLng === "number" ? source.locationLng : undefined,
+      paymentStatus: source.paymentStatus || "",
+      accounts: source.accounts || "",
+      quoteNumber: source.quoteNumber || "",
+      invoiceNumber: source.invoiceNumber || "",
+      exVatAuto: source.exVatAuto ?? "",
+      vinyl: source.vinyl || "",
+      gsAi: source.gsAi || "",
+      imagesSent: source.imagesSent || "",
+      snappic: source.snappic || "",
+      attendants: source.attendants || [],
+      exVat: source.exVat ?? "",
+      packageOnly: source.packageOnly || "",
+      notes: source.notes || "",
+      customFields: source.customFields || {},
+      updates: [],
+      files: [],
+      activity: [],
+      createdByUserId: currentUser._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (args.includeDrawerInfo) {
+      const sourceUpdates = await ctx.db
+        .query("eventUpdates")
+        .withIndex("by_event", (q) => q.eq("eventId", source._id))
+        .collect();
+      for (const entry of sourceUpdates) {
+        await ctx.db.insert("eventUpdates", {
+          eventId: createdId,
+          body: entry.body,
+          actorName: entry.actorName,
+          legacyEntryId: entry.legacyEntryId,
+          createdByUserId: entry.createdByUserId,
+          createdAt: entry.createdAt,
+        });
+      }
+
+      const sourceFiles = await ctx.db
+        .query("eventFiles")
+        .withIndex("by_event", (q) => q.eq("eventId", source._id))
+        .collect();
+      for (const entry of sourceFiles) {
+        await ctx.db.insert("eventFiles", {
+          eventId: createdId,
+          name: entry.name,
+          storageId: entry.storageId,
+          legacyFileId: entry.legacyFileId,
+          contentType: entry.contentType,
+          sizeLabel: entry.sizeLabel,
+          createdByUserId: entry.createdByUserId,
+          createdAt: entry.createdAt,
+        });
+      }
+
+      const sourceActivity = await ctx.db
+        .query("activityLog")
+        .withIndex("by_event", (q) => q.eq("eventId", source._id))
+        .collect();
+      for (const entry of sourceActivity) {
+        await ctx.db.insert("activityLog", {
+          workspaceYear: source.workspaceYear,
+          eventId: createdId,
+          eventName: source.name || "Untitled event",
+          text: entry.text,
+          shortText: entry.shortText,
+          actorName: entry.actorName,
+          legacyEntryId: entry.legacyEntryId,
+          actorUserId: entry.actorUserId,
+          createdAt: entry.createdAt,
+        });
+      }
+
+      const sourceBooking = await ctx.db
+        .query("eventBookings")
+        .withIndex("by_event", (q) => q.eq("eventId", source._id))
+        .unique();
+      if (sourceBooking) {
+        const bookingId = await ctx.db.insert("eventBookings", {
+          eventId: createdId,
+          eventKey: nextEventKey,
+          token: await generateUniqueBookingToken(ctx),
+          formData: sourceBooking.formData,
+          createdByUserId: sourceBooking.createdByUserId || currentUser._id,
+          submittedByUserId: sourceBooking.submittedByUserId,
+          publicAccessCount: 0,
+          createdAt: now,
+          updatedAt: now,
+          submittedAt: sourceBooking.submittedAt,
+          lastSubmittedIp: sourceBooking.lastSubmittedIp,
+        });
+        const sourceSnapshots = await ctx.db
+          .query("bookingSnapshots")
+          .withIndex("by_booking", (q) => q.eq("bookingId", sourceBooking._id))
+          .collect();
+        for (const snapshot of sourceSnapshots) {
+          await ctx.db.insert("bookingSnapshots", {
+            bookingId,
+            eventId: createdId,
+            storageId: snapshot.storageId,
+            fileName: snapshot.fileName,
+            sourceIp: snapshot.sourceIp,
+            submittedAt: snapshot.submittedAt,
+            createdByUserId: snapshot.createdByUserId,
+            createdByLabel: snapshot.createdByLabel,
+            createdAt: snapshot.createdAt,
+          });
+        }
+      }
+    }
+
+    const activityText = args.includeDrawerInfo
+      ? `Duplicated from ${source.name || "Untitled event"} with drawer data.`
+      : `Duplicated from ${source.name || "Untitled event"} without drawer data.`;
+    await ctx.db.insert("activityLog", {
+      workspaceYear: source.workspaceYear,
+      eventId: createdId,
+      eventName: source.name || "Untitled event",
+      text: activityText,
+      shortText: activityText,
+      actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
+      actorUserId: currentUser._id,
+      createdAt: now,
+    });
+
+    return toEventDto(await ctx.db.get(createdId), currentUser);
   },
 });
 

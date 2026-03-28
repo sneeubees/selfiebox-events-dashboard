@@ -554,6 +554,10 @@ export const generateForEvent = mutation({
     if (!eventRecord) {
       throw new Error("Event not found.");
     }
+    const eventDateTimestamp = parseIsoDateStart(eventRecord.date);
+    if (eventDateTimestamp != null && eventDateTimestamp < Date.now()) {
+      throw new Error("Booking links cannot be generated for past events.");
+    }
 
     const existing = await findBookingByEventId(ctx, eventRecord._id);
     if (existing) {
@@ -713,6 +717,43 @@ export const submitPublicForm = mutation({
       approvedUser ? "registered" : "public",
       approvedUser?.role || "public"
     );
+  },
+});
+
+export const regenerateSnapshotForEvent = mutation({
+  args: {
+    eventKey: v.string(),
+    baseUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCurrentUser(ctx);
+    const eventRecord = await findEventByKey(ctx, args.eventKey);
+    if (!eventRecord) {
+      throw new Error("Event not found.");
+    }
+    const bookingRecord = await findBookingByEventId(ctx, eventRecord._id);
+    if (!bookingRecord) {
+      throw new Error("Generate a booking link first.");
+    }
+
+    await ctx.scheduler.runAfter(0, internal.bookingEmails.generateBookingSnapshot, {
+      bookingId: bookingRecord._id,
+      baseUrl: normalizeString(args.baseUrl),
+    });
+
+    const now = Date.now();
+    await ctx.db.insert("activityLog", {
+      workspaceYear: eventRecord.workspaceYear,
+      eventId: eventRecord._id,
+      eventName: eventRecord.name || "Untitled event",
+      text: "Generated a fresh booking PDF snapshot.",
+      shortText: `${eventRecord.name || "Untitled event"}: Generated a fresh booking PDF snapshot.`,
+      actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
+      actorUserId: currentUser._id,
+      createdAt: now,
+    });
+
+    return { ok: true };
   },
 });
 

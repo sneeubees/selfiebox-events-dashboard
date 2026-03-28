@@ -150,15 +150,21 @@ export const listWorkspaceActivity = query({
       .order("desc")
       .take(safeLimit);
 
-    return activity
-      .map((entry) => ({
-        id: String(entry._id),
-        text: entry.text,
-        shortText: entry.shortText,
-        user: entry.actorName,
-        date: formatLogDate(entry.createdAt),
-        eventName: entry.eventName || "Untitled event",
-      }));
+    const eventIds = Array.from(new Set(activity.map((entry) => entry.eventId).filter(Boolean)));
+    const eventPairs = await Promise.all(
+      eventIds.map(async (eventId) => [String(eventId), await ctx.db.get(eventId)])
+    );
+    const eventMap = new Map(eventPairs);
+
+    return activity.map((entry) => ({
+      id: String(entry._id),
+      text: entry.text,
+      shortText: entry.shortText,
+      user: entry.actorName,
+      date: formatLogDate(entry.createdAt),
+      eventName: entry.eventName || "Untitled event",
+      eventKey: entry.eventId ? (eventMap.get(String(entry.eventId))?.eventKey || "") : "",
+    }));
   },
 });
 

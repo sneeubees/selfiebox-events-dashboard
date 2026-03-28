@@ -166,6 +166,55 @@ export const listSnapshots = query({
   },
 });
 
+export const saveSummarySnapshot = mutation({
+  args: {
+    month: v.string(),
+    year: v.number(),
+    period: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const currentUser = await requireCommissionUser(ctx);
+    const now = Date.now();
+    const id = await ctx.db.insert("commissionSummarySnapshots", {
+      month: args.month,
+      year: args.year,
+      period: args.period,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      createdAt: now,
+      createdByUserId: currentUser._id,
+    });
+    return { id };
+  },
+});
+
+export const listSummarySnapshots = query({
+  args: {
+    month: v.string(),
+    year: v.number(),
+    period: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommissionUser(ctx);
+    const rows = await ctx.db
+      .query("commissionSummarySnapshots")
+      .withIndex("by_month_period", (q) => q.eq("year", args.year).eq("month", args.month).eq("period", args.period))
+      .collect();
+    const users = await ctx.db.query("users").collect();
+    const userById = new Map(users.map((record) => [String(record._id), record]));
+    const enriched = await Promise.all(rows.map(async (row) => ({
+      id: row._id,
+      fileName: row.fileName,
+      createdAt: row.createdAt,
+      url: (await ctx.storage.getUrl(row.storageId)) || "",
+      createdByLabel: row.createdByUserId ? (userById.get(String(row.createdByUserId))?.fullName || "") : "",
+    })));
+    return enriched.sort((left, right) => right.createdAt - left.createdAt);
+  },
+});
+
 export const listOverrides = query({
   args: {
     month: v.string(),

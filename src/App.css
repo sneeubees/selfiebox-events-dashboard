@@ -165,7 +165,7 @@ button { cursor: pointer; }
 .admin-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 6px 8px; border-radius: 8px; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
-.month-header { width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; background: #fff; text-align: left; transition: background 140ms ease; box-sizing: border-box; }
+.month-header { position: sticky; top: 48px; z-index: 4; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; background: #fff; text-align: left; transition: background 140ms ease; box-sizing: border-box; }
 .month-header:hover { background: #eef6ff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
@@ -251,6 +251,7 @@ button { cursor: pointer; }
 .location-pin-button svg { width: 14px; height: 14px; }
 .pac-container { min-width: 320px !important; max-width: 520px !important; z-index: 9999 !important; }
 .drawer-location-row { margin-top: 6px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.drawer-duplicate-source { margin-top: 6px; padding: 0; border: 0; background: transparent; color: #c93c52; font-size: 0.72rem; text-align: left; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .drawer-location-text, .map-preview-address { font-size: 0.7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer-location-pin { width: 24px; height: 24px; min-width: 24px; }
 .map-preview-panel { width: min(720px, 100%); }
@@ -304,6 +305,8 @@ button { cursor: pointer; }
 .activity-item-meta { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted); }
 .activity-item p, .activity-item time, .activity-item-meta span { font-size: 0.72rem; line-height: 1.2; }
 .activity-item p { margin: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; color: var(--text); }
+.activity-event-link { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.activity-event-link:hover strong { text-decoration: underline; }
 .file-card { display: grid; }
 .file-card-main { display: grid; gap: 6px; min-width: 0; }
 .file-upload-dropzone { border-style: dashed; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
@@ -552,7 +555,9 @@ textarea { resize: vertical; min-height: 110px; }
 .logistics-sheet { display: grid; gap: 10px; min-height: 0; }
 .logistics-toolbar { display: flex; justify-content: flex-start; align-items: center; }
 .logistics-day-nav { display: inline-flex; align-items: center; gap: 8px; }
+.logistics-date-input { width: 160px; }
 .logistics-day-nav strong { min-width: 96px; text-align: center; color: var(--text); }
+.logistics-branch-strip { display: flex; flex-wrap: wrap; gap: 8px 12px; }
 .logistics-scale-wrap { display: grid; grid-template-columns: minmax(290px, 330px) minmax(0, 1fr); gap: 8px; align-items: end; }
 .logistics-scale-spacer { min-height: 1px; }
 .logistics-scale { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 0; font-size: 0.6rem; color: var(--muted); }
@@ -573,6 +578,7 @@ textarea { resize: vertical; min-height: 110px; }
 .logistics-attendant-line { font-weight: 700; color: var(--text); }
 .logistics-timeline { position: relative; min-height: 44px; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(4.166% - 1px), rgba(122, 138, 166, 0.18) calc(4.166% - 1px), rgba(122, 138, 166, 0.18) 4.166%); }
 .logistics-bar { position: absolute; top: 0; bottom: 0; border-radius: 0; display: flex; align-items: center; padding: 0 8px; overflow: hidden; white-space: nowrap; }
+.logistics-setup-bar { opacity: 0.38; }
 .logistics-bar span { font-size: 0.72rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .logistics-bar-empty { left: 0; width: 100%; background: transparent; color: var(--muted); }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
@@ -664,6 +670,17 @@ textarea { resize: vertical; min-height: 110px; }
   gap: 10px;
   align-items: center;
 }
+.attendant-details-card { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.attendant-details-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.attendant-details-grid label { display: grid; gap: 6px; }
+.attendant-files-panel { display: grid; gap: 10px; }
+.attendant-files-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.attendant-file-list { display: grid; gap: 8px; }
+.attendant-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8f9fb; }
+.attendant-file-row div { display: grid; gap: 3px; min-width: 0; }
+.attendant-file-row span, .attendant-file-row small, .attendant-file-row a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.attendant-file-row a { color: var(--accent); text-decoration: none; }
+.attendant-file-row a:hover { text-decoration: underline; }
 .branch-delete-button {
   border: 0;
   border-radius: 8px;

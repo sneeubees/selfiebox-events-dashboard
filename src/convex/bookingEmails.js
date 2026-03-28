@@ -59,6 +59,25 @@ function buildSummaryText(payload) {
     .join("\n");
 }
 
+async function storeBookingSnapshot(ctx, payload) {
+  const pdfBuffer = buildBookingPdfBase64(payload);
+  const fileName = buildBookingPdfFilename(payload);
+  const storageId = await ctx.storage.store(
+    new Blob([Buffer.from(pdfBuffer, "base64")], { type: "application/pdf" })
+  );
+  await ctx.runMutation(internal.bookings.saveBookingSnapshot, {
+    bookingId: payload.bookingId,
+    eventId: payload.eventId,
+    storageId,
+    fileName,
+    sourceIp: payload.sourceIp || undefined,
+    submittedAt: payload.submittedAt || Date.now(),
+    createdByUserId: payload.submittedByUserId || undefined,
+    createdByLabel: payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
+  });
+  return { fileName, pdfBase64: pdfBuffer };
+}
+
 export const sendBookingSubmissionEmail = internalAction({
   args: {
     bookingId: v.id("eventBookings"),
@@ -70,21 +89,7 @@ export const sendBookingSubmissionEmail = internalAction({
       return { sent: false, reason: "missing_payload" };
     }
 
-    const pdfBuffer = buildBookingPdfBase64(payload);
-    const fileName = buildBookingPdfFilename(payload);
-    const storageId = await ctx.storage.store(
-      new Blob([Buffer.from(pdfBuffer, "base64")], { type: "application/pdf" })
-    );
-    await ctx.runMutation(internal.bookings.saveBookingSnapshot, {
-      bookingId: payload.bookingId,
-      eventId: payload.eventId,
-      storageId,
-      fileName,
-      sourceIp: payload.sourceIp || undefined,
-      submittedAt: payload.submittedAt || Date.now(),
-      createdByUserId: payload.submittedByUserId || undefined,
-      createdByLabel: payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
-    });
+    const { fileName, pdfBase64 } = await storeBookingSnapshot(ctx, payload);
 
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -93,7 +98,6 @@ export const sendBookingSubmissionEmail = internalAction({
       return { sent: false, reason: "missing_email_config" };
     }
 
-    const pdfBase64 = pdfBuffer;
     const subject = `SelfieBox booking form Received - ${payload.eventName} | ${payload.formData.eventDate || "-"}`;
     const ccRecipients = Array.isArray(payload.branchEmails)
       ? Array.from(new Set(payload.branchEmails.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)))
@@ -159,5 +163,20 @@ export const sendBookingSubmissionEmail = internalAction({
 
     const json = await response.json();
     return { sent: true, id: json?.id || null };
+  },
+});
+
+export const generateBookingSnapshot = internalAction({
+  args: {
+    bookingId: v.id("eventBookings"),
+    baseUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const payload = await ctx.runQuery(internal.bookings.getSubmissionEmailPayload, args);
+    if (!payload) {
+      return { saved: false, reason: "missing_payload" };
+    }
+    const { fileName } = await storeBookingSnapshot(ctx, payload);
+    return { saved: true, fileName };
   },
 });
