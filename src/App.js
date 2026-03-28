@@ -4013,13 +4013,7 @@ function DashboardApp() {
                 hasActiveFilters ? "is-active" : ""
               ].join(" ").trim()}
               type="button"
-              onClick={() => {
-                if (hasActiveFilters) {
-    clearFilters({ includeSearch: true });
-                  return;
-                }
-                setFiltersOpen(true);
-              }}
+              onClick={() => setFiltersOpen(true)}
             >
               Filter
               {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">Clear</span> : null}
