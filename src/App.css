@@ -140,7 +140,7 @@ button { cursor: pointer; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable both-edges; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
-.board-header { position: sticky; top: 0; z-index: 20; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
+.board-header { position: sticky; top: 0; z-index: 40; background: #f3f5f9; margin: 10px 10px 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 12px 12px 0 0; overflow: hidden; }
 .board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 40px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5c4a25; background: #f3f5f9; }
 .column-header-label { line-height: 1.1; }
 .board-header .cell[draggable="true"] { cursor: grab; }
@@ -166,7 +166,7 @@ button { cursor: pointer; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 0 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
-.month-header { position: sticky; top: 47px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; margin-top: -1px; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
+.month-header { position: sticky; top: 41px; z-index: 26; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; }
 .month-header:hover { background: #e5eeff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
