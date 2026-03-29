@@ -25,6 +25,7 @@ import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as permissions from "../permissions.js";
 import type * as staticColumnLabels from "../staticColumnLabels.js";
+import type * as turnover from "../turnover.js";
 import type * as users from "../users.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   permissions: typeof permissions;
   staticColumnLabels: typeof staticColumnLabels;
+  turnover: typeof turnover;
   users: typeof users;
   workspaces: typeof workspaces;
 }>;

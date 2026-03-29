@@ -65,7 +65,7 @@ async function storeBookingSnapshot(ctx, payload) {
   const storageId = await ctx.storage.store(
     new Blob([Buffer.from(pdfBuffer, "base64")], { type: "application/pdf" })
   );
-  await ctx.runMutation(internal.bookings.saveBookingSnapshot, {
+  const snapshot = await ctx.runMutation(internal.bookings.saveBookingSnapshot, {
     bookingId: payload.bookingId,
     eventId: payload.eventId,
     storageId,
@@ -75,7 +75,14 @@ async function storeBookingSnapshot(ctx, payload) {
     createdByUserId: payload.submittedByUserId || undefined,
     createdByLabel: payload.snapshotLabel || payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
   });
-  return { fileName, pdfBase64: pdfBuffer };
+  return {
+    fileName,
+    pdfBase64: pdfBuffer,
+    snapshot: {
+      ...snapshot,
+      url: (await ctx.storage.getUrl(storageId)) || "",
+    },
+  };
 }
 
 export const sendBookingSubmissionEmail = internalAction({
@@ -177,10 +184,10 @@ export const generateBookingSnapshot = internalAction({
     if (!payload) {
       return { saved: false, reason: "missing_payload" };
     }
-    const { fileName } = await storeBookingSnapshot(ctx, {
+    const { fileName, snapshot } = await storeBookingSnapshot(ctx, {
       ...payload,
       snapshotLabel: args.snapshotLabel,
     });
-    return { saved: true, fileName };
+    return { saved: true, fileName, snapshot };
   },
 });

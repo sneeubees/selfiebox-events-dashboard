@@ -797,9 +797,13 @@ export const regenerateSnapshotForEventNow = action({
       actorUserId: currentUser._id,
     });
 
-    return { ok: true, fileName: snapshotResult.fileName || "" };
-  },
-});
+      return {
+        ok: true,
+        fileName: snapshotResult.fileName || "",
+        snapshot: snapshotResult.snapshot || null,
+      };
+    },
+  });
 
 export const findEventByKeyInternal = internalQuery({
   args: {
@@ -856,22 +860,29 @@ export const saveBookingSnapshot = internalMutation({
     submittedAt: v.number(),
     createdByUserId: v.optional(v.id("users")),
     createdByLabel: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert("bookingSnapshots", {
-      bookingId: args.bookingId,
-      eventId: args.eventId,
-      storageId: args.storageId,
-      fileName: args.fileName,
+    },
+    handler: async (ctx, args) => {
+      const snapshotId = await ctx.db.insert("bookingSnapshots", {
+        bookingId: args.bookingId,
+        eventId: args.eventId,
+        storageId: args.storageId,
+        fileName: args.fileName,
       sourceIp: args.sourceIp,
       submittedAt: args.submittedAt,
-      createdByUserId: args.createdByUserId,
-      createdByLabel: args.createdByLabel,
-      createdAt: Date.now(),
-    });
-    return { ok: true };
-  },
-});
+        createdByUserId: args.createdByUserId,
+        createdByLabel: args.createdByLabel,
+        createdAt: Date.now(),
+      });
+      return {
+        ok: true,
+        id: String(snapshotId),
+        fileName: args.fileName,
+        sourceIp: args.sourceIp || "",
+        submittedAt: args.submittedAt,
+        createdByLabel: args.createdByLabel || "",
+      };
+    },
+  });
 
 export const getSubmissionEmailPayload = internalQuery({
   args: {
