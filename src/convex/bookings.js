@@ -742,17 +742,21 @@ export const regenerateSnapshotForEvent = mutation({
       snapshotLabel: "Final Generated",
     });
 
-    const now = Date.now();
-    await ctx.db.insert("activityLog", {
-      workspaceYear: eventRecord.workspaceYear,
-      eventId: eventRecord._id,
-      eventName: eventRecord.name || "Untitled event",
-      text: "Generated a fresh booking PDF snapshot.",
-      shortText: `${eventRecord.name || "Untitled event"}: Generated a fresh booking PDF snapshot.`,
-      actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
-      actorUserId: currentUser._id,
-      createdAt: now,
-    });
+    try {
+      const now = Date.now();
+      await ctx.db.insert("activityLog", {
+        workspaceYear: eventRecord.workspaceYear,
+        eventId: eventRecord._id,
+        eventName: eventRecord.name || "Untitled event",
+        text: "Generated a fresh booking PDF snapshot.",
+        shortText: `${eventRecord.name || "Untitled event"}: Generated a fresh booking PDF snapshot.`,
+        actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
+        actorUserId: currentUser._id,
+        createdAt: now,
+      });
+    } catch (error) {
+      console.error("Failed to log booking snapshot activity", error);
+    }
 
     return { ok: true };
   },
