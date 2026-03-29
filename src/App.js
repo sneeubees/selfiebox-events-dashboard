@@ -465,7 +465,7 @@ function DashboardApp() {
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
-  const regenerateBookingSnapshotMutation = useMutation(api.bookings.regenerateSnapshotForEvent);
+  const regenerateBookingSnapshotAction = useAction(api.bookings.regenerateSnapshotForEventNow);
   const saveCommissionSummarySnapshotMutation = useMutation(api.commissions.saveSummarySnapshot);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
@@ -1261,11 +1261,11 @@ function DashboardApp() {
       return;
     }
     try {
-      await regenerateBookingSnapshotMutation({
+      await regenerateBookingSnapshotAction({
         eventKey: selectedEvent.id,
         baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
       });
-      openNotice('A fresh booking PDF is being generated for this event.');
+      openNotice('A fresh booking PDF has been generated for this event.');
     } catch (error) {
       console.error('Failed to regenerate booking PDF', error);
       openNotice(error?.message || 'The booking PDF could not be regenerated.');
@@ -5694,7 +5694,7 @@ function BookingDrawerSummary({ booking }) {
           <strong>{value}</strong>
         </div>
       ))}
-      {snapshots.length ? <div className="booking-summary-row booking-summary-submissions"><span>Saved Forms</span><div className="booking-submission-list">{snapshots.map((snapshot) => <a key={snapshot.id} className="booking-submission-link" href={snapshot.url} target="_blank" rel="noreferrer">{`${snapshot.createdByLabel || snapshot.fileName || 'Booking form'}${snapshot.submittedAt ? ` - ${formatSouthAfricaTimestamp(snapshot.submittedAt)}` : ''}${snapshot.sourceIp ? ` - ${snapshot.sourceIp}` : ''}`}</a>)}</div></div> : null}
+      {snapshots.length ? <div className="booking-summary-row booking-summary-submissions"><span>Saved Forms</span><div className="booking-submission-list">{snapshots.map((snapshot) => <a key={snapshot.id} className="booking-submission-link" href={snapshot.url} target="_blank" rel="noreferrer">{snapshot.createdByLabel === 'Final Generated' ? 'Final Generated' : `${snapshot.createdByLabel || snapshot.fileName || 'Booking form'}${snapshot.submittedAt ? ` - ${formatSouthAfricaTimestamp(snapshot.submittedAt)}` : ''}${snapshot.sourceIp ? ` - ${snapshot.sourceIp}` : ''}`}</a>)}</div></div> : null}
     </div>
   );
 }
