@@ -179,7 +179,8 @@ button { cursor: pointer; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 0 10px 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
-.month-header { position: sticky; top: 0; z-index: 19; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; border-radius: 12px 12px 0 0; }
+.month-header { position: sticky; top: 0; z-index: 19; isolation: isolate; overflow: clip; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; border-radius: 12px 12px 0 0; }
+.month-header::before { content: ''; position: absolute; inset: 0; background: inherit; z-index: -1; }
 .month-section.is-collapsed-month .month-header { border-radius: 12px; }
 .month-section.is-expanded-month .month-header { border-radius: 12px 12px 0 0; }
 .month-header:hover { background: #e5eeff; }
