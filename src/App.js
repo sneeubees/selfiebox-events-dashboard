@@ -722,7 +722,6 @@ function DashboardApp() {
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
-  const [generatedBookingSnapshotsByEvent, setGeneratedBookingSnapshotsByEvent] = useState({});
   const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId, refreshKey: bookingRefreshKey } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
@@ -962,21 +961,7 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
-  const selectedEventBooking = useMemo(() => {
-    if (!eventBookingRecord) {
-      return null;
-    }
-    const localSnapshots = selectedId ? (generatedBookingSnapshotsByEvent[selectedId] || []) : [];
-    if (!localSnapshots.length) {
-      return eventBookingRecord;
-    }
-    const mergedSnapshots = [...localSnapshots, ...(Array.isArray(eventBookingRecord.snapshots) ? eventBookingRecord.snapshots : [])]
-      .filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index);
-    return {
-      ...eventBookingRecord,
-      snapshots: mergedSnapshots,
-    };
-  }, [eventBookingRecord, generatedBookingSnapshotsByEvent, selectedId]);
+  const selectedEventBooking = useMemo(() => eventBookingRecord || null, [eventBookingRecord]);
   const attendantManagerFiles = useQuery(
     api.attendants.listFiles,
     canAccessDashboard && attendantManagerOpen && selectedAttendantManagerRecord?.id
