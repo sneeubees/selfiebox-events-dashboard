@@ -6,6 +6,7 @@ import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
+import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
 import {
   BOARD_COLUMNS,
   PAYMENT_OPTIONS,
@@ -486,6 +487,8 @@ function DashboardApp() {
   const [showCommissionRatesModal, setShowCommissionRatesModal] = useState(false);
   const [showCommissionSummaryModal, setShowCommissionSummaryModal] = useState(false);
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
+  const [showTurnoverModal, setShowTurnoverModal] = useState(false);
+  const [turnoverRegion, setTurnoverRegion] = useState('combined');
   const [commissionRatesForm, setCommissionRatesForm] = useState({
     twoHours: '500',
     threeHours: '550',
@@ -499,6 +502,7 @@ function DashboardApp() {
   const [pendingAttendantFileCategory, setPendingAttendantFileCategory] = useState('');
   const [showChangelogModal, setShowChangelogModal] = useState(false);
   const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
+  const liveTurnoverRecords = useQuery(api.turnover.getLiveTurnover, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const commissionOverrideRecords = useQuery(
     api.commissions.listOverrides,
     canAccessDashboard && commissionDialog.isOpen && commissionDialog.month && commissionDialog.attendant
@@ -1057,6 +1061,14 @@ function DashboardApp() {
       };
     }).sort((left, right) => right.total - left.total);
   }, [commissionAttendantNames, commissionDialog.attendant, commissionDialog.overrides, commissionDialog.period, commissionMonthEvents, commissionRates]);
+  const turnoverRegionOptions = useMemo(
+    () => Object.entries(TURNOVER_HISTORY_DATA.sections).map(([value, section]) => ({ value, label: section.label })),
+    []
+  );
+  const turnoverRows = useMemo(
+    () => buildTurnoverRows(turnoverRegion, liveTurnoverRecords || {}),
+    [turnoverRegion, liveTurnoverRecords]
+  );
   useEffect(() => {
     if (!commissionRatesRecord) {
       return;
@@ -2376,6 +2388,51 @@ function DashboardApp() {
       period: 'all',
       overrides: {},
     });
+  };
+
+  const openTurnoverDialog = () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      return;
+    }
+    setShowTurnoverModal(true);
+  };
+
+  const exportTurnoverToExcel = async () => {
+    if (!turnoverRows.length) {
+      openNotice('There is no turnover data to export for this selection yet.');
+      return;
+    }
+
+    const workbookBuffer = await buildWorkbookXlsxBuffer({
+      sheets: [
+        {
+          name: `Turnover ${turnoverRegionOptions.find((option) => option.value === turnoverRegion)?.label || 'History'}`,
+          rows: turnoverRows.map((row) => [
+            { value: row.label },
+            ...TURNOVER_HISTORY_DATA.months.map((month) => ({ value: row.months[month] ?? '' })),
+            { value: row.total ?? '' },
+            { value: row.growthPctDisplay },
+            { value: row.growthRand ?? '' },
+            { value: row.noEvents ?? '' },
+            { value: row.notes || '' },
+          ]),
+        },
+      ],
+      columns: [
+        { key: 'year', label: 'Year', width: 90 },
+        ...TURNOVER_HISTORY_DATA.months.map((month) => ({ key: month, label: month, width: 92 })),
+        { key: 'total', label: 'Total', width: 112 },
+        { key: 'growthPct', label: 'Growth %', width: 104 },
+        { key: 'growthRand', label: 'Growth R', width: 112 },
+        { key: 'noEvents', label: 'No Events', width: 98 },
+        { key: 'notes', label: 'Notes', width: 220 },
+      ],
+    });
+
+    downloadWorkbookFile(
+      `turnover-history-${sanitizeFilenamePart(turnoverRegionOptions.find((option) => option.value === turnoverRegion)?.label || 'history')}.xlsx`,
+      workbookBuffer
+    );
   };
 
   const closeCommissionDialog = () => {
@@ -4080,7 +4137,7 @@ function DashboardApp() {
                       <span><strong>{fullyPaidCount}</strong> Fully Paid</span>
                     </div>
                   </div>
-                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{currentUser.role === 'admin' ? <button className="month-export-button month-turnover-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openTurnoverDialog(); }}>Turnover</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -4542,6 +4599,52 @@ function DashboardApp() {
             <button className="primary-button" type="button" onClick={() => setShowCommissionSummarySnapshotsModal(false)}>
               Close
             </button>
+          </div>
+        </ModalShell>
+      ) : null}
+      {showTurnoverModal ? (
+        <ModalShell title="Turnover history" onClose={() => setShowTurnoverModal(false)} closeOnScrimClick={false} panelClassName="turnover-modal-panel">
+          <div className="turnover-sheet">
+            <div className="turnover-toolbar">
+              <label>
+                <span>Region</span>
+                <select value={turnoverRegion} onChange={(event) => setTurnoverRegion(event.target.value)}>
+                  {turnoverRegionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="modal-actions">
+                <button className="primary-button" type="button" onClick={() => void exportTurnoverToExcel()}>Export to Excel</button>
+              </div>
+            </div>
+            <div className="turnover-table-wrap">
+              <div className="turnover-table turnover-table-header">
+                <span>Year</span>
+                {TURNOVER_HISTORY_DATA.months.map((month) => <span key={month}>{month}</span>)}
+                <span>Total</span>
+                <span>Growth %</span>
+                <span>Growth R</span>
+                <span>No Events</span>
+                <span>Notes</span>
+              </div>
+              {turnoverRows.length ? turnoverRows.map((row) => (
+                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''}`} key={row.key}>
+                  <span className="turnover-year-cell">{row.label}</span>
+                  {TURNOVER_HISTORY_DATA.months.map((month) => <span className="turnover-value-cell" key={`${row.key}-${month}`}>{formatTurnoverCurrency(row.months[month])}</span>)}
+                  <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
+                  <span className="turnover-value-cell">{row.growthPctDisplay}</span>
+                  <span className="turnover-value-cell">{formatTurnoverCurrency(row.growthRand)}</span>
+                  <span className="turnover-value-cell">{row.noEvents ?? ''}</span>
+                  <span className="turnover-notes-cell" title={row.notes || ''}>{row.notes || ''}</span>
+                </div>
+              )) : (
+                <div className="empty-month">No turnover history for this selection yet.</div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="primary-button" type="button" onClick={() => setShowTurnoverModal(false)}>Close</button>
+            </div>
           </div>
         </ModalShell>
       ) : null}
@@ -5968,6 +6071,117 @@ function downloadBlobFile(filename, blob, type = 'application/octet-stream') {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function formatTurnoverCurrency(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return String(value);
+  }
+  return numeric.toLocaleString('en-ZA', {
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatTurnoverGrowthPct(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return String(value);
+  }
+  return `${(numeric * 100).toFixed(1)}%`;
+}
+
+function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
+  const region = TURNOVER_HISTORY_DATA.sections[regionKey] || TURNOVER_HISTORY_DATA.sections.combined;
+  const historicalRows = (region.rows || []).map((row) => ({
+    ...row,
+    key: `historical-${regionKey}-${row.year}`,
+    label: String(row.year),
+    rowType: 'year',
+    months: { ...row.months },
+    notes: row.notes || '',
+  }));
+
+  const liveRegionRows = liveTurnoverRecords?.[regionKey] || {};
+  const liveYears = Object.keys(liveRegionRows)
+    .map((year) => Number(year))
+    .filter((year) => Number.isFinite(year) && year >= 2026)
+    .sort((left, right) => left - right);
+
+  const dynamicRows = liveYears.map((year) => {
+    const yearRecord = liveRegionRows[year] || liveRegionRows[String(year)] || {};
+    const months = Object.fromEntries(
+      TURNOVER_HISTORY_DATA.months.map((month) => [month, Number(yearRecord.months?.[month] || 0)])
+    );
+    return {
+      year,
+      key: `live-${regionKey}-${year}`,
+      label: String(year),
+      rowType: 'year',
+      months,
+      total: Number(yearRecord.total || 0),
+      growthPct: null,
+      growthRand: null,
+      noEvents: yearRecord.noEvents ?? '',
+      notes: '',
+    };
+  });
+
+  const merged = [...historicalRows.filter((row) => row.year < 2026), ...dynamicRows].sort((left, right) => {
+    if (typeof left.year !== 'number') return 1;
+    if (typeof right.year !== 'number') return -1;
+    return left.year - right.year;
+  });
+
+  const decorated = merged.map((row, index) => {
+    const previous = merged[index - 1];
+    const previousTotal = Number(previous?.total);
+    const currentTotal = Number(row.total);
+    const growthRand = Number.isFinite(previousTotal) ? currentTotal - previousTotal : row.growthRand;
+    const growthPct = Number.isFinite(previousTotal) && previousTotal !== 0 ? growthRand / previousTotal : row.growthPct;
+    return {
+      ...row,
+      growthRand: Number.isFinite(growthRand) ? growthRand : row.growthRand,
+      growthPct: Number.isFinite(growthPct) ? growthPct : row.growthPct,
+      growthPctDisplay: formatTurnoverGrowthPct(Number.isFinite(growthPct) ? growthPct : row.growthPct),
+    };
+  });
+
+  const latestYearRow = decorated.filter((row) => row.rowType === 'year').at(-1);
+  const previousYearRow = decorated.filter((row) => row.rowType === 'year').at(-2);
+  if (!latestYearRow || !previousYearRow || typeof latestYearRow.year !== 'number' || latestYearRow.year < 2026) {
+    return decorated;
+  }
+
+  const diffMonths = Object.fromEntries(
+    TURNOVER_HISTORY_DATA.months.map((month) => {
+      const latestValue = Number(latestYearRow.months?.[month] || 0);
+      const previousValue = Number(previousYearRow.months?.[month] || 0);
+      return [month, latestValue - previousValue];
+    })
+  );
+
+  return [
+    ...decorated,
+    {
+      key: `diff-${regionKey}-${latestYearRow.year}`,
+      label: 'Diff prev year',
+      rowType: 'diff',
+      months: diffMonths,
+      total: null,
+      growthPct: null,
+      growthPctDisplay: '',
+      growthRand: null,
+      noEvents: '',
+      notes: '',
+    },
+  ];
 }
 
 function parseCommissionHours(value) {
