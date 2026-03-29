@@ -720,7 +720,7 @@ function DashboardApp() {
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
-  const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
+  const [bookingRefreshKey] = useState(0);
   const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId, refreshKey: bookingRefreshKey } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
