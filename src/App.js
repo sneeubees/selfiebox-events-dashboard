@@ -3975,14 +3975,17 @@ function DashboardApp() {
   return (
       <div className="app-shell">
         <header className="topbar compact">
-          <div>
-            <div className="topbar-kicker-row">
-              <div className="topbar-kicker">Events Dashboard</div>
-              <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
-                V1.2002
-              </button>
+          <div className="topbar-brand">
+            <img className="topbar-logo" src="/SB_Logo_60px.png" alt="SelfieBox" />
+            <div>
+              <div className="topbar-kicker-row">
+                <div className="topbar-kicker">Events Dashboard</div>
+                <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
+                  V1.2002
+                </button>
+              </div>
+              <h1>Events {selectedWorkspaceYear}</h1>
             </div>
-            <h1>SelfieBox Events {selectedWorkspaceYear}</h1>
           </div>
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
