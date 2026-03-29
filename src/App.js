@@ -155,6 +155,35 @@ const monthAccentClass = {
 
 const CHANGELOG_VERSIONS = [
   {
+    version: 'V1.3.001',
+    sections: [
+      {
+        title: 'Board and navigation',
+        items: [
+          'Month sections now dock more cleanly, keep local headers visible, and support improved scrolling with pinned first columns.',
+          'Search, filters, workspace year selection, top-bar layout, and header styling were refined for faster day-to-day use.',
+          'A new admin-only Turnover Figures view was added to compare historical turnover by region and export it to Excel.',
+        ],
+      },
+      {
+        title: 'Booking and drawer workflow',
+        items: [
+          'Booking generation was tightened so past events cannot generate new booking links and booking notices are clearer.',
+          'Drawer updates, files, and booking presentation were refined for readability and better spacing.',
+          'The temporary drawer-side Generate PDF action was removed for now so booking testing can continue on the stable flow.',
+        ],
+      },
+      {
+        title: 'Commission, logistics, and operations',
+        items: [
+          'Commission tools were expanded with summaries, saved summary PDFs, turnover-linked reporting, and cleaner modal layouts.',
+          'Logistics planning was improved with branch-aware timelines, setup visibility, and stronger manager planning tools.',
+          'Event sync behavior was hardened to reduce stale overwrites during live editing, adding, and deleting.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'V1.2002',
     sections: [
       {
@@ -4042,7 +4071,7 @@ function DashboardApp() {
               <div className="topbar-kicker-row">
                 <div className="topbar-kicker">Events Dashboard</div>
                 <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
-                  V1.2002
+                  V1.3.001
                 </button>
               </div>
               <h1>Events Calendar {selectedWorkspaceYear}</h1>
@@ -4207,7 +4236,7 @@ function DashboardApp() {
       {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={branchScopedAttendantOptions.map((option) => ({ value: option.fullName, label: option.displayName || option.fullName }))} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
       {showChangelogModal ? (
-        <ModalShell title="Changelog - V1.2002" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
+        <ModalShell title="Changelog - V1.3.001" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
           <div className="changelog-modal">
             {CHANGELOG_VERSIONS.map((release) => (
               <section className="changelog-version" key={release.version}>
