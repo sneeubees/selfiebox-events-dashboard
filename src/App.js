@@ -4059,10 +4059,19 @@ function DashboardApp() {
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
             <span className="workspace-prefix">Showing events for:</span>
-            <select value={selectedWorkspaceYear} onChange={(event) => setSelectedWorkspaceYear(Number(event.target.value))}>{workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}</select>
-            <div className="workspace-link-stack">
-              {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button> : null}
-            </div>
+            <select
+              value={selectedWorkspaceYear}
+              onChange={(event) => {
+                if (event.target.value === '__add__') {
+                  setShowWorkspaceModal(true);
+                  return;
+                }
+                setSelectedWorkspaceYear(Number(event.target.value));
+              }}
+            >
+              {workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}
+              {['admin', 'manager'].includes(currentUser.role) ? <option value="__add__">Add Year</option> : null}
+            </select>
           </div>
           {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
           {currentUser.role === 'admin' ? <button className="ghost-button turnover-top-button" type="button" onClick={openTurnoverDialog}>Turnover</button> : null}
