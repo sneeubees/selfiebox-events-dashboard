@@ -782,11 +782,14 @@ export const regenerateSnapshotForEventNow = action({
       throw new Error("Generate a booking link first.");
     }
 
-    await ctx.runAction(internal.bookingEmails.generateBookingSnapshot, {
+    const snapshotResult = await ctx.runAction(internal.bookingEmails.generateBookingSnapshot, {
       bookingId: bookingRecord._id,
       baseUrl: normalizeString(args.baseUrl),
       snapshotLabel: "Final Generated",
     });
+    if (!snapshotResult?.saved) {
+      throw new Error("The booking PDF could not be regenerated right now.");
+    }
 
     await ctx.runMutation(internal.bookings.logBookingSnapshotActivity, {
       eventId: eventRecord._id,
@@ -794,7 +797,7 @@ export const regenerateSnapshotForEventNow = action({
       actorUserId: currentUser._id,
     });
 
-    return { ok: true };
+    return { ok: true, fileName: snapshotResult.fileName || "" };
   },
 });
 
