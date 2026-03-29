@@ -259,6 +259,14 @@ export default defineSchema({
       updatedByUserId: v.optional(v.id("users")),
     })
       .index("by_singleton_key", ["singletonKey"]),
+  turnoverNoEventsOverrides: defineTable({
+      regionKey: v.string(),
+      year: v.number(),
+      noEvents: v.number(),
+      updatedAt: v.number(),
+      updatedByUserId: v.optional(v.id("users")),
+    })
+      .index("by_region_year", ["regionKey", "year"]),
   columnPermissions: defineTable({
     columnKey: v.string(),
     subjectType: v.union(v.literal("role"), v.literal("user")),

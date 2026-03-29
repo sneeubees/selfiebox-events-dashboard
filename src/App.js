@@ -21,6 +21,20 @@ import {
 const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const TURNOVER_MONTH_LABELS = {
+  Jan: 'January',
+  Feb: 'February',
+  Mar: 'March',
+  Apr: 'April',
+  May: 'May',
+  Jun: 'June',
+  Jul: 'July',
+  Aug: 'August',
+  Sep: 'September',
+  Oct: 'October',
+  Nov: 'November',
+  Dec: 'December',
+};
 const ROLE_OPTIONS = ['admin', 'manager', 'user'];
 const STATIC_COLUMN_TYPES = {
   name: 'text',
@@ -471,6 +485,7 @@ function DashboardApp() {
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
   const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
+  const saveTurnoverNoEventsOverrideMutation = useMutation(api.turnover.saveNoEventsOverride);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -489,6 +504,7 @@ function DashboardApp() {
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
   const [showTurnoverModal, setShowTurnoverModal] = useState(false);
   const [turnoverRegion, setTurnoverRegion] = useState('combined');
+  const [turnoverNoEventsDrafts, setTurnoverNoEventsDrafts] = useState({});
   const [commissionRatesForm, setCommissionRatesForm] = useState({
     twoHours: '500',
     threeHours: '550',
@@ -1069,6 +1085,18 @@ function DashboardApp() {
     () => buildTurnoverRows(turnoverRegion, liveTurnoverRecords || {}),
     [turnoverRegion, liveTurnoverRecords]
   );
+  useEffect(() => {
+    if (!showTurnoverModal) {
+      return;
+    }
+    setTurnoverNoEventsDrafts(
+      Object.fromEntries(
+        turnoverRows
+          .filter((row) => row.isEditableNoEvents)
+          .map((row) => [row.key, String(row.noEvents ?? '')])
+      )
+    );
+  }, [showTurnoverModal, turnoverRows]);
   useEffect(() => {
     if (!commissionRatesRecord) {
       return;
@@ -2414,18 +2442,16 @@ function DashboardApp() {
             { value: row.growthPctDisplay },
             { value: row.growthRand ?? '' },
             { value: row.noEvents ?? '' },
-            { value: row.notes || '' },
           ]),
         },
       ],
       columns: [
         { key: 'year', label: 'Year', width: 90 },
-        ...TURNOVER_HISTORY_DATA.months.map((month) => ({ key: month, label: month, width: 92 })),
+        ...TURNOVER_HISTORY_DATA.months.map((month) => ({ key: month, label: TURNOVER_MONTH_LABELS[month] || month, width: 112 })),
         { key: 'total', label: 'Total', width: 112 },
         { key: 'growthPct', label: 'Growth %', width: 104 },
         { key: 'growthRand', label: 'Growth R', width: 112 },
         { key: 'noEvents', label: 'No Events', width: 98 },
-        { key: 'notes', label: 'Notes', width: 220 },
       ],
     });
 
@@ -2433,6 +2459,30 @@ function DashboardApp() {
       `turnover-history-${sanitizeFilenamePart(turnoverRegionOptions.find((option) => option.value === turnoverRegion)?.label || 'history')}.xlsx`,
       workbookBuffer
     );
+  };
+
+  const saveTurnoverNoEvents = async (row) => {
+    if (!row?.isEditableNoEvents) {
+      return;
+    }
+    const rawValue = turnoverNoEventsDrafts[row.key] ?? String(row.noEvents ?? '');
+    const normalized = Math.max(0, parseInt(String(rawValue || '0').replace(/[^\d]/g, ''), 10) || 0);
+    if (normalized === Number(row.noEvents || 0)) {
+      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(normalized) }));
+      return;
+    }
+    try {
+      await saveTurnoverNoEventsOverrideMutation({
+        regionKey: turnoverRegion,
+        year: row.year,
+        noEvents: normalized,
+      });
+      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(normalized) }));
+    } catch (error) {
+      console.error('Failed to save turnover no-events override', error);
+      openNotice('The No Events value could not be saved right now.');
+      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(row.noEvents ?? '') }));
+    }
   };
 
   const closeCommissionDialog = () => {
@@ -4041,18 +4091,19 @@ function DashboardApp() {
                   V1.2002
                 </button>
               </div>
-              <h1>Events {selectedWorkspaceYear}</h1>
+              <h1>Events Calendar {selectedWorkspaceYear}</h1>
             </div>
           </div>
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
-            <span className="workspace-prefix">Workspace for</span>
+            <span className="workspace-prefix">Showing events for:</span>
             <select value={selectedWorkspaceYear} onChange={(event) => setSelectedWorkspaceYear(Number(event.target.value))}>{workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}</select>
             <div className="workspace-link-stack">
               {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button> : null}
             </div>
           </div>
           {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
+          {currentUser.role === 'admin' ? <button className="ghost-button turnover-top-button" type="button" onClick={openTurnoverDialog}>Turnover</button> : null}
           <button className="profile-pill" type="button" onClick={() => setShowProfileModal(true)}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span><strong>{currentUser.firstName} {currentUser.surname}</strong></button>
         </div>
       </header>
@@ -4137,7 +4188,7 @@ function DashboardApp() {
                       <span><strong>{fullyPaidCount}</strong> Fully Paid</span>
                     </div>
                   </div>
-                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{currentUser.role === 'admin' ? <button className="month-export-button month-turnover-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openTurnoverDialog(); }}>Turnover</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+              <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -4621,12 +4672,11 @@ function DashboardApp() {
             <div className="turnover-table-wrap">
               <div className="turnover-table turnover-table-header">
                 <span>Year</span>
-                {TURNOVER_HISTORY_DATA.months.map((month) => <span key={month}>{month}</span>)}
+                {TURNOVER_HISTORY_DATA.months.map((month) => <span key={month}>{TURNOVER_MONTH_LABELS[month] || month}</span>)}
                 <span>Total</span>
                 <span>Growth %</span>
                 <span>Growth R</span>
                 <span>No Events</span>
-                <span>Notes</span>
               </div>
               {turnoverRows.length ? turnoverRows.map((row) => (
                 <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''}`} key={row.key}>
@@ -4635,8 +4685,19 @@ function DashboardApp() {
                   <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
                   <span className="turnover-value-cell">{row.growthPctDisplay}</span>
                   <span className="turnover-value-cell">{formatTurnoverCurrency(row.growthRand)}</span>
-                  <span className="turnover-value-cell">{row.noEvents ?? ''}</span>
-                  <span className="turnover-notes-cell" title={row.notes || ''}>{row.notes || ''}</span>
+                  <span className="turnover-value-cell turnover-no-events-cell">
+                    {row.isEditableNoEvents ? (
+                      <input
+                        className="text-input turnover-no-events-input"
+                        inputMode="numeric"
+                        value={turnoverNoEventsDrafts[row.key] ?? String(row.noEvents ?? '')}
+                        onChange={(event) => setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: event.target.value.replace(/[^\d]/g, '') }))}
+                        onBlur={() => void saveTurnoverNoEvents(row)}
+                      />
+                    ) : (
+                      row.noEvents ?? ''
+                    )}
+                  </span>
                 </div>
               )) : (
                 <div className="empty-month">No turnover history for this selection yet.</div>
@@ -6099,16 +6160,17 @@ function formatTurnoverGrowthPct(value) {
 
 function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
   const region = TURNOVER_HISTORY_DATA.sections[regionKey] || TURNOVER_HISTORY_DATA.sections.combined;
+  const noEventsOverrides = liveTurnoverRecords?.overrides || {};
+  const liveRegionRows = liveTurnoverRecords?.regions?.[regionKey] || {};
   const historicalRows = (region.rows || []).map((row) => ({
     ...row,
     key: `historical-${regionKey}-${row.year}`,
     label: String(row.year),
     rowType: 'year',
     months: { ...row.months },
-    notes: row.notes || '',
+    noEvents: noEventsOverrides[`${regionKey}:${row.year}`] ?? row.noEvents ?? '',
+    isEditableNoEvents: typeof row.year === 'number' && row.year < 2026,
   }));
-
-  const liveRegionRows = liveTurnoverRecords?.[regionKey] || {};
   const liveYears = Object.keys(liveRegionRows)
     .map((year) => Number(year))
     .filter((year) => Number.isFinite(year) && year >= 2026)
@@ -6129,7 +6191,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       growthPct: null,
       growthRand: null,
       noEvents: yearRecord.noEvents ?? '',
-      notes: '',
+      isEditableNoEvents: false,
     };
   });
 
@@ -6169,18 +6231,18 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
 
   return [
     ...decorated,
-    {
-      key: `diff-${regionKey}-${latestYearRow.year}`,
-      label: 'Diff prev year',
-      rowType: 'diff',
-      months: diffMonths,
-      total: null,
-      growthPct: null,
-      growthPctDisplay: '',
-      growthRand: null,
-      noEvents: '',
-      notes: '',
-    },
+      {
+        key: `diff-${regionKey}-${latestYearRow.year}`,
+        label: 'Difference',
+        rowType: 'diff',
+        months: diffMonths,
+        total: null,
+        growthPct: null,
+        growthPctDisplay: '',
+        growthRand: null,
+        noEvents: '',
+        isEditableNoEvents: false,
+      },
   ];
 }
 

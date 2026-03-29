@@ -1,4 +1,5 @@
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
 
 async function requireAdminUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -86,7 +87,11 @@ function createYearBucket() {
   };
 }
 
-function addToRegionYear(target, year, month, amount) {
+function isCompletedStatus(status) {
+  return String(status || "").trim().toLowerCase() === "event completed";
+}
+
+function addToRegionYear(target, year, month, amount, completed) {
   if (!target[year]) {
     target[year] = createYearBucket();
   }
@@ -94,7 +99,9 @@ function addToRegionYear(target, year, month, amount) {
     target[year].months[month] = (target[year].months[month] || 0) + amount;
   }
   target[year].total += amount;
-  target[year].noEvents += 1;
+  if (completed) {
+    target[year].noEvents += 1;
+  }
 }
 
 export const getLiveTurnover = query({
@@ -108,6 +115,10 @@ export const getLiveTurnover = query({
       ct: {},
       combined: {},
     };
+    const noEventsOverrides = await ctx.db.query("turnoverNoEventsOverrides").collect();
+    const overrides = Object.fromEntries(
+      noEventsOverrides.map((entry) => [`${entry.regionKey}:${entry.year}`, entry.noEvents])
+    );
 
     events.forEach((event) => {
       const year = Number(event.workspaceYear || 0);
@@ -120,18 +131,56 @@ export const getLiveTurnover = query({
       const branchValues = Array.isArray(event.branch) ? event.branch.map(normalizeBranchValue) : [];
       const isGp = branchValues.some((value) => GP_BRANCHES.has(value));
       const isCt = branchValues.some((value) => CT_BRANCHES.has(value));
+      const completed = isCompletedStatus(event.status);
 
       if (isGp) {
-        addToRegionYear(grouped.gp, year, month, amount);
+        addToRegionYear(grouped.gp, year, month, amount, completed);
       }
       if (isCt) {
-        addToRegionYear(grouped.ct, year, month, amount);
+        addToRegionYear(grouped.ct, year, month, amount, completed);
       }
       if (isGp || isCt) {
-        addToRegionYear(grouped.combined, year, month, amount);
+        addToRegionYear(grouped.combined, year, month, amount, completed);
       }
     });
 
-    return grouped;
+    return {
+      regions: grouped,
+      overrides,
+    };
+  },
+});
+
+export const saveNoEventsOverride = mutation({
+  args: {
+    regionKey: v.string(),
+    year: v.number(),
+    noEvents: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAdminUser(ctx);
+    const regionKey = String(args.regionKey || "").trim().toLowerCase();
+    if (!["gp", "ct", "combined"].includes(regionKey)) {
+      throw new Error("Invalid turnover region.");
+    }
+    if (!Number.isFinite(args.year) || args.year >= 2026) {
+      throw new Error("Only previous years can be edited.");
+    }
+    const existing = await ctx.db
+      .query("turnoverNoEventsOverrides")
+      .withIndex("by_region_year", (q) => q.eq("regionKey", regionKey).eq("year", args.year))
+      .unique();
+    const payload = {
+      regionKey,
+      year: args.year,
+      noEvents: Math.max(0, Math.trunc(args.noEvents || 0)),
+      updatedAt: Date.now(),
+      updatedByUserId: user._id,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+      return existing._id;
+    }
+    return await ctx.db.insert("turnoverNoEventsOverrides", payload);
   },
 });
