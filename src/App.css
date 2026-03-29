@@ -88,10 +88,10 @@ button { cursor: pointer; }
 .profile-edit-grid span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #61708b; }
 .locked-input { background: #f5f7fb !important; color: #66758f !important; }
 .topbar-admin-actions { display: grid; gap: 6px; }
-.month-export-button.manage-users-button { white-space: nowrap; background: #e2ebff; border-color: #bed0f8; color: #244d9b; }
-.month-export-button.manage-users-button:hover { background: #d5e1fb; }
-.month-export-button.turnover-top-button { white-space: nowrap; background: #fff0d8; border-color: #f0d09b; color: #9a5c11; }
-.month-export-button.turnover-top-button:hover { background: #ffe7c3; }
+.month-export-button.manage-users-button { white-space: nowrap; background: #1f4d8a; border-color: #1f4d8a; color: #ffffff; }
+.month-export-button.manage-users-button:hover { background: #183e70; border-color: #183e70; }
+.month-export-button.turnover-top-button { white-space: nowrap; background: #c86a12; border-color: #c86a12; color: #ffffff; }
+.month-export-button.turnover-top-button:hover { background: #a8570f; border-color: #a8570f; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
 .rights-section { display: grid; gap: 10px; }

@@ -721,7 +721,8 @@ function DashboardApp() {
   const eventUpdateEntries = useQuery(api.collaboration.listEventUpdates, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
-  const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
+  const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId, refreshKey: bookingRefreshKey } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
   const [draftUpdate, setDraftUpdate] = useState('');
@@ -1299,6 +1300,7 @@ function DashboardApp() {
         eventKey: selectedEvent.id,
         baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
       });
+      setBookingRefreshKey((current) => current + 1);
       openNotice('A fresh booking PDF has been generated for this event.');
     } catch (error) {
       console.error('Failed to regenerate booking PDF', error);

@@ -533,7 +533,7 @@ async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) 
 }
 
 export const getForEvent = query({
-  args: { eventKey: v.string() },
+  args: { eventKey: v.string(), refreshKey: v.optional(v.number()) },
   handler: async (ctx, args) => {
     await requireCurrentUser(ctx);
     const eventRecord = await findEventByKey(ctx, args.eventKey);
