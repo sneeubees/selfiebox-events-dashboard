@@ -43,7 +43,7 @@ button { cursor: pointer; }
 }
 .topbar-version-button:hover { color: #274582; }
 .topbar.compact h1, .auth-card h1, .drawer-header h3 { margin: 0; font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
-.topbar.compact h1 { font-size: 1.45rem; color: #2f3440; }
+.topbar.compact h1 { font-size: 1.34rem; color: #2f3440; }
 .topbar-actions, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
 .workspace-prefix { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 .workspace-select-inline { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
