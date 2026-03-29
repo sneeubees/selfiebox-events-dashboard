@@ -584,12 +584,21 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-table-header span:last-child,
 .turnover-table-row span:last-child { border-right: 0; }
 .turnover-table-row { border-top: 1px solid var(--line); background: #fff; }
+.turnover-table-row.is-alt-row { background: #f7f9fd; }
 .turnover-table-row.is-diff-row { background: #f8fbff; font-weight: 700; }
+.turnover-table-row.is-diff-pct-row { background: #f3f7ff; font-weight: 700; }
 .turnover-year-cell { font-weight: 700; color: var(--text); }
 .turnover-value-cell { text-align: right; font-variant-numeric: tabular-nums; }
-.turnover-total-cell { font-weight: 700; }
+.turnover-total-cell { font-weight: 700; color: #c23f3f; }
 .turnover-no-events-cell { display: flex; align-items: center; justify-content: flex-end; }
 .turnover-no-events-input { width: 72px; min-width: 72px; text-align: right; padding: 6px 8px; font-size: 0.72rem; }
+.turnover-growth-cell.is-positive,
+.turnover-percent-cell.is-positive { color: #2e8b57; font-weight: 700; }
+.turnover-growth-cell.is-negative,
+.turnover-percent-cell.is-negative,
+.turnover-difference-cell.is-negative { color: #c23f3f; font-weight: 700; }
+.turnover-value-cell.is-row-best-month { color: #2e8b57; font-weight: 700; }
+.turnover-value-cell.is-best-ever-month { background: #efe5ff; color: #6a3db8; font-weight: 700; }
 .commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {
   display: grid;

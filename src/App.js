@@ -485,7 +485,6 @@ function DashboardApp() {
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
   const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
-  const saveTurnoverNoEventsOverrideMutation = useMutation(api.turnover.saveNoEventsOverride);
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
@@ -504,7 +503,6 @@ function DashboardApp() {
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
   const [showTurnoverModal, setShowTurnoverModal] = useState(false);
   const [turnoverRegion, setTurnoverRegion] = useState('combined');
-  const [turnoverNoEventsDrafts, setTurnoverNoEventsDrafts] = useState({});
   const [commissionRatesForm, setCommissionRatesForm] = useState({
     twoHours: '500',
     threeHours: '550',
@@ -1085,18 +1083,6 @@ function DashboardApp() {
     () => buildTurnoverRows(turnoverRegion, liveTurnoverRecords || {}),
     [turnoverRegion, liveTurnoverRecords]
   );
-  useEffect(() => {
-    if (!showTurnoverModal) {
-      return;
-    }
-    setTurnoverNoEventsDrafts(
-      Object.fromEntries(
-        turnoverRows
-          .filter((row) => row.isEditableNoEvents)
-          .map((row) => [row.key, String(row.noEvents ?? '')])
-      )
-    );
-  }, [showTurnoverModal, turnoverRows]);
   useEffect(() => {
     if (!commissionRatesRecord) {
       return;
@@ -2437,7 +2423,7 @@ function DashboardApp() {
           name: `Turnover ${turnoverRegionOptions.find((option) => option.value === turnoverRegion)?.label || 'History'}`,
           rows: turnoverRows.map((row) => [
             { value: row.label },
-            ...TURNOVER_HISTORY_DATA.months.map((month) => ({ value: row.months[month] ?? '' })),
+            ...TURNOVER_HISTORY_DATA.months.map((month) => ({ value: row.rowType === 'diffPct' ? formatTurnoverGrowthPct(row.months[month]) : row.months[month] ?? '' })),
             { value: row.total ?? '' },
             { value: row.growthPctDisplay },
             { value: row.growthRand ?? '' },
@@ -2459,30 +2445,6 @@ function DashboardApp() {
       `turnover-history-${sanitizeFilenamePart(turnoverRegionOptions.find((option) => option.value === turnoverRegion)?.label || 'history')}.xlsx`,
       workbookBuffer
     );
-  };
-
-  const saveTurnoverNoEvents = async (row) => {
-    if (!row?.isEditableNoEvents) {
-      return;
-    }
-    const rawValue = turnoverNoEventsDrafts[row.key] ?? String(row.noEvents ?? '');
-    const normalized = Math.max(0, parseInt(String(rawValue || '0').replace(/[^\d]/g, ''), 10) || 0);
-    if (normalized === Number(row.noEvents || 0)) {
-      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(normalized) }));
-      return;
-    }
-    try {
-      await saveTurnoverNoEventsOverrideMutation({
-        regionKey: turnoverRegion,
-        year: row.year,
-        noEvents: normalized,
-      });
-      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(normalized) }));
-    } catch (error) {
-      console.error('Failed to save turnover no-events override', error);
-      openNotice('The No Events value could not be saved right now.');
-      setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: String(row.noEvents ?? '') }));
-    }
   };
 
   const closeCommissionDialog = () => {
@@ -4678,26 +4640,28 @@ function DashboardApp() {
                 <span>Growth R</span>
                 <span>No Events</span>
               </div>
-              {turnoverRows.length ? turnoverRows.map((row) => (
-                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''}`} key={row.key}>
+              {turnoverRows.length ? turnoverRows.map((row, rowIndex) => (
+                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''} ${row.rowType === 'diffPct' ? 'is-diff-pct-row' : ''} ${rowIndex % 2 === 1 ? 'is-alt-row' : ''}`} key={row.key}>
                   <span className="turnover-year-cell">{row.label}</span>
-                  {TURNOVER_HISTORY_DATA.months.map((month) => <span className="turnover-value-cell" key={`${row.key}-${month}`}>{formatTurnoverCurrency(row.months[month])}</span>)}
+                  {TURNOVER_HISTORY_DATA.months.map((month) => {
+                    const value = row.months[month];
+                    const monthClassNames = [
+                      'turnover-value-cell',
+                      row.rowType === 'diffPct' ? 'turnover-percent-cell' : '',
+                      row.rowType === 'diffPct' && Number(value) > 0 ? 'is-positive' : '',
+                      row.rowType === 'diffPct' && Number(value) < 0 ? 'is-negative' : '',
+                      row.bestMonth === month ? 'is-row-best-month' : '',
+                      row.bestEverMonth === month ? 'is-best-ever-month' : '',
+                    ].filter(Boolean).join(' ');
+                    const content = row.rowType === 'diffPct'
+                      ? formatTurnoverGrowthPct(value)
+                      : formatTurnoverCurrency(value);
+                    return <span className={monthClassNames} key={`${row.key}-${month}`}>{content}</span>;
+                  })}
                   <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
-                  <span className="turnover-value-cell">{row.growthPctDisplay}</span>
-                  <span className="turnover-value-cell">{formatTurnoverCurrency(row.growthRand)}</span>
-                  <span className="turnover-value-cell turnover-no-events-cell">
-                    {row.isEditableNoEvents ? (
-                      <input
-                        className="text-input turnover-no-events-input"
-                        inputMode="numeric"
-                        value={turnoverNoEventsDrafts[row.key] ?? String(row.noEvents ?? '')}
-                        onChange={(event) => setTurnoverNoEventsDrafts((current) => ({ ...current, [row.key]: event.target.value.replace(/[^\d]/g, '') }))}
-                        onBlur={() => void saveTurnoverNoEvents(row)}
-                      />
-                    ) : (
-                      row.noEvents ?? ''
-                    )}
-                  </span>
+                  <span className={`turnover-value-cell turnover-growth-cell ${Number(row.growthPct) > 0 ? 'is-positive' : Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.growthPctDisplay}</span>
+                  <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
+                  <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
                 </div>
               )) : (
                 <div className="empty-month">No turnover history for this selection yet.</div>
@@ -6160,16 +6124,18 @@ function formatTurnoverGrowthPct(value) {
 
 function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
   const region = TURNOVER_HISTORY_DATA.sections[regionKey] || TURNOVER_HISTORY_DATA.sections.combined;
-  const noEventsOverrides = liveTurnoverRecords?.overrides || {};
   const liveRegionRows = liveTurnoverRecords?.regions?.[regionKey] || {};
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonthIndex = currentDate.getMonth();
+  const monthKeys = TURNOVER_HISTORY_DATA.months;
   const historicalRows = (region.rows || []).map((row) => ({
     ...row,
     key: `historical-${regionKey}-${row.year}`,
     label: String(row.year),
     rowType: 'year',
     months: { ...row.months },
-    noEvents: noEventsOverrides[`${regionKey}:${row.year}`] ?? row.noEvents ?? '',
-    isEditableNoEvents: typeof row.year === 'number' && row.year < 2026,
+    noEvents: '-',
   }));
   const liveYears = Object.keys(liveRegionRows)
     .map((year) => Number(year))
@@ -6191,7 +6157,6 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       growthPct: null,
       growthRand: null,
       noEvents: yearRecord.noEvents ?? '',
-      isEditableNoEvents: false,
     };
   });
 
@@ -6203,34 +6168,86 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
 
   const decorated = merged.map((row, index) => {
     const previous = merged[index - 1];
-    const previousTotal = Number(previous?.total);
-    const currentTotal = Number(row.total);
+    const isCurrentYear = typeof row.year === 'number' && row.year === currentYear;
+    const currentTotal = isCurrentYear
+      ? monthKeys.slice(0, currentMonthIndex + 1).reduce((sum, month) => sum + Number(row.months?.[month] || 0), 0)
+      : Number(row.total);
+    const previousTotal = Number.isFinite(Number(previous?.year)) && isCurrentYear
+      ? monthKeys.slice(0, currentMonthIndex + 1).reduce((sum, month) => sum + Number(previous?.months?.[month] || 0), 0)
+      : Number(previous?.total);
     const growthRand = Number.isFinite(previousTotal) ? currentTotal - previousTotal : row.growthRand;
     const growthPct = Number.isFinite(previousTotal) && previousTotal !== 0 ? growthRand / previousTotal : row.growthPct;
     return {
       ...row,
+      comparisonTotal: currentTotal,
       growthRand: Number.isFinite(growthRand) ? growthRand : row.growthRand,
       growthPct: Number.isFinite(growthPct) ? growthPct : row.growthPct,
       growthPctDisplay: formatTurnoverGrowthPct(Number.isFinite(growthPct) ? growthPct : row.growthPct),
     };
   });
 
-  const latestYearRow = decorated.filter((row) => row.rowType === 'year').at(-1);
-  const previousYearRow = decorated.filter((row) => row.rowType === 'year').at(-2);
+  let bestEver = { month: '', value: -Infinity, key: '' };
+  const decoratedWithHighlights = decorated.map((row) => {
+    if (row.rowType !== 'year') {
+      return row;
+    }
+    let bestMonth = '';
+    let bestValue = -Infinity;
+    monthKeys.forEach((month) => {
+      const numeric = Number(row.months?.[month] || 0);
+      if (numeric > bestValue) {
+        bestValue = numeric;
+        bestMonth = month;
+      }
+      if (numeric > bestEver.value) {
+        bestEver = { month, value: numeric, key: row.key };
+      }
+    });
+    return {
+      ...row,
+      bestMonth,
+    };
+  }).map((row) => ({
+    ...row,
+    bestEverMonth: row.key === bestEver.key ? bestEver.month : '',
+  }));
+
+  const latestYearRow = decoratedWithHighlights.filter((row) => row.rowType === 'year').at(-1);
+  const previousYearRow = decoratedWithHighlights.filter((row) => row.rowType === 'year').at(-2);
   if (!latestYearRow || !previousYearRow || typeof latestYearRow.year !== 'number' || latestYearRow.year < 2026) {
-    return decorated;
+    return decoratedWithHighlights;
   }
 
   const diffMonths = Object.fromEntries(
-    TURNOVER_HISTORY_DATA.months.map((month) => {
+    monthKeys.map((month) => {
       const latestValue = Number(latestYearRow.months?.[month] || 0);
       const previousValue = Number(previousYearRow.months?.[month] || 0);
       return [month, latestValue - previousValue];
     })
   );
 
+  const diffPctMonths = Object.fromEntries(
+    monthKeys.map((month, index) => {
+      if (latestYearRow.year === currentYear && index > currentMonthIndex) {
+        return [month, ''];
+      }
+      const latestValue = Number(latestYearRow.months?.[month] || 0);
+      const previousValue = Number(previousYearRow.months?.[month] || 0);
+      if (!previousValue) {
+        return [month, ''];
+      }
+      return [month, (latestValue - previousValue) / previousValue];
+    })
+  );
+
+  const latestComparisonTotal = Number(latestYearRow.comparisonTotal ?? latestYearRow.total ?? 0);
+  const previousComparisonTotal = latestYearRow.year === currentYear
+    ? monthKeys.slice(0, currentMonthIndex + 1).reduce((sum, month) => sum + Number(previousYearRow.months?.[month] || 0), 0)
+    : Number(previousYearRow.total || 0);
+  const totalDiffPct = previousComparisonTotal ? (latestComparisonTotal - previousComparisonTotal) / previousComparisonTotal : null;
+
   return [
-    ...decorated,
+    ...decoratedWithHighlights,
       {
         key: `diff-${regionKey}-${latestYearRow.year}`,
         label: 'Difference',
@@ -6241,7 +6258,17 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
         growthPctDisplay: '',
         growthRand: null,
         noEvents: '',
-        isEditableNoEvents: false,
+      },
+      {
+        key: `diff-pct-${regionKey}-${latestYearRow.year}`,
+        label: 'Difference %',
+        rowType: 'diffPct',
+        months: diffPctMonths,
+        total: null,
+        growthPct: totalDiffPct,
+        growthPctDisplay: totalDiffPct === null ? '' : formatTurnoverGrowthPct(totalDiffPct),
+        growthRand: null,
+        noEvents: '',
       },
   ];
 }
