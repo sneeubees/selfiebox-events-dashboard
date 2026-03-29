@@ -1267,6 +1267,10 @@ function DashboardApp() {
     if (!selectedEvent) {
       return;
     }
+    if (isPastEvent(selectedEvent)) {
+      openNotice('Booking links are disabled for past events.');
+      return;
+    }
 
     try {
       const result = await generateBookingLinkMutation({ eventKey: selectedEvent.id });
@@ -1278,7 +1282,11 @@ function DashboardApp() {
       }
     } catch (error) {
       console.error('Failed to generate booking link', error);
-      openNotice(error?.message || 'The booking link could not be generated.');
+      if (String(error?.message || '').toLowerCase().includes('past events')) {
+        openNotice('Booking links are disabled for past events.');
+      } else {
+        openNotice('The booking link could not be generated.');
+      }
     }
   };
 
@@ -1294,7 +1302,7 @@ function DashboardApp() {
       openNotice('A fresh booking PDF has been generated for this event.');
     } catch (error) {
       console.error('Failed to regenerate booking PDF', error);
-      openNotice(error?.message || 'The booking PDF could not be regenerated.');
+      openNotice('The booking PDF could not be regenerated right now.');
     }
   };
 
