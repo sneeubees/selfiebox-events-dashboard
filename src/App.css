@@ -46,6 +46,7 @@ button { cursor: pointer; }
 .topbar.compact h1 { font-size: 1.45rem; color: #2f3440; }
 .topbar-actions, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
 .workspace-prefix { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.workspace-select-inline { display: flex; align-items: center; gap: 6px; }
 .workspace-select-wrap { display: grid; gap: 4px; margin-right: 18px; }
 .workspace-select-wrap select { width: auto; min-width: 74px; padding-right: 28px; font-size: 0.84rem; }
 .workspace-link-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 92px; }
@@ -87,10 +88,10 @@ button { cursor: pointer; }
 .profile-edit-grid span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #61708b; }
 .locked-input { background: #f5f7fb !important; color: #66758f !important; }
 .topbar-admin-actions { display: grid; gap: 6px; }
-.manage-users-button { white-space: nowrap; background: #d9e1f2; border-color: #bccbe7; color: #21385f; }
-.manage-users-button:hover { background: #ccd7ed; }
-.turnover-top-button { white-space: nowrap; background: #ede6ff; border-color: #d7c7f8; color: #5c3ea8; }
-.turnover-top-button:hover { background: #e1d7ff; }
+.manage-users-button { white-space: nowrap; background: #e6eefb; border-color: #c9d7ef; color: #1f4d8a; }
+.manage-users-button:hover { background: #d9e6f8; }
+.turnover-top-button { white-space: nowrap; background: #eef8ef; border-color: #cfe7d1; color: #2f7a44; }
+.turnover-top-button:hover { background: #e2f1e4; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
 .rights-section { display: grid; gap: 10px; }
@@ -186,7 +187,7 @@ button { cursor: pointer; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
 .month-header-main { position: sticky; left: 5px; z-index: 20; display: grid; gap: 6px; align-items: start; flex: 0 0 auto; min-width: max-content; padding: 0 18px 0 5px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
 .month-header-stats { display: flex; flex-wrap: wrap; gap: 6px 10px; }
-.month-header .month-header-stats strong { color: inherit; font-weight: 700; font-size: calc(0.68rem + 1px); }
+.month-header .month-header-stats strong { color: inherit; font-weight: 700; font-size: 0.68rem; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { position: sticky; right: 5px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding: 2px 5px 2px 18px; background: inherit; box-shadow: -16px 0 14px -14px rgba(237, 243, 255, 0.98); }

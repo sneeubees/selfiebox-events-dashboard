@@ -4058,7 +4058,9 @@ function DashboardApp() {
           </div>
         <div className="topbar-actions compact-actions">
           <div className="workspace-select-wrap">
-            <span className="workspace-prefix">Showing events for:</span>
+            <div className="workspace-select-inline">
+              <span className="workspace-prefix">Showing events for:</span>
+            </div>
             <select
               value={selectedWorkspaceYear}
               onChange={(event) => {
