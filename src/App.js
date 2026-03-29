@@ -480,7 +480,6 @@ function DashboardApp() {
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
-  const regenerateBookingSnapshotAction = useAction(api.bookings.regenerateSnapshotForEventNow);
   const saveCommissionSummarySnapshotMutation = useMutation(api.commissions.saveSummarySnapshot);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
@@ -722,7 +721,6 @@ function DashboardApp() {
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
-  const [generatedBookingSnapshotsByEvent, setGeneratedBookingSnapshotsByEvent] = useState({});
   const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId, refreshKey: bookingRefreshKey } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
@@ -962,21 +960,7 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
-  const selectedEventBooking = useMemo(() => {
-    if (!eventBookingRecord) {
-      return null;
-    }
-    const localSnapshots = selectedId ? (generatedBookingSnapshotsByEvent[selectedId] || []) : [];
-    if (!localSnapshots.length) {
-      return eventBookingRecord;
-    }
-    const mergedSnapshots = [...localSnapshots, ...(Array.isArray(eventBookingRecord.snapshots) ? eventBookingRecord.snapshots : [])]
-      .filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index);
-    return {
-      ...eventBookingRecord,
-      snapshots: mergedSnapshots,
-    };
-  }, [eventBookingRecord, generatedBookingSnapshotsByEvent, selectedId]);
+  const selectedEventBooking = useMemo(() => eventBookingRecord || null, [eventBookingRecord]);
   const attendantManagerFiles = useQuery(
     api.attendants.listFiles,
     canAccessDashboard && attendantManagerOpen && selectedAttendantManagerRecord?.id
@@ -1303,38 +1287,6 @@ function DashboardApp() {
       } else {
         openNotice('The booking link could not be generated.');
       }
-    }
-  };
-
-  const regenerateBookingPdf = async () => {
-    if (!selectedEvent) {
-      return;
-    }
-    try {
-      const result = await regenerateBookingSnapshotAction({
-        eventKey: selectedEvent.id,
-        baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
-      });
-      if (result?.snapshot && selectedEvent.id) {
-        setGeneratedBookingSnapshotsByEvent((current) => ({
-          ...current,
-          [selectedEvent.id]: [
-            result.snapshot,
-            ...(current[selectedEvent.id] || []),
-          ].filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index),
-        }));
-      }
-      setBookingRefreshKey((current) => current + 1);
-      setTimeout(() => {
-        setBookingRefreshKey((current) => current + 1);
-      }, 1200);
-      setTimeout(() => {
-        setBookingRefreshKey((current) => current + 1);
-      }, 2500);
-      openNotice('A fresh booking PDF has been generated for this event.');
-    } catch (error) {
-      console.error('Failed to regenerate booking PDF', error);
-      openNotice('The booking PDF could not be regenerated right now.');
     }
   };
 
