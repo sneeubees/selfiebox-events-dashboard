@@ -480,7 +480,7 @@ function DashboardApp() {
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
-  const regenerateBookingSnapshotMutation = useMutation(api.bookings.regenerateSnapshotForEvent);
+  const regenerateBookingSnapshotAction = useAction(api.bookings.regenerateSnapshotForEventNow);
   const saveCommissionSummarySnapshotMutation = useMutation(api.commissions.saveSummarySnapshot);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
@@ -722,6 +722,7 @@ function DashboardApp() {
   const eventActivityEntries = useQuery(api.collaboration.listEventActivity, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const eventFileEntries = useQuery(api.files.listEventFiles, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   const [bookingRefreshKey, setBookingRefreshKey] = useState(0);
+  const [generatedBookingSnapshotsByEvent, setGeneratedBookingSnapshotsByEvent] = useState({});
   const eventBookingRecord = useQuery(api.bookings.getForEvent, canAccessDashboard && selectedId ? { eventKey: selectedId, refreshKey: bookingRefreshKey } : 'skip');
   const [activitiesOpen, setActivitiesOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState('updates');
@@ -961,7 +962,21 @@ function DashboardApp() {
   const selectedEventUpdates = useMemo(() => eventUpdateEntries || [], [eventUpdateEntries]);
   const selectedEventActivity = useMemo(() => eventActivityEntries || [], [eventActivityEntries]);
   const selectedEventFiles = useMemo(() => eventFileEntries || [], [eventFileEntries]);
-  const selectedEventBooking = useMemo(() => eventBookingRecord || null, [eventBookingRecord]);
+  const selectedEventBooking = useMemo(() => {
+    if (!eventBookingRecord) {
+      return null;
+    }
+    const localSnapshots = selectedId ? (generatedBookingSnapshotsByEvent[selectedId] || []) : [];
+    if (!localSnapshots.length) {
+      return eventBookingRecord;
+    }
+    const mergedSnapshots = [...localSnapshots, ...(Array.isArray(eventBookingRecord.snapshots) ? eventBookingRecord.snapshots : [])]
+      .filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index);
+    return {
+      ...eventBookingRecord,
+      snapshots: mergedSnapshots,
+    };
+  }, [eventBookingRecord, generatedBookingSnapshotsByEvent, selectedId]);
   const attendantManagerFiles = useQuery(
     api.attendants.listFiles,
     canAccessDashboard && attendantManagerOpen && selectedAttendantManagerRecord?.id
@@ -1296,17 +1311,27 @@ function DashboardApp() {
       return;
     }
     try {
-      await regenerateBookingSnapshotMutation({
+      const result = await regenerateBookingSnapshotAction({
         eventKey: selectedEvent.id,
         baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
       });
+      if (result?.snapshot && selectedEvent.id) {
+        setGeneratedBookingSnapshotsByEvent((current) => ({
+          ...current,
+          [selectedEvent.id]: [
+            result.snapshot,
+            ...(current[selectedEvent.id] || []),
+          ].filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index),
+        }));
+      }
+      setBookingRefreshKey((current) => current + 1);
       setTimeout(() => {
         setBookingRefreshKey((current) => current + 1);
       }, 1200);
       setTimeout(() => {
         setBookingRefreshKey((current) => current + 1);
       }, 2500);
-      openNotice('A fresh booking PDF has been generated for this event. It will appear under Saved Forms shortly.');
+      openNotice('A fresh booking PDF has been generated for this event.');
     } catch (error) {
       console.error('Failed to regenerate booking PDF', error);
       openNotice('The booking PDF could not be regenerated right now.');
@@ -5853,7 +5878,14 @@ function BookingDrawerSummary({ booking }) {
           <strong>{value}</strong>
         </div>
       ))}
-      {snapshots.length ? <div className="booking-summary-row booking-summary-submissions"><span>Saved Forms</span><div className="booking-submission-list">{snapshots.map((snapshot) => <a key={snapshot.id} className="booking-submission-link" href={snapshot.url} target="_blank" rel="noreferrer">{snapshot.createdByLabel === 'Final Generated' ? 'Final Generated' : `${snapshot.createdByLabel || snapshot.fileName || 'Booking form'}${snapshot.submittedAt ? ` - ${formatSouthAfricaTimestamp(snapshot.submittedAt)}` : ''}${snapshot.sourceIp ? ` - ${snapshot.sourceIp}` : ''}`}</a>)}</div></div> : null}
+      {snapshots.length ? <div className="booking-summary-row booking-summary-submissions"><span>Saved Forms</span><div className="booking-submission-list">{snapshots.map((snapshot) => {
+        const label = snapshot.createdByLabel === 'Final Generated'
+          ? 'Final Generated'
+          : `${snapshot.createdByLabel || snapshot.fileName || 'Booking form'}${snapshot.submittedAt ? ` - ${formatSouthAfricaTimestamp(snapshot.submittedAt)}` : ''}${snapshot.sourceIp ? ` - ${snapshot.sourceIp}` : ''}`;
+        return snapshot.url
+          ? <a key={snapshot.id} className="booking-submission-link" href={snapshot.url} target="_blank" rel="noreferrer">{label}</a>
+          : <span key={snapshot.id} className="booking-submission-link">{label}</span>;
+      })}</div></div> : null}
     </div>
   );
 }
