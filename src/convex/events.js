@@ -440,6 +440,10 @@ export const upsert = mutation({
       return null;
     }
 
+    if (deletedMarker) {
+      return null;
+    }
+
     const eventId = await ctx.db.insert("events", {
       ...payload,
       createdByUserId: currentUser._id,

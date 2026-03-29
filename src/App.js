@@ -4187,6 +4187,16 @@ function DashboardApp() {
                     </div>
                   </div>
               <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+                  <div className="month-header-main">
+                    <strong>{month} {selectedWorkspaceYear}</strong>
+                    <div className="month-header-stats">
+                      <span><strong>{monthItems.length}</strong> events</span>
+                      <span><strong>{upcomingCount}</strong> Upcoming Events</span>
+                      <span><strong>{completedCount}</strong> Completed Events</span>
+                      <span><strong>{fullyPaidCount}</strong> Fully Paid</span>
+                    </div>
+                  </div>
+                  <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
