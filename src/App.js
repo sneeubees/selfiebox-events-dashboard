@@ -3993,7 +3993,6 @@ function DashboardApp() {
             <select value={selectedWorkspaceYear} onChange={(event) => setSelectedWorkspaceYear(Number(event.target.value))}>{workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}</select>
             <div className="workspace-link-stack">
               {['admin', 'manager'].includes(currentUser.role) ? <button className="workspace-text-button" type="button" onClick={() => setShowWorkspaceModal(true)}>Add Year</button> : null}
-              {currentUser.role === 'admin' ? <button className="workspace-text-button" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
             </div>
           </div>
           {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
@@ -4005,22 +4004,24 @@ function DashboardApp() {
         <div className="board-toolbar compact-toolbar">
           <div className="filters-grid compact-filters single-row-tools">
             <div className="search-input-wrap">
-              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name" />
+              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" />
               {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
-            <button
-              className={[
-                "ghost-button",
-                "filter-button",
-                "filter-open-button",
-                hasActiveFilters ? "is-active" : ""
-              ].join(" ").trim()}
-              type="button"
-              onClick={() => setFiltersOpen(true)}
-            >
-              Filter
-              {hasActiveFilters ? <span className="filter-active-badge" aria-hidden="true">Clear</span> : null}
-            </button>
+            <div className="filter-button-wrap">
+              <button
+                className={[
+                  "ghost-button",
+                  "filter-button",
+                  "filter-open-button",
+                  hasActiveFilters ? "is-active" : ""
+                ].join(" ").trim()}
+                type="button"
+                onClick={() => setFiltersOpen(true)}
+              >
+                Filter
+              </button>
+              {hasActiveFilters ? <button className="filter-clear-mini-button" type="button" aria-label="Clear filters" onClick={(event) => { event.stopPropagation(); clearFilters(); }}>x</button> : null}
+            </div>
             {savedFilterViews.length ? (
               <div className="saved-filter-chip-stack">
                 <div className="saved-filter-chip-label">Saved Filters</div>
@@ -4043,7 +4044,10 @@ function DashboardApp() {
               </div>
             ) : null}
           </div>
-          <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
+          <div className="board-toolbar-actions">
+            <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
+            {currentUser.role === 'admin' ? <button className="workspace-text-button board-export-link" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
+          </div>
         </div>
         <div className="board-surface" ref={boardSurfaceRef} style={{ '--board-columns': boardColumnTemplate, '--board-width': `${boardWidth}px` }}>
           {orderedMonths.map((month) => {
@@ -4070,10 +4074,10 @@ function DashboardApp() {
                   <div className="month-header-main">
                     <strong>{month} {selectedWorkspaceYear}</strong>
                     <div className="month-header-stats">
-                      <span>{monthItems.length} events</span>
-                      <span>{upcomingCount} Upcoming Events</span>
-                      <span>{completedCount} Completed Events</span>
-                      <span>{fullyPaidCount} Fully Paid</span>
+                      <span><strong>{monthItems.length}</strong> events</span>
+                      <span><strong>{upcomingCount}</strong> Upcoming Events</span>
+                      <span><strong>{completedCount}</strong> Completed Events</span>
+                      <span><strong>{fullyPaidCount}</strong> Fully Paid</span>
                     </div>
                   </div>
                   <div className="month-header-actions">{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}>Export to Excel</button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
@@ -4542,7 +4546,7 @@ function DashboardApp() {
         </ModalShell>
       ) : null}
       {logisticsDialog.isOpen ? (
-        <ModalShell title={`Manager - Logistics manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={() => { void closeLogisticsDialog(); }} panelClassName="logistics-modal-panel">
+        <ModalShell title={`Logistics Manager - ${logisticsDialog.month} ${selectedWorkspaceYear}`} onClose={() => { void closeLogisticsDialog(); }} panelClassName="logistics-modal-panel">
           <div className="logistics-sheet">
             <div className="logistics-toolbar">
               <div className="logistics-day-nav">
@@ -4629,7 +4633,9 @@ function DashboardApp() {
                           <div
                             className="logistics-bar logistics-setup-bar"
                             style={{ left: row.setupLeft, width: row.setupWidth, background: row.color, color: row.textColor }}
-                          />
+                          >
+                            <span>Setup</span>
+                          </div>
                           <div
                             className="logistics-bar"
                             style={{ left: row.barLeft, width: row.barWidth, background: row.color, color: row.textColor }}
