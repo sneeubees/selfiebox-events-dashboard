@@ -28,7 +28,7 @@ button { cursor: pointer; }
 .app-shell { height: 100vh; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.topbar-logo { width: 44px; height: 44px; object-fit: contain; flex: 0 0 auto; }
+.topbar-logo { width: 150px; height: auto; object-fit: contain; flex: 0 0 auto; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8a620f; }
 .topbar-kicker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .topbar-kicker-row .topbar-kicker { margin-bottom: 0; }
@@ -615,7 +615,7 @@ textarea { resize: vertical; min-height: 110px; }
 .changelog-section li { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
 .totals-row { min-width: max-content; }
 @media (max-width: 1200px) { .topbar { flex-direction: column; align-items: stretch; } .modal-form { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { .app-shell { padding: 8px; } .topbar-brand, .topbar-actions, .workspace-select-wrap { flex-direction: column; align-items: stretch; } .topbar-logo { width: 40px; height: 40px; } .modal-form { grid-template-columns: 1fr; } .board-row { width: max-content; } .event-drawer { width: 100vw; } .search-wide { min-width: 220px; } .booking-page-card { padding: 18px; } .booking-form-grid, .booking-extras-grid, .booking-time-row { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .app-shell { padding: 8px; } .topbar-brand, .topbar-actions, .workspace-select-wrap { flex-direction: column; align-items: stretch; } .topbar-logo { width: 120px; height: auto; } .modal-form { grid-template-columns: 1fr; } .board-row { width: max-content; } .event-drawer { width: 100vw; } .search-wide { min-width: 220px; } .booking-page-card { padding: 18px; } .booking-form-grid, .booking-extras-grid, .booking-time-row { grid-template-columns: 1fr; } }
 
 
 
