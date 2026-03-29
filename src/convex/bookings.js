@@ -764,7 +764,7 @@ export const regenerateSnapshotForEventNow = action({
     baseUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const currentUser = await getApprovedCurrentUser(ctx);
+    const currentUser = await ctx.runQuery(internal.bookings.getApprovedCurrentUserInternal, {});
     if (!currentUser) {
       throw new Error("Not authenticated");
     }
@@ -810,6 +810,11 @@ export const findBookingByEventIdInternal = internalQuery({
     eventId: v.id("events"),
   },
   handler: async (ctx, args) => findBookingByEventId(ctx, args.eventId),
+});
+
+export const getApprovedCurrentUserInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => getApprovedCurrentUser(ctx),
 });
 
 export const logBookingSnapshotActivity = internalMutation({
