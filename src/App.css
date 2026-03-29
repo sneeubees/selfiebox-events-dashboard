@@ -144,7 +144,7 @@ button { cursor: pointer; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
-.board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: hidden; }
+.board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: visible; }
 .board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5c4a25; background: #f3f5f9; }
 .column-header-label { line-height: 1.1; }
 .board-header .cell[draggable="true"] { cursor: grab; }
@@ -180,7 +180,7 @@ button { cursor: pointer; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
 .month-header-main { position: sticky; left: 5px; z-index: 20; display: grid; gap: 6px; align-items: start; flex: 0 0 auto; min-width: max-content; padding: 0 18px 0 5px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
 .month-header-stats { display: flex; flex-wrap: wrap; gap: 6px 10px; }
-.month-header-stats strong { color: inherit; font-weight: 700; font-size: 0.62rem; }
+.month-header-stats strong { color: inherit; font-weight: 700; font-size: inherit; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { position: sticky; right: 5px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding: 2px 5px 2px 18px; background: inherit; box-shadow: -16px 0 14px -14px rgba(237, 243, 255, 0.98); }
@@ -194,18 +194,18 @@ button { cursor: pointer; }
 .month-section.is-dragging-month { opacity: 0.72; }
 .month-section.is-drag-target-month .month-header { background: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
 .month-toggle { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: #e8edf8; color: #355190; font-size: 1rem; font-weight: 700; }
-.month-accent-1 .month-header strong { color: #7652d3; }
-.month-accent-2 .month-header strong { color: #0f7a8a; }
-.month-accent-3 .month-header strong { color: #1e63c5; }
-.month-accent-4 .month-header strong { color: #b85a1d; }
-.month-accent-5 .month-header strong { color: #2f8f49; }
-.month-accent-6 .month-header strong { color: #a13c5a; }
-.month-accent-7 .month-header strong { color: #4f52c7; }
-.month-accent-8 .month-header strong { color: #7a6a12; }
-.month-accent-9 .month-header strong { color: #0d6f5f; }
-.month-accent-10 .month-header strong { color: #9b4d11; }
-.month-accent-11 .month-header strong { color: #6240c3; }
-.month-accent-12 .month-header strong { color: #196aa0; }
+.month-accent-1 .month-header-main > strong { color: #7652d3; }
+.month-accent-2 .month-header-main > strong { color: #0f7a8a; }
+.month-accent-3 .month-header-main > strong { color: #1e63c5; }
+.month-accent-4 .month-header-main > strong { color: #b85a1d; }
+.month-accent-5 .month-header-main > strong { color: #2f8f49; }
+.month-accent-6 .month-header-main > strong { color: #a13c5a; }
+.month-accent-7 .month-header-main > strong { color: #4f52c7; }
+.month-accent-8 .month-header-main > strong { color: #7a6a12; }
+.month-accent-9 .month-header-main > strong { color: #0d6f5f; }
+.month-accent-10 .month-header-main > strong { color: #9b4d11; }
+.month-accent-11 .month-header-main > strong { color: #6240c3; }
+.month-accent-12 .month-header-main > strong { color: #196aa0; }
 .board-entry { background: #fff; transition: background 120ms ease; }
 .board-entry.is-alt-day .cell { background: #f6f7fa; }
 .board-entry.is-alt-day .cell-name { background: #f6f7fa; }
