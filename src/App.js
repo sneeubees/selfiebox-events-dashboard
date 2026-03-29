@@ -4198,13 +4198,6 @@ function DashboardApp() {
               <span>{getCommissionPeriodLabel(commissionDialog.month, selectedWorkspaceYear, commissionDialog.period)}</span>
               <span>Attendant: {commissionDialog.attendant || '-'}</span>
               <span className="commission-subhead-spacer" aria-hidden="true" />
-              <button
-                className="commission-link-action"
-                type="button"
-                onClick={() => setShowCommissionSummaryModal(true)}
-              >
-                Summary
-              </button>
               {currentUser?.role === 'admin' ? (
                 <button
                   className="commission-link-action"
@@ -4214,13 +4207,6 @@ function DashboardApp() {
                   Commision rates
                 </button>
               ) : null}
-              <button
-                className="commission-link-action"
-                type="button"
-                onClick={() => setShowCommissionSummarySnapshotsModal(true)}
-              >
-                Saved PDF's Summary
-              </button>
               <button
                 className="commission-link-action"
                 type="button"
@@ -4331,12 +4317,27 @@ function DashboardApp() {
                 </div>
               </div>
             </div>
-            <div className="modal-actions">
+            <div className="modal-actions commission-footer-actions">
               <button className="ghost-button" type="button" onClick={closeCommissionDialog}>
                 Close
               </button>
+              <button
+                className="ghost-button commission-summary-button"
+                type="button"
+                onClick={() => setShowCommissionSummaryModal(true)}
+              >
+                Summary
+              </button>
               <button className="primary-button" type="button" onClick={() => void exportCommissionSheet()}>
                 Export to PDF
+              </button>
+              <span className="commission-footer-spacer" aria-hidden="true" />
+              <button
+                className="commission-link-action"
+                type="button"
+                onClick={() => setShowCommissionSummarySnapshotsModal(true)}
+              >
+                Saved PDF's Summary
               </button>
             </div>
           </div>

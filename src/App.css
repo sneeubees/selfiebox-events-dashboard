@@ -540,6 +540,14 @@ textarea { resize: vertical; min-height: 110px; }
 .commission-summary-grid > div { display: grid; gap: 4px; min-width: 0; }
 .commission-summary-grid span { color: var(--muted); font-size: 0.72rem; line-height: 1.25; }
 .commission-summary-grid strong { color: var(--text); font-size: 0.96rem; }
+.commission-footer-actions { align-items: center; }
+.commission-summary-button {
+  border-color: #d7e3c4;
+  background: #eef7dc;
+  color: #48661e;
+}
+.commission-summary-button:hover { background: #e4f0cc; }
+.commission-footer-spacer { flex: 1 1 auto; min-width: 0; }
 .commission-rates-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1174,6 +1182,14 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .commission-km-auto-button:hover {
   background: #294066;
+}
+:root[data-theme="dark"] .commission-summary-button {
+  border-color: #577236;
+  background: #24391d;
+  color: #d8efbe;
+}
+:root[data-theme="dark"] .commission-summary-button:hover {
+  background: #2c4524;
 }
 :root[data-theme="dark"] .commission-summary {
   background: var(--panel);
