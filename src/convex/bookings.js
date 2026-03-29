@@ -791,11 +791,15 @@ export const regenerateSnapshotForEventNow = action({
       throw new Error("The booking PDF could not be regenerated right now.");
     }
 
-    await ctx.runMutation(internal.bookings.logBookingSnapshotActivity, {
-      eventId: eventRecord._id,
-      actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
-      actorUserId: currentUser._id,
-    });
+    try {
+      await ctx.runMutation(internal.bookings.logBookingSnapshotActivity, {
+        eventId: eventRecord._id,
+        actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
+        actorUserId: currentUser._id,
+      });
+    } catch (error) {
+      console.error("Failed to log booking snapshot activity", error);
+    }
 
       return {
         ok: true,
