@@ -78,10 +78,7 @@ async function storeBookingSnapshot(ctx, payload) {
   return {
     fileName,
     pdfBase64: pdfBuffer,
-    snapshot: {
-      ...snapshot,
-      url: (await ctx.storage.getUrl(storageId)) || "",
-    },
+    snapshot,
   };
 }
 
