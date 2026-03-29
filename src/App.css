@@ -175,6 +175,8 @@ button { cursor: pointer; }
 .month-section { margin: 0 10px 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
 .month-header { position: sticky; top: 0; z-index: 19; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1px 0 #d4def2; border-radius: 12px 12px 0 0; }
+.month-section.is-collapsed-month .month-header { border-radius: 12px; }
+.month-section.is-expanded-month .month-header { border-radius: 12px 12px 0 0; }
 .month-header:hover { background: #e5eeff; }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
@@ -184,7 +186,7 @@ button { cursor: pointer; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { position: sticky; right: 5px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding: 2px 5px 2px 18px; background: inherit; box-shadow: -16px 0 14px -14px rgba(237, 243, 255, 0.98); }
-.month-board-header { position: sticky; top: 40px; z-index: 18; }
+.month-board-header { position: sticky; top: 39px; z-index: 18; }
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 2px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 .month-commission-button { background: #eef8ef; border-color: #cde6cf; color: #2b6b3b; }
@@ -316,10 +318,10 @@ button { cursor: pointer; }
 .booking-submission-link:hover { text-decoration: underline; }
 .activity-item, .file-card { display: flex; justify-content: space-between; gap: 8px; padding: 5px 7px; border-radius: 10px; background: #f8f9fb; border: 1px solid var(--line); }
 .activity-item { align-items: flex-start; }
-.activity-item-body { min-width: 0; display: grid; gap: 2px; }
+.activity-item-body { min-width: 0; display: grid; gap: 4px; }
 .activity-item-meta { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted); }
-.activity-item p, .activity-item time, .activity-item-meta span { font-size: 0.72rem; line-height: 1.2; }
-.activity-item p { margin: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; color: var(--text); }
+.activity-item time, .activity-item-meta span { font-size: 0.66rem; line-height: 1.2; }
+.activity-item p { margin: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; color: var(--text); font-size: 0.8rem; line-height: 1.28; }
 .activity-event-link { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
 .activity-event-link:hover strong { text-decoration: underline; }
 .file-card { display: grid; }
@@ -327,14 +329,18 @@ button { cursor: pointer; }
 .file-upload-dropzone { border-style: dashed; transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease; }
 .file-upload-dropzone.is-drag-over { border-color: #7fa2ec; background: #eef4ff; box-shadow: inset 0 0 0 1px #9fb8f1; }
 .file-drop-hint { margin: 6px 0 0; font-size: 0.72rem; color: var(--muted); }
-.file-upload-types { margin: 0; font-size: 0.66rem; color: var(--muted); }
+.file-upload-types { margin: 0 0 8px; font-size: 0.66rem; color: var(--muted); }
 .file-name, .file-name-link, .file-name-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-name-link, .file-name-button { color: inherit; text-decoration: none; }
 .file-name-button { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; font: inherit; cursor: pointer; font-size: 0.76rem; }
 .file-name-link:hover, .file-name-button:hover { text-decoration: underline; }
 .file-card span { display: inline-flex; width: fit-content; border-radius: 999px; padding: 3px 7px; background: #e5ecff; color: #355190; font-size: 0.66rem; font-weight: 700; }
 .file-card p, .file-card small { font-size: 0.64rem; line-height: 1.15; }
-.file-delete { justify-self: end; border: 0; border-radius: 999px; padding: 5px 9px; background: #ffe9ee; color: #c23c57; font-size: 0.68rem; font-weight: 700; }
+.file-card { position: relative; }
+.file-card-main { padding-right: 28px; }
+.file-card-meta-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); }
+.file-card-meta-line p, .file-card-meta-line small { margin: 0; }
+.file-delete { position: absolute; top: 7px; right: 7px; width: 20px; height: 20px; min-width: 20px; border: 0; border-radius: 999px; padding: 0; background: #ffe9ee; color: #c23c57; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .file-delete:hover { background: #ffdce5; }
 .file-delete:disabled { opacity: 0.45; cursor: not-allowed; background: #f3f4f7; color: #8994a8; }
 .file-preview-panel { width: min(940px, 100%); }
@@ -343,7 +349,7 @@ button { cursor: pointer; }
 .file-preview-frame { width: min(820px, 100%); height: 68vh; border: 0; background: #fff; }
 .file-preview-link { text-decoration: none; }
 textarea { resize: vertical; min-height: 110px; }
-.modal-scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
+.modal-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
 .modal-panel { width: min(860px, 100%); padding: 18px; border-radius: 16px; }
 .branch-manager-modal-panel { width: min(96vw, 1520px); max-height: 96vh; display: flex; flex-direction: column; overflow: hidden; }
 .logistics-modal-panel { width: min(96vw, 1680px); max-height: 94vh; }

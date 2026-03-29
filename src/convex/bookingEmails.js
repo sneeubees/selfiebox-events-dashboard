@@ -73,7 +73,7 @@ async function storeBookingSnapshot(ctx, payload) {
     sourceIp: payload.sourceIp || undefined,
     submittedAt: payload.submittedAt || Date.now(),
     createdByUserId: payload.submittedByUserId || undefined,
-    createdByLabel: payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
+    createdByLabel: payload.snapshotLabel || payload.submittedByLabel || payload.formData.contactPerson || "Booking form",
   });
   return { fileName, pdfBase64: pdfBuffer };
 }
@@ -170,13 +170,17 @@ export const generateBookingSnapshot = internalAction({
   args: {
     bookingId: v.id("eventBookings"),
     baseUrl: v.optional(v.string()),
+    snapshotLabel: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const payload = await ctx.runQuery(internal.bookings.getSubmissionEmailPayload, args);
     if (!payload) {
       return { saved: false, reason: "missing_payload" };
     }
-    const { fileName } = await storeBookingSnapshot(ctx, payload);
+    const { fileName } = await storeBookingSnapshot(ctx, {
+      ...payload,
+      snapshotLabel: args.snapshotLabel,
+    });
     return { saved: true, fileName };
   },
 });
