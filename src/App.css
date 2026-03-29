@@ -86,9 +86,10 @@ button { cursor: pointer; }
 .profile-edit-grid label { display: grid; gap: 6px; }
 .profile-edit-grid span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #61708b; }
 .locked-input { background: #f5f7fb !important; color: #66758f !important; }
-.manage-users-button { white-space: nowrap; background: #d9e1f2; color: #21385f; }
+.topbar-admin-actions { display: grid; gap: 6px; }
+.manage-users-button { white-space: nowrap; background: #d9e1f2; border-color: #bccbe7; color: #21385f; }
 .manage-users-button:hover { background: #ccd7ed; }
-.turnover-top-button { white-space: nowrap; background: #ede6ff; color: #5c3ea8; }
+.turnover-top-button { white-space: nowrap; background: #ede6ff; border-color: #d7c7f8; color: #5c3ea8; }
 .turnover-top-button:hover { background: #e1d7ff; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
@@ -581,23 +582,25 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-table-header { position: sticky; top: 0; z-index: 1; background: #d3ddec; color: #43526d; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .turnover-table-header span,
 .turnover-table-row span { padding: 9px 10px; border-right: 1px solid var(--line); font-size: 0.72rem; }
+.turnover-table-header span { text-align: center; }
 .turnover-table-header span:last-child,
 .turnover-table-row span:last-child { border-right: 0; }
 .turnover-table-row { border-top: 1px solid var(--line); background: #fff; }
 .turnover-table-row.is-alt-row { background: #f7f9fd; }
 .turnover-table-row.is-diff-row { background: #f8fbff; font-weight: 700; }
 .turnover-table-row.is-diff-pct-row { background: #f3f7ff; font-weight: 700; }
+.turnover-table-row.is-totals-row { background: #eef2f8; font-weight: 700; }
 .turnover-year-cell { font-weight: 700; color: var(--text); }
 .turnover-value-cell { text-align: right; font-variant-numeric: tabular-nums; }
-.turnover-total-cell { font-weight: 700; color: #c23f3f; }
+.turnover-total-cell { font-weight: 700; color: #df2b2b; }
 .turnover-no-events-cell { display: flex; align-items: center; justify-content: flex-end; }
 .turnover-no-events-input { width: 72px; min-width: 72px; text-align: right; padding: 6px 8px; font-size: 0.72rem; }
 .turnover-growth-cell.is-positive,
-.turnover-percent-cell.is-positive { color: #2e8b57; font-weight: 700; }
+.turnover-percent-cell.is-positive { color: #149b46; font-weight: 700; }
 .turnover-growth-cell.is-negative,
 .turnover-percent-cell.is-negative,
-.turnover-difference-cell.is-negative { color: #c23f3f; font-weight: 700; }
-.turnover-value-cell.is-row-best-month { color: #2e8b57; font-weight: 700; }
+.turnover-difference-cell.is-negative { color: #e12525; font-weight: 700; }
+.turnover-value-cell.is-row-best-month { color: #149b46; font-weight: 700; }
 .turnover-value-cell.is-best-ever-month { background: #efe5ff; color: #6a3db8; font-weight: 700; }
 .commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {

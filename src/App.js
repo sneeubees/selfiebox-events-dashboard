@@ -4073,8 +4073,12 @@ function DashboardApp() {
               {['admin', 'manager'].includes(currentUser.role) ? <option value="__add__">Add Year</option> : null}
             </select>
           </div>
-          {currentUser.role === 'admin' ? <button className="ghost-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button> : null}
-          {currentUser.role === 'admin' ? <button className="ghost-button turnover-top-button" type="button" onClick={openTurnoverDialog}>Turnover</button> : null}
+          {currentUser.role === 'admin' ? (
+            <div className="topbar-admin-actions">
+              <button className="month-export-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button>
+              <button className="month-export-button turnover-top-button" type="button" onClick={openTurnoverDialog}>Turnover Figures</button>
+            </div>
+          ) : null}
           <button className="profile-pill" type="button" onClick={() => setShowProfileModal(true)}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span><strong>{currentUser.firstName} {currentUser.surname}</strong></button>
         </div>
       </header>
@@ -4650,13 +4654,14 @@ function DashboardApp() {
                 <span>No Events</span>
               </div>
               {turnoverRows.length ? turnoverRows.map((row, rowIndex) => (
-                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''} ${row.rowType === 'diffPct' ? 'is-diff-pct-row' : ''} ${rowIndex % 2 === 1 ? 'is-alt-row' : ''}`} key={row.key}>
+                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''} ${row.rowType === 'diffPct' ? 'is-diff-pct-row' : ''} ${row.rowType === 'totals' ? 'is-totals-row' : ''} ${rowIndex % 2 === 1 ? 'is-alt-row' : ''}`} key={row.key}>
                   <span className="turnover-year-cell">{row.label}</span>
                   {TURNOVER_HISTORY_DATA.months.map((month) => {
                     const value = row.months[month];
                     const monthClassNames = [
                       'turnover-value-cell',
                       row.rowType === 'diffPct' ? 'turnover-percent-cell' : '',
+                      row.rowType === 'diff' && Number(value) < 0 ? 'is-negative' : '',
                       row.rowType === 'diffPct' && Number(value) > 0 ? 'is-positive' : '',
                       row.rowType === 'diffPct' && Number(value) < 0 ? 'is-negative' : '',
                       row.bestMonth === month ? 'is-row-best-month' : '',
@@ -4668,7 +4673,7 @@ function DashboardApp() {
                     return <span className={monthClassNames} key={`${row.key}-${month}`}>{content}</span>;
                   })}
                   <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
-                  <span className={`turnover-value-cell turnover-growth-cell ${Number(row.growthPct) > 0 ? 'is-positive' : Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.growthPctDisplay}</span>
+                  <span className={`turnover-value-cell turnover-growth-cell ${row.rowType !== 'diffPct' && Number(row.growthPct) > 0 ? 'is-positive' : ''} ${row.rowType !== 'diffPct' && Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.rowType === 'diffPct' ? '' : row.growthPctDisplay}</span>
                   <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
                   <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
                 </div>
@@ -6165,7 +6170,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       total: Number(yearRecord.total || 0),
       growthPct: null,
       growthRand: null,
-      noEvents: yearRecord.noEvents ?? '',
+      noEvents: year === 2026 ? (yearRecord.noEvents ?? '') : '',
     };
   });
 
@@ -6221,8 +6226,9 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
     bestEverMonth: row.key === bestEver.key ? bestEver.month : '',
   }));
 
-  const latestYearRow = decoratedWithHighlights.filter((row) => row.rowType === 'year').at(-1);
-  const previousYearRow = decoratedWithHighlights.filter((row) => row.rowType === 'year').at(-2);
+  const yearRows = decoratedWithHighlights.filter((row) => row.rowType === 'year');
+  const latestYearRow = yearRows.at(-1);
+  const previousYearRow = yearRows.at(-2);
   if (!latestYearRow || !previousYearRow || typeof latestYearRow.year !== 'number' || latestYearRow.year < 2026) {
     return decoratedWithHighlights;
   }
@@ -6254,6 +6260,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
     ? monthKeys.slice(0, currentMonthIndex + 1).reduce((sum, month) => sum + Number(previousYearRow.months?.[month] || 0), 0)
     : Number(previousYearRow.total || 0);
   const totalDiffPct = previousComparisonTotal ? (latestComparisonTotal - previousComparisonTotal) / previousComparisonTotal : null;
+  const totalsRowTotal = yearRows.reduce((sum, row) => sum + Number(row.total || 0), 0);
 
   return [
     ...decoratedWithHighlights,
@@ -6270,12 +6277,23 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       },
       {
         key: `diff-pct-${regionKey}-${latestYearRow.year}`,
-        label: 'Difference %',
+        label: '-',
         rowType: 'diffPct',
         months: diffPctMonths,
         total: null,
         growthPct: totalDiffPct,
         growthPctDisplay: totalDiffPct === null ? '' : formatTurnoverGrowthPct(totalDiffPct),
+        growthRand: null,
+        noEvents: '',
+      },
+      {
+        key: `totals-${regionKey}`,
+        label: 'Totals',
+        rowType: 'totals',
+        months: Object.fromEntries(monthKeys.map((month) => [month, ''])),
+        total: totalsRowTotal,
+        growthPct: null,
+        growthPctDisplay: '',
         growthRand: null,
         noEvents: '',
       },
