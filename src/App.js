@@ -480,7 +480,7 @@ function DashboardApp() {
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
-  const regenerateBookingSnapshotAction = useAction(api.bookings.regenerateSnapshotForEventNow);
+  const regenerateBookingSnapshotMutation = useMutation(api.bookings.regenerateSnapshotForEvent);
   const saveCommissionSummarySnapshotMutation = useMutation(api.commissions.saveSummarySnapshot);
   const saveCommissionSnapshotMutation = useMutation(api.commissions.saveSnapshot);
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
@@ -1311,21 +1311,17 @@ function DashboardApp() {
       return;
     }
     try {
-      const result = await regenerateBookingSnapshotAction({
+      await regenerateBookingSnapshotMutation({
         eventKey: selectedEvent.id,
         baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
       });
-      if (result?.snapshot && selectedEvent.id) {
-        setGeneratedBookingSnapshotsByEvent((current) => ({
-          ...current,
-          [selectedEvent.id]: [
-            result.snapshot,
-            ...(current[selectedEvent.id] || []),
-          ].filter((snapshot, index, collection) => collection.findIndex((candidate) => candidate.id === snapshot.id) === index),
-        }));
-      }
-      setBookingRefreshKey((current) => current + 1);
-      openNotice('A fresh booking PDF has been generated for this event.');
+      setTimeout(() => {
+        setBookingRefreshKey((current) => current + 1);
+      }, 1200);
+      setTimeout(() => {
+        setBookingRefreshKey((current) => current + 1);
+      }, 2500);
+      openNotice('A fresh booking PDF has been generated for this event. It will appear under Saved Forms shortly.');
     } catch (error) {
       console.error('Failed to regenerate booking PDF', error);
       openNotice('The booking PDF could not be regenerated right now.');
