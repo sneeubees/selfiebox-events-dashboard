@@ -4450,6 +4450,29 @@ function DashboardApp() {
       ) : null}
       {showCommissionSummaryModal ? (
         <ModalShell title={`Commission summary - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={() => setShowCommissionSummaryModal(false)} panelClassName="commission-snapshots-modal-panel">
+          <div className="commission-periods commission-summary-periods">
+            <button
+              className={["ghost-button", commissionDialog.period === 'all' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}
+            >
+              Whole Month
+            </button>
+            <button
+              className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}
+            >
+              1st to 15th
+            </button>
+            <button
+              className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}
+            >
+              16th to last day
+            </button>
+          </div>
           <div className="commission-snapshot-list">
             {commissionSummaryRows.length ? (
               commissionSummaryRows.map((row) => (
@@ -4474,6 +4497,29 @@ function DashboardApp() {
       ) : null}
       {showCommissionSummarySnapshotsModal ? (
         <ModalShell title="Saved PDF's Summary" onClose={() => setShowCommissionSummarySnapshotsModal(false)} panelClassName="commission-snapshots-modal-panel">
+          <div className="commission-periods commission-summary-periods">
+            <button
+              className={["ghost-button", commissionDialog.period === 'all' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'all' }))}
+            >
+              Whole Month
+            </button>
+            <button
+              className={["ghost-button", commissionDialog.period === 'firstHalf' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'firstHalf' }))}
+            >
+              1st to 15th
+            </button>
+            <button
+              className={["ghost-button", commissionDialog.period === 'secondHalf' ? 'is-active' : ''].join(' ').trim()}
+              type="button"
+              onClick={() => setCommissionDialog((current) => ({ ...current, period: 'secondHalf' }))}
+            >
+              16th to last day
+            </button>
+          </div>
           <div className="commission-snapshot-list">
             {commissionSummarySnapshots === undefined ? (
               <div className="empty-month">Loading saved summary PDFs...</div>

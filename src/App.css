@@ -550,6 +550,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .commission-summary-button:hover { background: #e4f0cc; }
 .commission-footer-spacer { flex: 1 1 auto; min-width: 0; }
+.commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
