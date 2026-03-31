@@ -4725,7 +4725,7 @@ function DashboardApp() {
                   <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
                   <span className={`turnover-value-cell turnover-growth-cell ${row.rowType !== 'diffPct' && Number(row.growthPct) > 0 ? 'is-positive' : ''} ${row.rowType !== 'diffPct' && Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.rowType === 'diffPct' ? '' : row.growthPctDisplay}</span>
                   <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
-                  <span className="turnover-value-cell">{formatTurnoverCurrency(row.nettProfit)}</span>
+                  <span className="turnover-value-cell turnover-nett-profit-cell">{formatTurnoverCurrency(row.nettProfit)}</span>
                   <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
                 </div>
               )) : (

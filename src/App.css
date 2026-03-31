@@ -595,6 +595,7 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-table-row.is-totals-row { background: #eef2f8; font-weight: 700; }
 .turnover-year-cell { font-weight: 700; color: var(--text); }
 .turnover-value-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.turnover-nett-profit-cell { font-weight: 700; }
 .turnover-total-cell { font-weight: 700; color: #df2b2b; }
 .turnover-no-events-cell { justify-content: flex-end; }
 .turnover-no-events-input { width: 72px; min-width: 72px; text-align: right; padding: 6px 8px; font-size: 0.72rem; }
