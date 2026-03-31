@@ -16,10 +16,17 @@ async function requireIdentity(ctx) {
 async function getCurrentUserRecord(ctx) {
   const identity = await requireIdentity(ctx);
   const clerkId = identity.subject ?? identity.tokenIdentifier;
-  const user = await ctx.db
+  let user = await ctx.db
     .query("users")
     .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
     .unique();
+
+  if (!user) {
+    const email = String(identity.email || "").trim().toLowerCase();
+    if (email) {
+      user = pickCanonicalUser(await findUsersByEmail(ctx, email), clerkId);
+    }
+  }
 
   return { identity, clerkId, user };
 }
@@ -292,10 +299,17 @@ export const current = query({
     }
 
     const clerkId = identity.subject ?? identity.tokenIdentifier;
-    const user = await ctx.db
+    let user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
       .unique();
+
+    if (!user) {
+      const email = String(identity.email || "").trim().toLowerCase();
+      if (email) {
+        user = pickCanonicalUser(await findUsersByEmail(ctx, email), clerkId);
+      }
+    }
 
     return toUserDto(user);
   },
