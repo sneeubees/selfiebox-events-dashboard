@@ -5826,6 +5826,37 @@ function LoadingShell() {
   );
 }
 
+class DashboardErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Dashboard render failure', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="auth-shell">
+          <div className="auth-card">
+            <div className="auth-brand">SelfieBox Events</div>
+            <h1>Dashboard failed to load</h1>
+            <p>{this.state.error?.message || 'An unexpected error occurred while loading the dashboard.'}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function App() {
   const bookingToken = getBookingTokenFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
   const [authMode, setAuthMode] = useState('login');
@@ -5843,7 +5874,9 @@ function App() {
         <AuthShell authMode={authMode} setAuthMode={setAuthMode} />
       </Unauthenticated>
       <Authenticated>
-        <DashboardApp />
+        <DashboardErrorBoundary>
+          <DashboardApp />
+        </DashboardErrorBoundary>
       </Authenticated>
     </>
   );
