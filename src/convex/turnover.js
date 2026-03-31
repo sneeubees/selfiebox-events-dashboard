@@ -87,8 +87,17 @@ function createYearBucket() {
   };
 }
 
+function normalizeStatus(status) {
+  return String(status || "").trim().toLowerCase();
+}
+
+function isIncludedTurnoverStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized === "event completed" || normalized === "in progress";
+}
+
 function isCompletedStatus(status) {
-  return String(status || "").trim().toLowerCase() === "event completed";
+  return normalizeStatus(status) === "event completed";
 }
 
 function addToRegionYear(target, year, month, amount, completed) {
@@ -131,7 +140,12 @@ export const getLiveTurnover = query({
       const branchValues = Array.isArray(event.branch) ? event.branch.map(normalizeBranchValue) : [];
       const isGp = branchValues.some((value) => GP_BRANCHES.has(value));
       const isCt = branchValues.some((value) => CT_BRANCHES.has(value));
+      const included = isIncludedTurnoverStatus(event.status);
       const completed = isCompletedStatus(event.status);
+
+      if (!included) {
+        return;
+      }
 
       if (isGp) {
         addToRegionYear(grouped.gp, year, month, amount, completed);
