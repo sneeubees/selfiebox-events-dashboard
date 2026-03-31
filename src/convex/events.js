@@ -171,7 +171,6 @@ function toEventListDto(record, creator = null) {
     customFields: record.customFields || {},
     createdByUserId: record.createdByUserId || null,
     createdByName: creator?.fullName || "",
-    createdByProfilePic: creator?.profilePic || "",
     duplicatedFromEventKey: record.duplicatedFromEventKey || "",
     duplicatedFromEventName: record.duplicatedFromEventName || "",
   };
