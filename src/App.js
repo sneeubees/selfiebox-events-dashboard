@@ -1452,12 +1452,14 @@ function DashboardApp() {
       });
     }
 
-    if (currentUser) {
-      userSyncKeyRef.current = clerkUser.id;
-      if (matchesPendingRegistration) {
-        window.sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
-      }
-      return;
+      const hasClerkMismatch = currentUser && currentUser.clerkId && currentUser.clerkId !== clerkUser.id;
+
+      if (currentUser && !hasClerkMismatch) {
+        userSyncKeyRef.current = clerkUser.id;
+        if (matchesPendingRegistration) {
+          window.sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
+        }
+        return;
     }
 
     if (userSyncKeyRef.current === clerkUser.id) {
@@ -4024,7 +4026,14 @@ function DashboardApp() {
     });
   };
 
-  const isUserSyncing = Boolean(clerkUser && !currentUser && userSyncKeyRef.current === clerkUser.id);
+    const hasCurrentUserClerkMismatch = Boolean(clerkUser && currentUser?.clerkId && currentUser.clerkId !== clerkUser.id);
+    const isUserSyncing = Boolean(
+      clerkUser &&
+      (
+        (!currentUser && userSyncKeyRef.current === clerkUser.id) ||
+        hasCurrentUserClerkMismatch
+      )
+    );
 
   if (currentUser === undefined || isUserSyncing || (canAccessDashboard && workspaceRecords === undefined)) {
     return (
