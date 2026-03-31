@@ -531,6 +531,7 @@ function DashboardApp() {
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
   const [showTurnoverModal, setShowTurnoverModal] = useState(false);
   const [turnoverRegion, setTurnoverRegion] = useState('combined');
+  const [turnoverNetProfitPct, setTurnoverNetProfitPct] = useState('70');
   const [commissionRatesForm, setCommissionRatesForm] = useState({
     twoHours: '500',
     threeHours: '550',
@@ -1109,8 +1110,8 @@ function DashboardApp() {
     []
   );
   const turnoverRows = useMemo(
-    () => buildTurnoverRows(turnoverRegion, liveTurnoverRecords || {}),
-    [turnoverRegion, liveTurnoverRecords]
+    () => buildTurnoverRows(turnoverRegion, liveTurnoverRecords || {}, turnoverNetProfitPct),
+    [turnoverRegion, liveTurnoverRecords, turnoverNetProfitPct]
   );
   useEffect(() => {
     if (!commissionRatesRecord) {
@@ -2448,6 +2449,7 @@ function DashboardApp() {
             { value: row.total ?? '' },
             { value: row.growthPctDisplay },
             { value: row.growthRand ?? '' },
+            { value: row.nettProfit ?? '' },
             { value: row.noEvents ?? '' },
           ]),
         },
@@ -2458,6 +2460,7 @@ function DashboardApp() {
         { key: 'total', label: 'Total', width: 112 },
         { key: 'growthPct', label: 'Growth %', width: 104 },
         { key: 'growthRand', label: 'Growth R', width: 112 },
+        { key: 'nettProfit', label: 'NETT PROF', width: 112 },
         { key: 'noEvents', label: 'No Events', width: 98 },
       ],
     });
@@ -4663,6 +4666,17 @@ function DashboardApp() {
                   ))}
                 </select>
               </label>
+              <label>
+                <span>Nett profit %</span>
+                <input
+                  className="turnover-profit-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={turnoverNetProfitPct}
+                  onChange={(event) => setTurnoverNetProfitPct(event.target.value)}
+                />
+              </label>
               <div className="modal-actions">
                 <button className="primary-button" type="button" onClick={() => void exportTurnoverToExcel()}>Export to Excel</button>
               </div>
@@ -4674,6 +4688,7 @@ function DashboardApp() {
                 <span>Total</span>
                 <span>Growth %</span>
                 <span>Growth R</span>
+                <span>NETT PROF</span>
                 <span>No Events</span>
               </div>
               {turnoverRows.length ? turnoverRows.map((row, rowIndex) => (
@@ -4698,6 +4713,7 @@ function DashboardApp() {
                   <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
                   <span className={`turnover-value-cell turnover-growth-cell ${row.rowType !== 'diffPct' && Number(row.growthPct) > 0 ? 'is-positive' : ''} ${row.rowType !== 'diffPct' && Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.rowType === 'diffPct' ? '' : row.growthPctDisplay}</span>
                   <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
+                  <span className="turnover-value-cell">{formatTurnoverCurrency(row.nettProfit)}</span>
                   <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
                 </div>
               )) : (
@@ -6166,13 +6182,30 @@ function formatTurnoverGrowthPct(value) {
   return `${(numeric * 100).toFixed(1)}%`;
 }
 
-function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
+function parseTurnoverNetProfitPct(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0.7;
+  }
+  return Math.max(0, parsed) / 100;
+}
+
+function calculateTurnoverNetProfit(total, netProfitRatio) {
+  const numeric = Number(total);
+  if (!Number.isFinite(numeric)) {
+    return '';
+  }
+  return numeric * netProfitRatio;
+}
+
+function buildTurnoverRows(regionKey, liveTurnoverRecords = {}, netProfitPct = 70) {
   const region = TURNOVER_HISTORY_DATA.sections[regionKey] || TURNOVER_HISTORY_DATA.sections.combined;
   const liveRegionRows = liveTurnoverRecords?.regions?.[regionKey] || {};
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonthIndex = currentDate.getMonth();
   const monthKeys = TURNOVER_HISTORY_DATA.months;
+  const netProfitRatio = parseTurnoverNetProfitPct(netProfitPct);
   const historicalRows = (region.rows || []).map((row) => ({
     ...row,
     key: `historical-${regionKey}-${row.year}`,
@@ -6180,6 +6213,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
     rowType: 'year',
     months: { ...row.months },
     noEvents: '-',
+    nettProfit: calculateTurnoverNetProfit(row.total, netProfitRatio),
   }));
   const liveYears = Object.keys(liveRegionRows)
     .map((year) => Number(year))
@@ -6201,6 +6235,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       growthPct: null,
       growthRand: null,
       noEvents: year === 2026 ? (yearRecord.noEvents ?? '') : '',
+      nettProfit: calculateTurnoverNetProfit(Number(yearRecord.total || 0), netProfitRatio),
     };
   });
 
@@ -6227,6 +6262,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
       growthRand: Number.isFinite(growthRand) ? growthRand : row.growthRand,
       growthPct: Number.isFinite(growthPct) ? growthPct : row.growthPct,
       growthPctDisplay: formatTurnoverGrowthPct(Number.isFinite(growthPct) ? growthPct : row.growthPct),
+      nettProfit: calculateTurnoverNetProfit(row.total, netProfitRatio),
     };
   });
 
@@ -6303,6 +6339,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
         growthPct: null,
         growthPctDisplay: '',
         growthRand: null,
+        nettProfit: '',
         noEvents: '',
       },
       {
@@ -6314,6 +6351,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
         growthPct: totalDiffPct,
         growthPctDisplay: totalDiffPct === null ? '' : formatTurnoverGrowthPct(totalDiffPct),
         growthRand: null,
+        nettProfit: '',
         noEvents: '',
       },
       {
@@ -6325,6 +6363,7 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}) {
         growthPct: null,
         growthPctDisplay: '',
         growthRand: null,
+        nettProfit: calculateTurnoverNetProfit(totalsRowTotal, netProfitRatio),
         noEvents: '',
       },
   ];
