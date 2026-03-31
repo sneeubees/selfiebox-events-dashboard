@@ -8,10 +8,19 @@ async function getCurrentUser(ctx) {
   }
 
   const clerkId = identity.subject ?? identity.tokenIdentifier;
-  return ctx.db
+  let user = await ctx.db
     .query("users")
     .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
     .unique();
+
+  if (!user) {
+    const email = String(identity.email || "").trim().toLowerCase();
+    if (email) {
+      user = (await ctx.db.query("users").collect()).find((candidate) => candidate.email === email) || null;
+    }
+  }
+
+  return user;
 }
 
 async function requireApprovedUser(ctx) {
