@@ -138,6 +138,21 @@ const defaultYesNoOptions = [
   { name: 'No', color: '#d93c56' },
 ];
 
+const defaultCollapsedMonthState = {
+  January: true,
+  February: true,
+  March: false,
+  April: true,
+  May: true,
+  June: true,
+  July: true,
+  August: true,
+  September: true,
+  October: true,
+  November: true,
+  December: true,
+};
+
 const monthAccentClass = {
   January: 'month-accent-1',
   February: 'month-accent-2',
@@ -631,7 +646,7 @@ function DashboardApp() {
   const [newAttendantName, setNewAttendantName] = useState('');
   const [newAttendantBranch, setNewAttendantBranch] = useState('');
   const [attendantDrafts, setAttendantDrafts] = useState({});
-  const [collapsedMonths, setCollapsedMonths] = useState({ January: true, February: true, March: false, April: true, May: true, June: true, July: true, August: true, September: true, October: true, November: true, December: true });
+  const [collapsedMonths, setCollapsedMonths] = useState(defaultCollapsedMonthState);
   const [monthOrder, setMonthOrder] = useState(monthNames);
   const [draggedMonth, setDraggedMonth] = useState('');
   const [dragOverMonth, setDragOverMonth] = useState('');
@@ -677,6 +692,47 @@ function DashboardApp() {
       setMonthOrder(monthNames);
     }
   }, [currentUser]);
+  useEffect(() => {
+    boardViewHydratedRef.current = false;
+    if (!currentUser?.id || typeof window === 'undefined') {
+      setCollapsedMonths(defaultCollapsedMonthState);
+      return;
+    }
+
+    try {
+      const boardViewRaw = window.localStorage.getItem(getBoardViewStorageKey(currentUser.id));
+      const parsed = boardViewRaw ? JSON.parse(boardViewRaw) : null;
+      const nextCollapsedMonths = monthNames.reduce((accumulator, month) => {
+        accumulator[month] = typeof parsed?.collapsedMonths?.[month] === 'boolean'
+          ? parsed.collapsedMonths[month]
+          : defaultCollapsedMonthState[month];
+        return accumulator;
+      }, {});
+
+      if (typeof parsed?.selectedWorkspaceYear === 'number' && Number.isFinite(parsed.selectedWorkspaceYear)) {
+        setSelectedWorkspaceYear(parsed.selectedWorkspaceYear);
+      }
+
+      setCollapsedMonths(nextCollapsedMonths);
+    } catch {
+      setCollapsedMonths(defaultCollapsedMonthState);
+    }
+
+    boardViewHydratedRef.current = true;
+  }, [currentUser?.id]);
+  useEffect(() => {
+    if (!boardViewHydratedRef.current || !currentUser?.id || typeof window === 'undefined' || search.trim()) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      getBoardViewStorageKey(currentUser.id),
+      JSON.stringify({
+        selectedWorkspaceYear,
+        collapsedMonths,
+      })
+    );
+  }, [collapsedMonths, currentUser?.id, search, selectedWorkspaceYear]);
   useEffect(() => {
     filtersHydratedRef.current = false;
     if (!currentUser?.id || typeof window === 'undefined') {
@@ -821,6 +877,7 @@ function DashboardApp() {
   const labelCleanupRef = useRef(false);
   const customColumnTypeFixRef = useRef(false);
   const pendingMonthOrderRef = useRef(null);
+  const boardViewHydratedRef = useRef(false);
   const filtersHydratedRef = useRef(false);
   const collaborationMigratedRef = useRef(false);
   const futureActivityCleanupRef = useRef(false);
@@ -5389,6 +5446,10 @@ function getManagedOptionNames(optionsByKey, columnKey) {
 
 function getMonthOrderStorageKey(userId) {
   return `selfiebox-month-order-${userId}`;
+}
+
+function getBoardViewStorageKey(userId) {
+  return `selfiebox-board-view-${userId}`;
 }
 
 function getSavedFilterViewsStorageKey(userId) {
