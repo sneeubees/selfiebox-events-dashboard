@@ -169,6 +169,18 @@ function toUserDto(record) {
   };
 }
 
+function toCreatorProfileDto(record) {
+  if (!record) {
+    return null;
+  }
+
+  return {
+    id: record._id,
+    fullName: record.fullName || `${record.firstName || ""} ${record.surname || ""}`.trim(),
+    profilePic: record.profilePic || "",
+  };
+}
+
 export const syncCurrentUser = mutation({
   args: {
     email: v.string(),
@@ -327,6 +339,20 @@ export const list = query({
     return users
       .sort((left, right) => left.firstName.localeCompare(right.firstName))
       .map(toUserDto);
+  },
+});
+
+export const listCreatorProfiles = query({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await getCurrentUserRecord(ctx);
+    } catch {
+      return [];
+    }
+
+    const users = await ctx.db.query("users").collect();
+    return users.map(toCreatorProfileDto).filter(Boolean);
   },
 });
 
