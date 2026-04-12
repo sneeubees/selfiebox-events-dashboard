@@ -884,6 +884,7 @@ function DashboardApp() {
   const boardSurfaceRef = useRef(null);
   const eventRowRefs = useRef(new Map());
   const pendingDateAnchorRef = useRef(null);
+  const pendingNewEventFocusRef = useRef(null);
   const userSyncKeyRef = useRef('');
   const eventsSeededRef = useRef(false);
   const labelsSeededRef = useRef(false);
@@ -1444,6 +1445,33 @@ function DashboardApp() {
   useLayoutEffect(() => {
     const pendingAnchor = pendingDateAnchorRef.current;
     if (!pendingAnchor) {
+      const pendingNewEvent = pendingNewEventFocusRef.current;
+      if (!pendingNewEvent) {
+        return;
+      }
+
+      const surface = boardSurfaceRef.current;
+      const row = eventRowRefs.current.get(pendingNewEvent.eventId);
+      if (!surface || !row) {
+        pendingNewEventFocusRef.current = null;
+        return;
+      }
+
+      const surfaceRect = surface.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const currentOffset = rowRect.top - surfaceRect.top;
+      const desiredOffset = Math.max(72, Math.min(surface.clientHeight * 0.22, 140));
+      surface.scrollTop += currentOffset - desiredOffset;
+
+      const nameInput = row.querySelector('.inline-name');
+      if (nameInput instanceof HTMLInputElement) {
+        window.requestAnimationFrame(() => {
+          nameInput.focus();
+          nameInput.select();
+        });
+      }
+
+      pendingNewEventFocusRef.current = null;
       return;
     }
 
@@ -2273,6 +2301,7 @@ function DashboardApp() {
       activity: [],
     };
     replaceEvents((current) => [...current, newEvent]);
+    pendingNewEventFocusRef.current = { eventId: newEvent.id };
     queueActivityLog({
       workspaceYear: selectedWorkspaceYear,
       eventKey: newEvent.id,
