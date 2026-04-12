@@ -7,7 +7,16 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 const clerkPublishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
-const convexUrl = process.env.REACT_APP_CONVEX_URL;
+
+function resolveConvexUrl() {
+  const configuredUrl = process.env.REACT_APP_CONVEX_URL;
+  if (typeof window !== 'undefined' && window.location.hostname === 'events.selfiebox.co.za') {
+    return 'https://api.events.selfiebox.co.za/convex';
+  }
+  return configuredUrl;
+}
+
+const convexUrl = resolveConvexUrl();
 
 if (!clerkPublishableKey) {
   throw new Error('Missing REACT_APP_CLERK_PUBLISHABLE_KEY');
