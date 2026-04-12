@@ -170,6 +170,46 @@ const monthAccentClass = {
 
 const CHANGELOG_VERSIONS = [
   {
+    version: 'V1.3.002',
+    sections: [
+      {
+        title: 'Board Performance & Stability',
+        items: [
+          'Reduced the main board payload size to improve load reliability and reduce Convex read pressure.',
+          'Fixed a live issue where the dashboard could fail to load when the yearly event query became too large.',
+          'Creator profile pictures were reworked to load in a lighter way without bloating the main board query.',
+          'Improved new-event behavior so the board stays focused on the new row and places the cursor directly in the Main name field.',
+        ],
+      },
+      {
+        title: 'Live Editing & Board Behavior',
+        items: [
+          'Strengthened event sync behavior to reduce stale overwrites during editing, adding, and deleting.',
+          'Improved month-header docking and sticky behavior to keep the board layout cleaner while scrolling.',
+          'Refined month header statistics styling and board header positioning for better readability.',
+          'Improved the board’s remembered state so users return to the last working view more consistently.',
+        ],
+      },
+      {
+        title: 'Booking, Drawer & Reporting Refinements',
+        items: [
+          'Refined booking, drawer, turnover, commission, and logistics layouts to improve clarity and day-to-day usability.',
+          'Improved Turnover Figures with better row styling, highlighting, nett profit calculations, and current-year calculations based on active and completed events only.',
+          'Cleaned up drawer presentation for updates, files, and booking sections.',
+          'Removed unstable temporary booking PDF regeneration behavior from the drawer until it can be reintroduced safely.',
+        ],
+      },
+      {
+        title: 'Infrastructure',
+        items: [
+          'Staging was moved to the VPS with self-hosted Convex and HTTPS.',
+          'Live was prepared to move away from Convex Cloud by adding a VPS-hosted live Convex backend path.',
+          'Clerk and Resend remain externally hosted.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'V1.3.001',
     sections: [
       {
@@ -4186,7 +4226,7 @@ function DashboardApp() {
               <div className="topbar-kicker-row">
                 <div className="topbar-kicker">Events Dashboard</div>
                 <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
-                  V1.3.001
+                  V1.3.002
                 </button>
               </div>
               <h1>Events Calendar {selectedWorkspaceYear}</h1>
@@ -4351,7 +4391,7 @@ function DashboardApp() {
       {filtersOpen ? <ModalShell title="Filters" onClose={() => setFiltersOpen(false)} hideCloseButton><div className="filter-popup-scroll"><div className="filter-popup"><FilterGroup title="Branches" options={branchOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedBranches} onToggle={(value) => toggleSelection(setSelectedBranches, value)} /><FilterGroup title="Products" options={productOptions.map((option) => ({ value: option.abbreviation, label: option.fullName }))} selected={selectedProducts} onToggle={(value) => toggleSelection(setSelectedProducts, value)} /><FilterGroup title="Statuses" options={statusNames} selected={selectedStatuses} onToggle={(value) => toggleSelection(setSelectedStatuses, value)} /><FilterGroup title="Payment" options={getManagedOptionNames(managedSingleOptions, 'paymentStatus')} selected={selectedPayments} onToggle={(value) => toggleSelection(setSelectedPayments, value)} /><FilterGroup title="Attendants" options={branchScopedAttendantOptions.map((option) => ({ value: option.fullName, label: option.displayName || option.fullName }))} selected={selectedAttendants} onToggle={(value) => toggleSelection(setSelectedAttendants, value)} /></div></div><div className="modal-actions filter-popup-actions"><button className="ghost-button" type="button" onClick={clearFilters}>Clear filter</button><button className="ghost-button filter-save-button" type="button" onClick={openSaveCustomViewModal}>Save Custom View</button><button className="primary-button" type="button" onClick={() => setFiltersOpen(false)}>Apply</button></div></ModalShell> : null}
       {saveFilterViewModalOpen ? <ModalShell title="Save custom view" onClose={() => setSaveFilterViewModalOpen(false)}><div className="simple-stack"><label><span>Name</span><input className="text-input" maxLength={15} value={newFilterViewName} onChange={(event) => setNewFilterViewName(event.target.value.slice(0, 15))} autoFocus /></label><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setSaveFilterViewModalOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveCustomFilterView}>Save</button></div></div></ModalShell> : null}
       {showChangelogModal ? (
-        <ModalShell title="Changelog - V1.3.001" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
+        <ModalShell title="Changelog - V1.3.002" onClose={() => setShowChangelogModal(false)} closeOnScrimClick={false}>
           <div className="changelog-modal">
             {CHANGELOG_VERSIONS.map((release) => (
               <section className="changelog-version" key={release.version}>
