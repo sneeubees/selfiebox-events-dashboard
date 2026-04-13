@@ -5803,7 +5803,7 @@ function DateInlineEditor({ value, allowPastDates = false, onChange, onCancel, o
     cells.push({ day, dateValue });
   }
 
-  return <div className="date-inline-modal" onMouseDown={onCancel} onClick={onCancel}><div className="date-inline-popover calendar-popover" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+  return createPortal(<div className="date-inline-modal" onMouseDown={onCancel} onClick={onCancel}><div className="date-inline-popover calendar-popover" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
     <div className="calendar-header">
       <button className="ghost-button calendar-nav" type="button" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>{'<'}</button>
       <strong>{visibleMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</strong>
@@ -5815,7 +5815,7 @@ function DateInlineEditor({ value, allowPastDates = false, onChange, onCancel, o
       <button className="ghost-button date-inline-button" type="button" onClick={onCancel}>Cancel</button>
       <button className="primary-button date-inline-button" type="button" onClick={onApply}>Apply</button>
     </div>
-  </div></div>;
+  </div></div>, document.body);
 }
 
 function formatDateDisplay(value) {
