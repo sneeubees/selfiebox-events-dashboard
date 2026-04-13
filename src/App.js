@@ -2331,6 +2331,10 @@ function DashboardApp() {
   };
 
   const addBlankEvent = (monthName) => {
+    if (currentUser?.role !== 'admin' && isPastMonth(monthName, selectedWorkspaceYear)) {
+      openNotice('Only admins can add events in the past.');
+      return;
+    }
     const newEvent = {
       ...eventDefaults,
       id: createEventKey(),
@@ -4359,8 +4363,8 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, creatorProfileMap })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Duplicate" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>D</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
-                    <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows}>+ Add Event</button>
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: (effectiveColumnRights[column.key]?.canEdit ?? true) && !(isPastEvent(event) && currentUser?.role !== 'admin'), allowPastDates: currentUser?.role === 'admin', creatorProfileMap })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Duplicate" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>D</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}>+ Add Event</button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
                 ) : null}
@@ -5458,7 +5462,7 @@ function renderEventFields(
     </>
   );
 }
-function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, creatorProfileMap }) {
+function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, allowPastDates, creatorProfileMap }) {
     if (columnKey === 'name') {
       const creatorProfile = creatorProfileMap.get(String(event.createdByUserId || '')) || null;
       const creatorName = creatorProfile?.fullName || event.createdByName || '';
@@ -5471,7 +5475,7 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
   if (columnKey === 'exVatAuto') return <span title={String(event.exVatAuto || '')}>{event.exVatAuto || ''}</span>;
   if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value)} />;
   if (columnKey === 'quoteNumber' || columnKey === 'invoiceNumber') return <span title={event[columnKey] || ''}>{event[columnKey] || ''}</span>;
-  if (columnKey === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === 'date' ? <DateInlineEditor value={dateEditor.value} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, 'date')} /> : <button className='cell-select-button date-cell-button' type='button' title={event.date || ''} disabled={!canEdit} onClick={() => openDateEditor(event, 'date')}><span>{formatDateDisplay(event.date) || 'Pick date'}</span></button>;
+  if (columnKey === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === 'date' ? <DateInlineEditor value={dateEditor.value} allowPastDates={allowPastDates} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, 'date')} /> : <button className='cell-select-button date-cell-button' type='button' title={event.date || ''} disabled={!canEdit} onClick={() => openDateEditor(event, 'date')}><span>{formatDateDisplay(event.date) || 'Pick date'}</span></button>;
   if (columnKey === 'branch') return <button className='cell-select-button' type='button' title={event.branch.map((item) => branchFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openBranchSelector(event.id)}><CompactTagList items={event.branch} styles={branchStyles} /></button>;
   if (columnKey === 'products') return <button className='cell-select-button' type='button' title={event.products.map((item) => productFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openProductSelector(event.id)}><CompactTagList items={event.products} styles={productStyles} /></button>;
   if (columnKey === 'status') return <button className='cell-select-button' type='button' title={event.status || ''} disabled={!canEdit} onClick={() => openStatusSelector(event.id)}><Tag value={event.status || ''} styles={statusStyles} placeholder='' /></button>;
@@ -5485,7 +5489,7 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
     const customValue = (event.customFields || {})[columnKey];
     if (customColumn.type === 'text') return <input className="inline-input" title={String(customValue || '')} value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value)} />;
     if (customColumn.type === 'number') return <input className="inline-input inline-number" value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value)} />;
-    if (customColumn.type === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === columnKey ? <DateInlineEditor value={String(customValue || dateEditor.value || '')} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, columnKey)} /> : <button className='cell-select-button date-cell-button' type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openDateEditor(event, columnKey)}><span>{formatDateDisplay(String(customValue || '')) || 'Pick date'}</span></button>;
+    if (customColumn.type === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === columnKey ? <DateInlineEditor value={String(customValue || dateEditor.value || '')} allowPastDates={allowPastDates} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, columnKey)} /> : <button className='cell-select-button date-cell-button' type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openDateEditor(event, columnKey)}><span>{formatDateDisplay(String(customValue || '')) || 'Pick date'}</span></button>;
     if (customColumn.type === 'singleItem') return <button className='cell-select-button custom-single-select-button' style={customColumnWidths[columnKey] ? { width: customColumnWidths[columnKey], minWidth: customColumnWidths[columnKey] } : undefined} type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CustomSingleTag value={String(customValue || '')} styles={customItemStyles[columnKey] || {}} width={customColumnWidths[columnKey]} placeholder='' /></button>;
     if (customColumn.type === 'multiItem') return <button className='cell-select-button' type='button' title={(Array.isArray(customValue) ? customValue : []).join(', ')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CompactTagList items={Array.isArray(customValue) ? customValue : []} styles={customItemStyles[columnKey] || {}} wide /></button>;
   }
@@ -5777,7 +5781,7 @@ function getEventDayShadeClass(event) {
   return parsed.getDate() % 2 === 0 ? 'is-alt-day' : '';
 }
 
-function DateInlineEditor({ value, onChange, onCancel, onApply }) {
+function DateInlineEditor({ value, allowPastDates = false, onChange, onCancel, onApply }) {
   const [visibleMonth, setVisibleMonth] = useState(() => getCalendarMonth(value));
 
   useEffect(() => {
@@ -5806,7 +5810,7 @@ function DateInlineEditor({ value, onChange, onCancel, onApply }) {
       <button className="ghost-button calendar-nav" type="button" onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>{'>'}</button>
     </div>
     <div className="calendar-weekdays">{['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((day) => <span key={day}>{day}</span>)}</div>
-    <div className="calendar-grid">{cells.map((cell, index) => cell ? <button key={cell.dateValue} className={['calendar-day', value === cell.dateValue ? 'is-selected' : '', cell.dateValue < todayValue ? 'is-disabled' : ''].join(' ').trim()} type="button" disabled={cell.dateValue < todayValue} onClick={() => onChange(cell.dateValue)}>{cell.day}</button> : <span key={`blank-${index}`} className="calendar-day is-empty" />)}</div>
+    <div className="calendar-grid">{cells.map((cell, index) => cell ? <button key={cell.dateValue} className={['calendar-day', value === cell.dateValue ? 'is-selected' : '', !allowPastDates && cell.dateValue < todayValue ? 'is-disabled' : ''].join(' ').trim()} type="button" disabled={!allowPastDates && cell.dateValue < todayValue} onClick={() => onChange(cell.dateValue)}>{cell.day}</button> : <span key={`blank-${index}`} className="calendar-day is-empty" />)}</div>
     <div className="date-inline-actions">
       <button className="ghost-button date-inline-button" type="button" onClick={onCancel}>Cancel</button>
       <button className="primary-button date-inline-button" type="button" onClick={onApply}>Apply</button>
@@ -6228,6 +6232,17 @@ function isPastEvent(event) {
   }
   parsed.setHours(0, 0, 0, 0);
   return parsed < today;
+}
+
+function isPastMonth(monthName, workspaceYear) {
+  const monthIndex = monthNames.indexOf(monthName);
+  if (monthIndex === -1) {
+    return false;
+  }
+
+  const monthEnd = new Date(workspaceYear, monthIndex + 1, 0);
+  monthEnd.setHours(23, 59, 59, 999);
+  return monthEnd < new Date();
 }
 
 function orderColumnsAfterPayment(columns, savedOrder) {
