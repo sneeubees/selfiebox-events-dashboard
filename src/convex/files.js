@@ -117,16 +117,22 @@ export const listPdfCandidatesForDocumentNumbers = query({
     const eventKeyById = new Map(events.map((event) => [String(event._id), event.eventKey]));
 
     const files = await ctx.db.query("eventFiles").collect();
-    return files
-      .filter((file) => file.storageId && isPdfFile(file.name, file.contentType))
-      .map((file) => ({
+    const results = [];
+    for (const file of files) {
+      if (!file.storageId || !isPdfFile(file.name, file.contentType)) {
+        continue;
+      }
+      results.push({
         id: String(file._id),
         eventKey: eventKeyById.get(String(file.eventId)) || "",
         storageId: file.storageId,
         name: file.name,
         contentType: file.contentType || "",
         createdAt: file.createdAt,
-      }))
+        fileUrl: (await ctx.storage.getUrl(file.storageId)) || "",
+      });
+    }
+    return results
       .filter((file) => file.eventKey)
       .sort((left, right) => right.createdAt - left.createdAt);
   },

@@ -711,6 +711,34 @@ export const setDocumentNumberFromUpload = internalMutation({
   },
 });
 
+async function applyExtractedPdfDataPatch(ctx, args) {
+  const existing = await ctx.db
+    .query("events")
+    .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
+    .unique();
+
+  if (!existing) {
+    return null;
+  }
+
+  const patch = {
+    updatedAt: Date.now(),
+  };
+
+  if (args.documentType === "quote" && args.documentNumber) {
+    patch.quoteNumber = args.documentNumber;
+  }
+  if (args.documentType === "invoice" && args.documentNumber) {
+    patch.invoiceNumber = args.documentNumber;
+  }
+  if (args.exVatAuto !== undefined) {
+    patch.exVatAuto = args.exVatAuto;
+  }
+
+  await ctx.db.patch(existing._id, patch);
+  return await ctx.db.get(existing._id);
+}
+
 export const applyExtractedPdfData = internalMutation({
   args: {
     eventKey: v.string(),
@@ -718,31 +746,15 @@ export const applyExtractedPdfData = internalMutation({
     documentNumber: v.optional(v.string()),
     exVatAuto: v.optional(v.union(v.number(), v.string())),
   },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("events")
-      .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventKey))
-      .unique();
+  handler: async (ctx, args) => applyExtractedPdfDataPatch(ctx, args),
+});
 
-    if (!existing) {
-      return null;
-    }
-
-    const patch = {
-      updatedAt: Date.now(),
-    };
-
-    if (args.documentType === "quote" && args.documentNumber) {
-      patch.quoteNumber = args.documentNumber;
-    }
-    if (args.documentType === "invoice" && args.documentNumber) {
-      patch.invoiceNumber = args.documentNumber;
-    }
-    if (args.exVatAuto !== undefined) {
-      patch.exVatAuto = args.exVatAuto;
-    }
-
-    await ctx.db.patch(existing._id, patch);
-    return await ctx.db.get(existing._id);
+export const applyExtractedPdfDataFromAction = mutation({
+  args: {
+    eventKey: v.string(),
+    documentType: v.optional(v.union(v.literal("quote"), v.literal("invoice"))),
+    documentNumber: v.optional(v.string()),
+    exVatAuto: v.optional(v.union(v.number(), v.string())),
   },
+  handler: async (ctx, args) => applyExtractedPdfDataPatch(ctx, args),
 });

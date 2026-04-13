@@ -560,6 +560,7 @@ function DashboardApp() {
   const generateEventFileUploadUrl = useMutation(api.files.generateUploadUrl);
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
+  const applyExtractedPdfDataMutation = useMutation(api.events.applyExtractedPdfDataFromAction);
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
@@ -2107,7 +2108,7 @@ function DashboardApp() {
       }
 
       const { storageId } = await uploadResult.json();
-      await saveUploadedEventFile({
+      const savedFile = await saveUploadedEventFile({
         eventKey: selectedEvent.id,
         storageId,
         name: file.name,
@@ -2120,6 +2121,27 @@ function DashboardApp() {
           storageId,
           name: file.name,
           contentType: file.type || '',
+          fileUrl: savedFile?.url || '',
+        }).then((result) => {
+          if (!result?.processed) {
+            return;
+          }
+          const patch = {
+            eventKey: selectedEvent.id,
+          };
+          if (result.documentType) {
+            patch.documentType = result.documentType;
+          }
+          if (result.documentNumber) {
+            patch.documentNumber = result.documentNumber;
+          }
+          if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') {
+            patch.exVatAuto = result.exVatAuto;
+          }
+          if (!patch.documentType && !patch.documentNumber && patch.exVatAuto === undefined) {
+            return;
+          }
+          return applyExtractedPdfDataMutation(patch);
         }).catch((error) => {
           console.error('Failed to extract document number', error);
         });

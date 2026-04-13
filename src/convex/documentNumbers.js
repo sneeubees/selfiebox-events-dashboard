@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 function isPdfUpload(name, contentType) {
@@ -147,15 +147,16 @@ export const extractUploadedDocumentNumber = action({
     storageId: v.id("_storage"),
     name: v.string(),
     contentType: v.optional(v.string()),
+    fileUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => processUploadedDocument(ctx, args),
 });
 
 async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}) {
   if (!skipUserCheck) {
-    const currentUser = await ctx.runQuery(api.users.current, {});
-    if (!currentUser || !currentUser.isApproved || !currentUser.isActive) {
-      throw new Error("User access is pending approval.");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Not authenticated");
     }
   }
 
@@ -163,16 +164,29 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     return { processed: false, reason: "not_pdf" };
   }
 
-  const storedFile = await ctx.storage.get(args.storageId);
-  if (!storedFile) {
-    console.log("Document extraction skipped: storage file missing", {
+  const fileUrl = String(args.fileUrl || "").trim();
+  if (!fileUrl) {
+    console.log("Document extraction skipped: storage URL missing", {
       eventKey: args.eventKey,
       name: args.name,
+      storageId: args.storageId,
     });
-    return { processed: false, reason: "missing_storage_blob" };
+    return { processed: false, reason: "missing_storage_url" };
   }
 
-  const buffer = Buffer.from(await storedFile.arrayBuffer());
+  const fileResponse = await fetch(fileUrl);
+  if (!fileResponse.ok) {
+    console.log("Document extraction skipped: storage fetch failed", {
+      eventKey: args.eventKey,
+      name: args.name,
+      storageId: args.storageId,
+      fileUrl,
+      status: fileResponse.status,
+    });
+    return { processed: false, reason: "storage_fetch_failed", status: fileResponse.status };
+  }
+
+  const buffer = Buffer.from(await fileResponse.arrayBuffer());
   const parsed = await pdfParse(buffer);
   const text = normalizeExtractedText(parsed.text || "");
   const knownDocument = extractKnownDocument(text, args.name);
@@ -181,10 +195,6 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
 
   if (!documentType) {
     if (exVatAuto) {
-      await ctx.runMutation(internal.events.applyExtractedPdfData, {
-        eventKey: args.eventKey,
-        exVatAuto,
-      });
       console.log("Document extraction applied ExVAT Auto only", {
         eventKey: args.eventKey,
         name: args.name,
@@ -203,11 +213,6 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
   const documentNumber = knownDocument?.documentNumber || extractDocumentNumber(text, args.name, documentType);
   if (!documentNumber) {
     if (exVatAuto) {
-      await ctx.runMutation(internal.events.applyExtractedPdfData, {
-        eventKey: args.eventKey,
-        documentType,
-        exVatAuto,
-      });
       console.log("Document extraction applied ExVAT Auto without number", {
         eventKey: args.eventKey,
         name: args.name,
@@ -224,13 +229,6 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     });
     return { processed: false, reason: "number_not_found", documentType };
   }
-
-  await ctx.runMutation(internal.events.applyExtractedPdfData, {
-    eventKey: args.eventKey,
-    documentType,
-    documentNumber,
-    exVatAuto: exVatAuto || undefined,
-  });
 
   console.log("Document extraction succeeded", {
     eventKey: args.eventKey,
