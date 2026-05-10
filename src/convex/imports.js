@@ -72,6 +72,24 @@ function monthNameFromNumber(monthNumber) {
   return MONTH_NAMES[Math.max(0, Math.min(11, Number(monthNumber) - 1))] || "January";
 }
 
+function normalizeHistoricBranch(value) {
+  const raw = normalizeText(value);
+  const key = normalizeLooseKey(raw);
+  if (!key) {
+    return "";
+  }
+  if (["dbn", "durban", "kwazulunatal", "kwazulunatalsouthafrica", "kwazulunatalprovince", "kzn"].includes(key)) {
+    return "KZN";
+  }
+  if (["gp", "gauteng"].includes(key)) {
+    return "GP";
+  }
+  if (["ct", "capetown", "capetownsouthafrica", "capetowncitycentre", "capetownprovince"].includes(key)) {
+    return "CT";
+  }
+  return raw;
+}
+
 function shortActivity(eventName, text) {
   const summary = `${eventName}: ${text}`;
   return summary.length > 64 ? `${summary.slice(0, 61)}...` : summary;
@@ -418,6 +436,140 @@ export const normalizeImportedStatuses = mutation({
       updatedEvents,
       removedTypoOption: Boolean(typoOption && correctOption),
       renamedTypoOption: Boolean(typoOption && !correctOption),
+    };
+  },
+});
+
+export const importHistoricMonthWorkbook = mutation({
+  args: {
+    workspaceYear: v.number(),
+    monthNumber: v.number(),
+    events: v.array(v.object({
+      eventKey: v.string(),
+      name: v.string(),
+      date: v.optional(v.string()),
+      hours: v.optional(v.string()),
+      branch: v.array(v.string()),
+      products: v.array(v.string()),
+      status: v.optional(v.string()),
+      location: v.optional(v.string()),
+      paymentStatus: v.optional(v.string()),
+      attendants: v.array(v.string()),
+      exVat: v.optional(v.union(v.number(), v.string())),
+      packageOnly: v.optional(v.string()),
+      exclJc: v.optional(v.string()),
+      notes: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const importingUser = null;
+    await ensureWorkspace(ctx, args.workspaceYear, importingUser?._id);
+
+    const monthName = monthNameFromNumber(args.monthNumber);
+    let createdEvents = 0;
+    let updatedEvents = 0;
+
+    for (const sourceEvent of args.events) {
+      const eventKey = normalizeText(sourceEvent.eventKey);
+      const name = normalizeText(sourceEvent.name);
+      if (!eventKey || !name) {
+        continue;
+      }
+
+      const existingEvent = await ctx.db
+        .query("events")
+        .withIndex("by_event_key", (q) => q.eq("eventKey", eventKey))
+        .unique();
+
+      const branch = [];
+      for (const [index, value] of sourceEvent.branch.entries()) {
+        const storedValue = await ensureLabelOption(ctx, "branch", normalizeHistoricBranch(value), index);
+        if (storedValue) {
+          branch.push(storedValue);
+        }
+      }
+
+      const products = [];
+      for (const [index, value] of sourceEvent.products.entries()) {
+        const storedValue = await ensureLabelOption(ctx, "products", value, index);
+        if (storedValue) {
+          products.push(storedValue);
+        }
+      }
+
+      const attendants = [];
+      for (const [index, value] of sourceEvent.attendants.entries()) {
+        const storedValue = await ensureLabelOption(ctx, "attendants", value, index);
+        if (storedValue) {
+          attendants.push(storedValue);
+        }
+      }
+
+      const status = await ensureLabelOption(ctx, "status", sourceEvent.status || "", 0);
+      const paymentStatus = await ensureLabelOption(ctx, "paymentStatus", sourceEvent.paymentStatus || "", 0);
+
+      const nextCustomFields = {
+        ...(existingEvent?.customFields || {}),
+      };
+      if (normalizeText(sourceEvent.exclJc)) {
+        nextCustomFields.exclJc = normalizeText(sourceEvent.exclJc);
+        nextCustomFields.custom_excl_jc = normalizeText(sourceEvent.exclJc);
+      }
+
+      const payload = {
+        workspaceYear: args.workspaceYear,
+        name,
+        date: normalizeText(sourceEvent.date),
+        draftMonth: normalizeText(sourceEvent.date) ? "" : monthName,
+        hours: normalizeText(sourceEvent.hours),
+        branch: uniqueList(branch),
+        products: uniqueList(products),
+        status,
+        location: normalizeText(sourceEvent.location),
+        paymentStatus,
+        attendants: uniqueList(attendants),
+        exVat: sourceEvent.exVat ?? "",
+        packageOnly: normalizeText(sourceEvent.packageOnly),
+        notes: normalizeText(sourceEvent.notes),
+        customFields: nextCustomFields,
+        updatedAt: Date.now(),
+      };
+
+      if (existingEvent) {
+        await ctx.db.patch(existingEvent._id, payload);
+        updatedEvents += 1;
+      } else {
+        await ctx.db.insert("events", {
+          eventKey,
+          eventTitle: "",
+          duplicatedFromEventKey: "",
+          duplicatedFromEventName: "",
+          locationPlaceId: "",
+          locationLat: undefined,
+          locationLng: undefined,
+          accounts: "",
+          quoteNumber: "",
+          invoiceNumber: "",
+          exVatAuto: "",
+          vinyl: "",
+          gsAi: "",
+          imagesSent: "",
+          snappic: "",
+          updates: [],
+          files: [],
+          activity: [],
+          createdByUserId: importingUser?._id,
+          createdAt: Date.now(),
+          ...payload,
+        });
+        createdEvents += 1;
+      }
+    }
+
+    return {
+      month: monthName,
+      createdEvents,
+      updatedEvents,
     };
   },
 });
