@@ -555,7 +555,6 @@ function DashboardApp() {
   const removeColumnPermissionMutation = useMutation(api.permissions.remove);
   const addEventUpdateMutation = useMutation(api.collaboration.addUpdate);
   const logActivityMutation = useMutation(api.collaboration.logActivity);
-  const migrateLegacyCollaboration = useMutation(api.collaboration.migrateLegacyEntries);
   const deleteFutureActivityEntries = useMutation(api.collaboration.deleteFutureActivityEntries);
   const generateEventFileUploadUrl = useMutation(api.files.generateUploadUrl);
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
@@ -935,7 +934,6 @@ function DashboardApp() {
   const pendingMonthOrderRef = useRef(null);
   const boardViewHydratedRef = useRef(false);
   const filtersHydratedRef = useRef(false);
-  const collaborationMigratedRef = useRef(false);
   const futureActivityCleanupRef = useRef(false);
   const filesMigratedRef = useRef(false);
   const eventsRef = useRef(events);
@@ -1679,18 +1677,6 @@ function DashboardApp() {
       eventsSeededRef.current = false;
     });
   }, [canAccessDashboard, hasAnyEvents, liveEvents, seedInitialEvents]);
-
-  useEffect(() => {
-    if (!canAccessDashboard || liveEvents === undefined || collaborationMigratedRef.current) {
-      return;
-    }
-
-    collaborationMigratedRef.current = true;
-    void migrateLegacyCollaboration().catch((error) => {
-      console.error('Failed to migrate legacy collaboration', error);
-      collaborationMigratedRef.current = false;
-    });
-  }, [canAccessDashboard, liveEvents, migrateLegacyCollaboration]);
 
   useEffect(() => {
     if (!canAccessDashboard || !currentUser || currentUser.role !== 'admin' || futureActivityCleanupRef.current) {
