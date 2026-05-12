@@ -121,11 +121,16 @@ function addToRegionYear(target, year, month, amount, completed) {
 }
 
 export const getLiveTurnover = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    workspaceYear: v.number(),
+  },
+  handler: async (ctx, args) => {
     await requireAdminUser(ctx);
 
-    const events = await ctx.db.query("events").collect();
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", args.workspaceYear))
+      .collect();
     const grouped = {
       gp: {},
       ct: {},

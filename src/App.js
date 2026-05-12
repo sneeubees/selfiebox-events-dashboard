@@ -599,7 +599,9 @@ function DashboardApp() {
   const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const liveTurnoverRecords = useQuery(
     api.turnover.getLiveTurnover,
-    canAccessDashboard && currentUser?.role === 'admin' && showTurnoverModal ? {} : 'skip'
+    canAccessDashboard && currentUser?.role === 'admin' && showTurnoverModal
+      ? { workspaceYear: selectedWorkspaceYear }
+      : 'skip'
   );
   const commissionOverrideRecords = useQuery(
     api.commissions.listOverrides,
