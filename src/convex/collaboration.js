@@ -257,61 +257,10 @@ export const migrateLegacyEntries = mutation({
   args: {},
   handler: async (ctx) => {
     await requireCurrentUser(ctx);
-
-    const events = await ctx.db.query("events").collect();
-    let insertedUpdates = 0;
-    let insertedActivity = 0;
-
-    for (const eventRecord of events) {
-      const existingUpdates = await ctx.db
-        .query("eventUpdates")
-        .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
-        .collect();
-      const existingUpdateLegacyIds = new Set(existingUpdates.map((entry) => entry.legacyEntryId).filter(Boolean));
-
-      for (const entry of eventRecord.updates || []) {
-        if (entry.id && existingUpdateLegacyIds.has(entry.id)) {
-          continue;
-        }
-
-        await ctx.db.insert("eventUpdates", {
-          eventId: eventRecord._id,
-          body: entry.text || "",
-          actorName: entry.user || "Unknown user",
-          legacyEntryId: entry.id || undefined,
-          createdAt: parseLegacyTimestamp(entry.date),
-        });
-        insertedUpdates += 1;
-      }
-
-      const existingActivity = await ctx.db
-        .query("activityLog")
-        .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
-        .collect();
-      const existingActivityLegacyIds = new Set(existingActivity.map((entry) => entry.legacyEntryId).filter(Boolean));
-
-      for (const entry of eventRecord.activity || []) {
-        if (entry.id && existingActivityLegacyIds.has(entry.id)) {
-          continue;
-        }
-
-        await ctx.db.insert("activityLog", {
-          workspaceYear: eventRecord.workspaceYear,
-          eventId: eventRecord._id,
-          eventName: eventRecord.name || "Untitled event",
-          text: entry.text || "",
-          shortText: abbreviateActivity(eventRecord.name || "Untitled event", entry.text || ""),
-          actorName: entry.user || "Unknown user",
-          legacyEntryId: entry.id || undefined,
-          createdAt: parseLegacyTimestamp(entry.date),
-        });
-        insertedActivity += 1;
-      }
-    }
-
     return {
-      insertedUpdates,
-      insertedActivity,
+      insertedUpdates: 0,
+      insertedActivity: 0,
+      skipped: true,
     };
   },
 });

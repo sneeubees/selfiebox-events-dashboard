@@ -540,8 +540,6 @@ function DashboardApp() {
   const ensureWorkspaceYear = useMutation(api.workspaces.ensureYear);
   const seedInitialEvents = useMutation(api.events.seedInitialData);
   const seedInitialLabels = useMutation(api.labels.seedInitialData);
-  const migrateLegacyProductKeys = useMutation(api.labels.migrateLegacyProductKeys);
-  const cleanupDuplicateLabels = useMutation(api.labels.cleanupDuplicates);
   const upsertEventMutation = useMutation(api.events.upsert);
   const removeEventMutation = useMutation(api.events.remove);
   const cloneEventMutation = useMutation(api.events.cloneEvent);
@@ -555,13 +553,11 @@ function DashboardApp() {
   const removeColumnPermissionMutation = useMutation(api.permissions.remove);
   const addEventUpdateMutation = useMutation(api.collaboration.addUpdate);
   const logActivityMutation = useMutation(api.collaboration.logActivity);
-  const deleteFutureActivityEntries = useMutation(api.collaboration.deleteFutureActivityEntries);
   const generateEventFileUploadUrl = useMutation(api.files.generateUploadUrl);
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const applyExtractedPdfDataMutation = useMutation(api.events.applyExtractedPdfDataFromAction);
   const removeUploadedEventFile = useMutation(api.files.removeFile);
-  const migrateLegacyFiles = useMutation(api.files.migrateLegacyFiles);
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
   const generateBookingLinkMutation = useMutation(api.bookings.generateForEvent);
@@ -928,14 +924,10 @@ function DashboardApp() {
   const userSyncKeyRef = useRef('');
   const eventsSeededRef = useRef(false);
   const labelsSeededRef = useRef(false);
-  const productKeysMigratedRef = useRef(false);
-  const labelCleanupRef = useRef(false);
   const customColumnTypeFixRef = useRef(false);
   const pendingMonthOrderRef = useRef(null);
   const boardViewHydratedRef = useRef(false);
   const filtersHydratedRef = useRef(false);
-  const futureActivityCleanupRef = useRef(false);
-  const filesMigratedRef = useRef(false);
   const eventsRef = useRef(events);
   const persistTimeoutsRef = useRef(new Map());
   const eventPersistVersionsRef = useRef(new Map());
@@ -1679,30 +1671,6 @@ function DashboardApp() {
   }, [canAccessDashboard, hasAnyEvents, liveEvents, seedInitialEvents]);
 
   useEffect(() => {
-    if (!canAccessDashboard || !currentUser || currentUser.role !== 'admin' || futureActivityCleanupRef.current) {
-      return;
-    }
-
-    futureActivityCleanupRef.current = true;
-    void deleteFutureActivityEntries().catch((error) => {
-      console.error('Failed to clean future activity entries', error);
-      futureActivityCleanupRef.current = false;
-    });
-  }, [canAccessDashboard, currentUser, deleteFutureActivityEntries]);
-
-  useEffect(() => {
-    if (!canAccessDashboard || liveEvents === undefined || filesMigratedRef.current) {
-      return;
-    }
-
-    filesMigratedRef.current = true;
-    void migrateLegacyFiles().catch((error) => {
-      console.error('Failed to migrate legacy files', error);
-      filesMigratedRef.current = false;
-    });
-  }, [canAccessDashboard, liveEvents, migrateLegacyFiles]);
-
-  useEffect(() => {
     if (!canAccessDashboard || liveLabelOptions === undefined || labelsSeededRef.current) {
       return;
     }
@@ -1718,30 +1686,6 @@ function DashboardApp() {
       labelsSeededRef.current = false;
     });
   }, [canAccessDashboard, liveLabelOptions, seedInitialLabels]);
-
-  useEffect(() => {
-    if (!canAccessDashboard || liveLabelOptions === undefined || productKeysMigratedRef.current) {
-      return;
-    }
-
-    productKeysMigratedRef.current = true;
-    void migrateLegacyProductKeys().catch((error) => {
-      console.error('Failed to migrate legacy product keys', error);
-      productKeysMigratedRef.current = false;
-    });
-  }, [canAccessDashboard, liveLabelOptions, migrateLegacyProductKeys]);
-
-  useEffect(() => {
-    if (!canAccessDashboard || liveLabelOptions === undefined || labelCleanupRef.current) {
-      return;
-    }
-
-    labelCleanupRef.current = true;
-    void cleanupDuplicateLabels().catch((error) => {
-      console.error('Failed to clean duplicate labels', error);
-      labelCleanupRef.current = false;
-    });
-  }, [canAccessDashboard, liveLabelOptions, cleanupDuplicateLabels]);
 
   useEffect(() => {
     if (!canAccessDashboard || !currentUser || currentUser.role !== 'admin' || !customColumnRecords || customColumnTypeFixRef.current) {
