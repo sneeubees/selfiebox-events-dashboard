@@ -211,21 +211,7 @@ export const migrateLegacyProductKeys = mutation({
   args: {},
   handler: async (ctx) => {
     await requireCurrentUser(ctx);
-    const products = await ctx.db
-      .query("labelOptions")
-      .withIndex("by_column", (q) => q.eq("columnKey", "products"))
-      .collect();
-
-    for (const product of products) {
-      if (product.optionKey !== product.name) {
-        await ctx.db.patch(product._id, {
-          optionKey: product.name,
-          updatedAt: Date.now(),
-        });
-      }
-    }
-
-    return { migrated: products.length };
+    return { migrated: 0, skipped: true };
   },
 });
 
@@ -233,90 +219,7 @@ export const cleanupDuplicates = mutation({
   args: {},
   handler: async (ctx) => {
     await requireCurrentUser(ctx);
-    const allOptions = await ctx.db.query("labelOptions").collect();
-    const allEvents = await ctx.db.query("events").collect();
-    const columns = ["branch", "products", "status", "paymentStatus", "accounts", "vinyl", "gsAi", "imagesSent", "snappic", "attendants"];
-    let removed = 0;
-    let touchedEvents = 0;
-
-    const eventsById = new Map(allEvents.map((event) => [event._id, event]));
-
-    for (const columnKey of columns) {
-      const options = allOptions
-        .filter((option) => option.columnKey === columnKey)
-        .sort((left, right) => left.order - right.order || left._creationTime - right._creationTime);
-
-      const canonicalByName = new Map();
-      const canonicalByAbbrev = new Map();
-      const valueRemap = new Map();
-      const duplicates = [];
-
-      for (const option of options) {
-        const nameKey = normalizeValue(option.name);
-        const abbrevValue = columnKey === "branch" || columnKey === "products" ? (option.abbreviation || option.optionKey || option.name) : option.name;
-        const abbrevKey = normalizeValue(abbrevValue);
-        const canonical = canonicalByName.get(nameKey) || ((columnKey === "branch" || columnKey === "products") ? canonicalByAbbrev.get(abbrevKey) : null);
-
-        if (!canonical) {
-          canonicalByName.set(nameKey, option);
-          if (columnKey === "branch" || columnKey === "products") {
-            canonicalByAbbrev.set(abbrevKey, option);
-          }
-          continue;
-        }
-
-        duplicates.push(option);
-        const canonicalValue = columnKey === "branch" || columnKey === "products"
-          ? (canonical.abbreviation || canonical.optionKey || canonical.name)
-          : canonical.name;
-        const duplicateValue = columnKey === "branch" || columnKey === "products"
-          ? (option.abbreviation || option.optionKey || option.name)
-          : option.name;
-
-        if (duplicateValue !== canonicalValue) {
-          valueRemap.set(duplicateValue, canonicalValue);
-        }
-      }
-
-      if (valueRemap.size) {
-        for (const [eventId, event] of eventsById.entries()) {
-          let changed = false;
-          const nextEvent = { ...event };
-
-          if (isArrayColumn(columnKey)) {
-            const currentValues = Array.isArray(event[columnKey]) ? event[columnKey] : [];
-            const mappedValues = uniqueList(currentValues.map((item) => valueRemap.get(item) || item));
-            if (JSON.stringify(mappedValues) !== JSON.stringify(currentValues)) {
-              nextEvent[columnKey] = mappedValues;
-              changed = true;
-            }
-          } else {
-            const currentValue = event[columnKey] || "";
-            const mappedValue = valueRemap.get(currentValue) || currentValue;
-            if (mappedValue !== currentValue) {
-              nextEvent[columnKey] = mappedValue;
-              changed = true;
-            }
-          }
-
-          if (changed) {
-            await ctx.db.patch(eventId, {
-              [columnKey]: nextEvent[columnKey],
-              updatedAt: Date.now(),
-            });
-            eventsById.set(eventId, nextEvent);
-            touchedEvents += 1;
-          }
-        }
-      }
-
-      for (const duplicate of duplicates) {
-        await ctx.db.delete(duplicate._id);
-        removed += 1;
-      }
-    }
-
-    return { removed, touchedEvents };
+    return { removed: 0, touchedEvents: 0, skipped: true };
   },
 });
 

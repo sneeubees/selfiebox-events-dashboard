@@ -241,41 +241,6 @@ export const migrateLegacyFiles = mutation({
   args: {},
   handler: async (ctx) => {
     await requireCurrentUser(ctx);
-
-    const events = await ctx.db.query("events").collect();
-    let inserted = 0;
-
-    for (const eventRecord of events) {
-      const existingFiles = await ctx.db
-        .query("eventFiles")
-        .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
-        .collect();
-      const existingLegacyIds = new Set(existingFiles.map((entry) => entry.legacyFileId).filter(Boolean));
-
-      for (const file of eventRecord.files || []) {
-        if (file.id && existingLegacyIds.has(file.id)) {
-          continue;
-        }
-
-        await ctx.db.insert("eventFiles", {
-          eventId: eventRecord._id,
-          name: file.name || "Legacy file",
-          legacyFileId: file.id || undefined,
-          contentType: file.type || undefined,
-          sizeLabel: file.size || undefined,
-          createdAt: parseLegacyTimestamp(),
-        });
-        inserted += 1;
-      }
-
-      if ((eventRecord.files || []).length) {
-        await ctx.db.patch(eventRecord._id, {
-          files: [],
-          updatedAt: Date.now(),
-        });
-      }
-    }
-
-    return { inserted };
+    return { inserted: 0, skipped: true };
   },
 });
