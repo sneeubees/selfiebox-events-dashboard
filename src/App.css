@@ -476,6 +476,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .commission-periods { display: inline-flex; flex-wrap: wrap; gap: 8px; }
 .commission-periods .ghost-button.is-active { background: #dfe8ff; color: #23427f; }
+.commission-period-badge { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; background: rgba(35, 66, 127, 0.12); color: #23427f; font-size: 0.82rem; font-weight: 600; }
 .commission-subhead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; font-size: 0.82rem; color: var(--muted); }
 .commission-subhead strong { color: var(--text); }
 .commission-subhead-spacer { flex: 1 1 auto; min-width: 0; }
@@ -743,6 +744,8 @@ textarea { resize: vertical; min-height: 110px; }
 .attendant-details-card { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .attendant-details-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .attendant-details-grid label { display: grid; gap: 6px; }
+.attendant-checkbox-row { display: flex !important; align-items: center; gap: 10px; }
+.attendant-checkbox-row input { width: 16px; height: 16px; }
 .attendant-files-panel { display: grid; gap: 10px; }
 .attendant-files-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .attendant-file-list { display: grid; gap: 8px; }
@@ -992,7 +995,7 @@ textarea { resize: vertical; min-height: 110px; }
 .date-inline-modal {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 90;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -1019,7 +1022,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .calendar-popover {
   position: relative;
-  z-index: 41;
+  z-index: 91;
   width: min(220px, calc(100vw - 32px));
   padding: 8px;
   border: 1px solid var(--line);
@@ -1226,6 +1229,10 @@ textarea { resize: vertical; min-height: 110px; }
   background: var(--panel);
 }
 :root[data-theme="dark"] .commission-periods .ghost-button.is-active {
+  background: #223556;
+  color: #dce8ff;
+}
+:root[data-theme="dark"] .commission-period-badge {
   background: #223556;
   color: #dce8ff;
 }

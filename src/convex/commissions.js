@@ -248,6 +248,32 @@ export const listOverrides = query({
   },
 });
 
+export const listMonthOverrides = query({
+  args: {
+    month: v.string(),
+    year: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommissionUser(ctx);
+    const rows = await ctx.db
+      .query("commissionOverrides")
+      .withIndex("by_month_attendant", (q) => q.eq("year", args.year).eq("month", args.month))
+      .collect();
+
+    return rows.map((row) => ({
+      id: row._id,
+      attendant: row.attendant,
+      eventId: row.eventId,
+      hoursPayable: row.hoursPayable || "",
+      amount: row.amount || "",
+      car: row.car || "",
+      km: row.km || "",
+      note: row.note || "",
+      updatedAt: row.updatedAt,
+    }));
+  },
+});
+
 export const saveOverride = mutation({
   args: {
     month: v.string(),

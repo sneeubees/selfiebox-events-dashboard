@@ -133,6 +133,7 @@ export default defineSchema({
     addressPlaceId: v.optional(v.string()),
     addressLat: v.optional(v.union(v.number(), v.null())),
     addressLng: v.optional(v.union(v.number(), v.null())),
+    isFullTimeEmployee: v.optional(v.boolean()),
     color: v.string(),
     order: v.number(),
     isActive: v.boolean(),
