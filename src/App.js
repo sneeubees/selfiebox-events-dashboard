@@ -717,13 +717,12 @@ function DashboardApp() {
     const pendingOrder = pendingMonthOrderRef.current;
     const storedOrder = currentUser && typeof window !== 'undefined'
       ? (() => {
-          try {
-            const raw = window.localStorage.getItem(getMonthOrderStorageKey(currentUser.id));
-            const parsed = raw ? JSON.parse(raw) : null;
-            return Array.isArray(parsed) && parsed.length === monthNames.length ? parsed : null;
-          } catch {
-            return null;
-          }
+          const parsed = readUserScopedStorage({
+            currentUser,
+            getKey: getMonthOrderStorageKey,
+            fallbackValue: null,
+          });
+          return Array.isArray(parsed) && parsed.length === monthNames.length ? parsed : null;
         })()
       : null;
 
@@ -747,14 +746,17 @@ function DashboardApp() {
   }, [currentUser]);
   useEffect(() => {
     boardViewHydratedRef.current = false;
-    if (!currentUser?.id || typeof window === 'undefined') {
+    if (!currentUser || typeof window === 'undefined') {
       setCollapsedMonths(defaultCollapsedMonthState);
       return;
     }
 
     try {
-      const boardViewRaw = window.localStorage.getItem(getBoardViewStorageKey(currentUser.id));
-      const parsed = boardViewRaw ? JSON.parse(boardViewRaw) : null;
+      const parsed = readUserScopedStorage({
+        currentUser,
+        getKey: getBoardViewStorageKey,
+        fallbackValue: null,
+      });
       const nextCollapsedMonths = monthNames.reduce((accumulator, month) => {
         accumulator[month] = typeof parsed?.collapsedMonths?.[month] === 'boolean'
           ? parsed.collapsedMonths[month]
@@ -772,23 +774,24 @@ function DashboardApp() {
     }
 
     boardViewHydratedRef.current = true;
-  }, [currentUser?.id]);
+  }, [currentUser]);
   useEffect(() => {
-    if (!boardViewHydratedRef.current || !currentUser?.id || typeof window === 'undefined' || search.trim()) {
+    if (!boardViewHydratedRef.current || !currentUser || typeof window === 'undefined' || search.trim()) {
       return;
     }
 
-    window.localStorage.setItem(
-      getBoardViewStorageKey(currentUser.id),
-      JSON.stringify({
+    writeUserScopedStorage({
+      currentUser,
+      getKey: getBoardViewStorageKey,
+      value: {
         selectedWorkspaceYear,
         collapsedMonths,
-      })
-    );
-  }, [collapsedMonths, currentUser?.id, search, selectedWorkspaceYear]);
+      },
+    });
+  }, [collapsedMonths, currentUser, search, selectedWorkspaceYear]);
   useEffect(() => {
     filtersHydratedRef.current = false;
-    if (!currentUser?.id || typeof window === 'undefined') {
+    if (!currentUser || typeof window === 'undefined') {
       setSavedFilterViews([]);
       setSelectedBranches([]);
       setSelectedProducts([]);
@@ -799,12 +802,18 @@ function DashboardApp() {
     }
 
     try {
-      const savedViewsRaw = window.localStorage.getItem(getSavedFilterViewsStorageKey(currentUser.id));
-      const savedViewsParsed = savedViewsRaw ? JSON.parse(savedViewsRaw) : [];
+      const savedViewsParsed = readUserScopedStorage({
+        currentUser,
+        getKey: getSavedFilterViewsStorageKey,
+        fallbackValue: [],
+      });
       setSavedFilterViews(Array.isArray(savedViewsParsed) ? savedViewsParsed.slice(0, 8) : []);
 
-      const activeFiltersRaw = window.localStorage.getItem(getActiveFilterStateStorageKey(currentUser.id));
-      const activeFilters = activeFiltersRaw ? JSON.parse(activeFiltersRaw) : null;
+      const activeFilters = readUserScopedStorage({
+        currentUser,
+        getKey: getActiveFilterStateStorageKey,
+        fallbackValue: null,
+      });
       setSelectedBranches(Array.isArray(activeFilters?.branches) ? activeFilters.branches : []);
       setSelectedProducts(Array.isArray(activeFilters?.products) ? activeFilters.products : []);
       setSelectedStatuses(Array.isArray(activeFilters?.statuses) ? activeFilters.statuses : []);
@@ -820,28 +829,33 @@ function DashboardApp() {
     }
 
     filtersHydratedRef.current = true;
-  }, [currentUser?.id]);
+  }, [currentUser]);
   useEffect(() => {
-    if (!filtersHydratedRef.current || !currentUser?.id || typeof window === 'undefined') {
+    if (!filtersHydratedRef.current || !currentUser || typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(
-      getActiveFilterStateStorageKey(currentUser.id),
-      JSON.stringify({
+    writeUserScopedStorage({
+      currentUser,
+      getKey: getActiveFilterStateStorageKey,
+      value: {
         branches: selectedBranches,
         products: selectedProducts,
         statuses: selectedStatuses,
         payments: selectedPayments,
         attendants: selectedAttendants,
-      })
-    );
-  }, [currentUser?.id, selectedBranches, selectedProducts, selectedStatuses, selectedPayments, selectedAttendants]);
+      },
+    });
+  }, [currentUser, selectedBranches, selectedProducts, selectedStatuses, selectedPayments, selectedAttendants]);
   useEffect(() => {
-    if (!filtersHydratedRef.current || !currentUser?.id || typeof window === 'undefined') {
+    if (!filtersHydratedRef.current || !currentUser || typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(getSavedFilterViewsStorageKey(currentUser.id), JSON.stringify(savedFilterViews.slice(0, 8)));
-  }, [currentUser?.id, savedFilterViews]);
+    writeUserScopedStorage({
+      currentUser,
+      getKey: getSavedFilterViewsStorageKey,
+      value: savedFilterViews.slice(0, 8),
+    });
+  }, [currentUser, savedFilterViews]);
   useEffect(() => {
     setColumnOrderAfterPaymentDraft(currentUser?.columnOrderAfterPayment || []);
   }, [currentUser?.columnOrderAfterPayment]);
@@ -3026,16 +3040,21 @@ function DashboardApp() {
     pendingMonthOrderRef.current = nextOrder;
     setMonthOrder(nextOrder);
     try {
-      if (currentUser && typeof window !== 'undefined') {
-        window.localStorage.setItem(getMonthOrderStorageKey(currentUser.id), JSON.stringify(nextOrder));
-      }
+      writeUserScopedStorage({
+        currentUser,
+        getKey: getMonthOrderStorageKey,
+        value: nextOrder,
+      });
       await updateMonthOrderMutation({ monthOrder: nextOrder });
     } catch (error) {
       console.error('Failed to save month order', error);
       pendingMonthOrderRef.current = null;
       if (currentUser && typeof window !== 'undefined') {
-        const raw = window.localStorage.getItem(getMonthOrderStorageKey(currentUser.id));
-        const parsed = raw ? JSON.parse(raw) : null;
+        const parsed = readUserScopedStorage({
+          currentUser,
+          getKey: getMonthOrderStorageKey,
+          fallbackValue: null,
+        });
         setMonthOrder(Array.isArray(parsed) && parsed.length === monthNames.length ? parsed : (currentUser?.monthOrder?.length === monthNames.length ? currentUser.monthOrder : monthNames));
       } else {
         setMonthOrder(currentUser?.monthOrder?.length === monthNames.length ? currentUser.monthOrder : monthNames);
@@ -5547,20 +5566,73 @@ function getManagedOptionNames(optionsByKey, columnKey) {
   return (optionsByKey[columnKey] || []).map((option) => option.name);
 }
 
-function getMonthOrderStorageKey(userId) {
-  return `selfiebox-month-order-${userId}`;
+function getPreferenceStorageIdentity(user) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (email) {
+    return email;
+  }
+  return String(user?.id || '').trim();
 }
 
-function getBoardViewStorageKey(userId) {
-  return `selfiebox-board-view-${userId}`;
+function getMonthOrderStorageKey(userIdentity) {
+  return `selfiebox-month-order-${userIdentity}`;
 }
 
-function getSavedFilterViewsStorageKey(userId) {
-  return `selfiebox-saved-filter-views-${userId}`;
+function getBoardViewStorageKey(userIdentity) {
+  return `selfiebox-board-view-${userIdentity}`;
 }
 
-function getActiveFilterStateStorageKey(userId) {
-  return `selfiebox-active-filter-state-${userId}`;
+function getSavedFilterViewsStorageKey(userIdentity) {
+  return `selfiebox-saved-filter-views-${userIdentity}`;
+}
+
+function getActiveFilterStateStorageKey(userIdentity) {
+  return `selfiebox-active-filter-state-${userIdentity}`;
+}
+
+function readUserScopedStorage({ currentUser, getKey, fallbackValue = null }) {
+  if (!currentUser || typeof window === 'undefined') {
+    return fallbackValue;
+  }
+
+  const currentIdentity = getPreferenceStorageIdentity(currentUser);
+  const currentKey = getKey(currentIdentity);
+  const legacyKey = currentUser?.id ? getKey(String(currentUser.id)) : '';
+
+  try {
+    const currentRaw = window.localStorage.getItem(currentKey);
+    if (currentRaw !== null) {
+      return JSON.parse(currentRaw);
+    }
+
+    if (legacyKey && legacyKey !== currentKey) {
+      const legacyRaw = window.localStorage.getItem(legacyKey);
+      if (legacyRaw !== null) {
+        window.localStorage.setItem(currentKey, legacyRaw);
+        return JSON.parse(legacyRaw);
+      }
+    }
+  } catch {
+    return fallbackValue;
+  }
+
+  return fallbackValue;
+}
+
+function writeUserScopedStorage({ currentUser, getKey, value }) {
+  if (!currentUser || typeof window === 'undefined') {
+    return;
+  }
+
+  const currentIdentity = getPreferenceStorageIdentity(currentUser);
+  const currentKey = getKey(currentIdentity);
+  const legacyKey = currentUser?.id ? getKey(String(currentUser.id)) : '';
+  const serialized = JSON.stringify(value);
+
+  window.localStorage.setItem(currentKey, serialized);
+  if (legacyKey && legacyKey !== currentKey) {
+    window.localStorage.removeItem(legacyKey);
+  }
 }
 
 function columnTitle(columnKey) {
