@@ -751,6 +751,7 @@ function DashboardApp() {
       return;
     }
 
+    skipBoardViewPersistRef.current = true;
     try {
       const parsed = readUserScopedStorage({
         currentUser,
@@ -779,6 +780,10 @@ function DashboardApp() {
     if (!boardViewHydratedRef.current || !currentUser || typeof window === 'undefined' || search.trim()) {
       return;
     }
+    if (skipBoardViewPersistRef.current) {
+      skipBoardViewPersistRef.current = false;
+      return;
+    }
 
     writeUserScopedStorage({
       currentUser,
@@ -801,6 +806,8 @@ function DashboardApp() {
       return;
     }
 
+    skipActiveFiltersPersistRef.current = true;
+    skipSavedFilterViewsPersistRef.current = true;
     try {
       const savedViewsParsed = readUserScopedStorage({
         currentUser,
@@ -834,6 +841,10 @@ function DashboardApp() {
     if (!filtersHydratedRef.current || !currentUser || typeof window === 'undefined') {
       return;
     }
+    if (skipActiveFiltersPersistRef.current) {
+      skipActiveFiltersPersistRef.current = false;
+      return;
+    }
     writeUserScopedStorage({
       currentUser,
       getKey: getActiveFilterStateStorageKey,
@@ -848,6 +859,10 @@ function DashboardApp() {
   }, [currentUser, selectedBranches, selectedProducts, selectedStatuses, selectedPayments, selectedAttendants]);
   useEffect(() => {
     if (!filtersHydratedRef.current || !currentUser || typeof window === 'undefined') {
+      return;
+    }
+    if (skipSavedFilterViewsPersistRef.current) {
+      skipSavedFilterViewsPersistRef.current = false;
       return;
     }
     writeUserScopedStorage({
@@ -958,6 +973,9 @@ function DashboardApp() {
   const pendingMonthOrderRef = useRef(null);
   const boardViewHydratedRef = useRef(false);
   const filtersHydratedRef = useRef(false);
+  const skipBoardViewPersistRef = useRef(false);
+  const skipActiveFiltersPersistRef = useRef(false);
+  const skipSavedFilterViewsPersistRef = useRef(false);
   const eventsRef = useRef(events);
   const persistTimeoutsRef = useRef(new Map());
   const eventPersistVersionsRef = useRef(new Map());
