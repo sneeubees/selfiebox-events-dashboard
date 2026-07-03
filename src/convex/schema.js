@@ -80,6 +80,7 @@ export default defineSchema({
     date: v.optional(v.string()),
     draftMonth: v.optional(v.string()),
     hours: v.optional(v.string()),
+    time: v.optional(v.string()),
     branch: v.array(v.string()),
     products: v.array(v.string()),
     status: v.optional(v.string()),
@@ -302,4 +303,9 @@ export default defineSchema({
     label: v.string(),
     updatedAt: v.number(),
   }).index("by_column_key", ["columnKey"]),
+  websiteStats: defineTable({
+    date: v.string(),
+    visits: v.number(),
+    quotes: v.number(),
+  }).index("by_date", ["date"]),
 });

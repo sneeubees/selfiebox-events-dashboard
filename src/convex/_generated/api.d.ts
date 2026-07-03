@@ -19,6 +19,7 @@ import type * as commissions from "../commissions.js";
 import type * as documentNumbers from "../documentNumbers.js";
 import type * as events from "../events.js";
 import type * as files from "../files.js";
+import type * as http from "../http.js";
 import type * as imports from "../imports.js";
 import type * as labels from "../labels.js";
 import type * as maintenance from "../maintenance.js";
@@ -27,6 +28,10 @@ import type * as permissions from "../permissions.js";
 import type * as staticColumnLabels from "../staticColumnLabels.js";
 import type * as turnover from "../turnover.js";
 import type * as users from "../users.js";
+import type * as websiteContactEmail from "../websiteContactEmail.js";
+import type * as websiteQuoteEmail from "../websiteQuoteEmail.js";
+import type * as websiteQuotes from "../websiteQuotes.js";
+import type * as websiteStats from "../websiteStats.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -47,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   documentNumbers: typeof documentNumbers;
   events: typeof events;
   files: typeof files;
+  http: typeof http;
   imports: typeof imports;
   labels: typeof labels;
   maintenance: typeof maintenance;
@@ -55,6 +61,10 @@ declare const fullApi: ApiFromModules<{
   staticColumnLabels: typeof staticColumnLabels;
   turnover: typeof turnover;
   users: typeof users;
+  websiteContactEmail: typeof websiteContactEmail;
+  websiteQuoteEmail: typeof websiteQuoteEmail;
+  websiteQuotes: typeof websiteQuotes;
+  websiteStats: typeof websiteStats;
   workspaces: typeof workspaces;
 }>;
 

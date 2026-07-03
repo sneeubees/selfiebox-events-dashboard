@@ -40,6 +40,7 @@ const STATIC_COLUMN_TYPES = {
   name: 'text',
   date: 'date',
   hours: 'text',
+  time: 'text',
   branch: 'multiItem',
   products: 'multiItem',
   status: 'singleItem',
@@ -66,6 +67,11 @@ const EXTENDED_BOARD_COLUMNS = [
   { key: 'exVatAuto', label: 'ExVAT Auto' },
   ...BOARD_COLUMNS.slice(14),
 ];
+// Inject the "Time" column right after "Hours" (start–finish range from website quotes)
+const _hoursColIdx = EXTENDED_BOARD_COLUMNS.findIndex((column) => column.key === 'hours');
+if (_hoursColIdx >= 0 && !EXTENDED_BOARD_COLUMNS.some((column) => column.key === 'time')) {
+  EXTENDED_BOARD_COLUMNS.splice(_hoursColIdx + 1, 0, { key: 'time', label: 'Time' });
+}
 const STATIC_COLUMNS = EXTENDED_BOARD_COLUMNS.map((column) => ({
   ...column,
   type: STATIC_COLUMN_TYPES[column.key] || 'text',
@@ -84,6 +90,7 @@ const eventDefaults = {
   date: '',
   draftMonth: '',
   hours: '',
+  time: '',
   branch: [],
   products: [],
   status: '',
@@ -443,6 +450,7 @@ function getColumnWidth(column) {
   if (column.key === 'name') return 260;
   if (column.key === 'date') return 70;
   if (column.key === 'hours') return 120;
+  if (column.key === 'time') return 130;
   if (column.key === 'branch') return 100;
   if (column.key === 'products') return 136;
   if (column.key === 'status') return 132;
@@ -476,6 +484,7 @@ function serializeEventForConvex(event) {
     date: event.date || '',
     draftMonth: event.draftMonth || '',
     hours: event.hours || '',
+    time: event.time || '',
     branch: event.branch || [],
     products: event.products || [],
     status: event.status || '',
@@ -523,6 +532,7 @@ function DashboardApp() {
     canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip'
   );
   const hasAnyEvents = useQuery(api.events.hasAny, canAccessDashboard ? {} : 'skip');
+  const websiteStats = useQuery(api.websiteStats.getWebsiteStats, canAccessDashboard ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
   const customColumnRecords = useQuery(api.columns.listAll, canAccessDashboard ? {} : 'skip');
   const staticColumnLabelRecords = useQuery(api.staticColumnLabels.listAll, canAccessDashboard ? {} : 'skip');
@@ -582,6 +592,8 @@ function DashboardApp() {
   const [showCommissionSummaryModal, setShowCommissionSummaryModal] = useState(false);
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
   const [showTurnoverModal, setShowTurnoverModal] = useState(false);
+  const [showWebsiteStats, setShowWebsiteStats] = useState(false);
+  const [statsRange, setStatsRange] = useState('7d');
   const [turnoverRegion, setTurnoverRegion] = useState('combined');
   const [turnoverNetProfitPct, setTurnoverNetProfitPct] = useState('70');
   const [commissionRatesForm, setCommissionRatesForm] = useState({
@@ -4438,7 +4450,44 @@ function DashboardApp() {
         </div>
       </section>
 
-      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><span>Software developed by SelfieBox - All rights reserved</span></footer>
+      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button type="button" onClick={() => setShowWebsiteStats(true)} style={{ background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Website Stats</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
+            {showWebsiteStats && (() => {
+        const RANGES = [['today','Today',1],['7d','7 Days',7],['30d','30 Days',30],['6m','6 Months',182],['all','All Time',100000]];
+        let visits = 0, quotes = 0;
+        if (websiteStats && websiteStats.days) {
+          const n = (RANGES.find((r) => r[0] === statsRange) || RANGES[1])[2];
+          const c = new Date(websiteStats.today + 'T00:00:00');
+          c.setDate(c.getDate() - (n - 1));
+          const cutoff = c.toISOString().slice(0, 10);
+          for (const d of websiteStats.days) { if (d.date >= cutoff) { visits += d.visits; quotes += d.quotes; } }
+        }
+        return (
+          <div onClick={() => setShowWebsiteStats(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(6,12,26,.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '26px 28px', width: 'min(480px,92vw)', boxShadow: '0 30px 80px -20px rgba(0,0,0,.5)' }}>
+              <div style={{ font: '800 20px/1.2 system-ui,sans-serif', color: '#14203a' }}>Website Stats</div>
+              <div style={{ fontSize: 13, color: '#6b7a99', margin: '4px 0 18px' }}>selfiebox.co.za</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+                {RANGES.map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => setStatsRange(key)} style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (statsRange === key ? '#2f6fdc' : '#d5deee'), background: statsRange === key ? '#2f6fdc' : '#fff', color: statsRange === key ? '#fff' : '#44557a', font: '600 12px system-ui,sans-serif', cursor: 'pointer' }}>{label}</button>
+                ))}
+              </div>
+              {!websiteStats ? (
+                <div style={{ color: '#6b7a99', padding: '10px 0' }}>Loading…</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  {[['Visits', visits], ['Quote Requests', quotes]].map(([label, num]) => (
+                    <div key={label} style={{ background: '#f2f6fc', borderRadius: 12, padding: '20px 14px', textAlign: 'center' }}>
+                      <div style={{ font: '800 30px/1 system-ui,sans-serif', color: '#2f6fdc' }}>{num}</div>
+                      <div style={{ fontSize: 12, color: '#54648a', marginTop: 6 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button type="button" onClick={() => setShowWebsiteStats(false)} style={{ marginTop: 20, width: '100%', padding: 11, border: 0, borderRadius: 999, background: '#2f6fdc', color: '#fff', font: '700 14px system-ui,sans-serif', cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
