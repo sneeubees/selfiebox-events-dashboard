@@ -153,7 +153,6 @@ function BookingAddressInput({ value, readOnly, onChange, onPlaceSelect, inputEl
         autocompleteRef.current = new google.maps.places.Autocomplete(inputRef.current, {
           componentRestrictions: { country: "za" },
           fields: ["formatted_address", "geometry", "place_id", "name"],
-          types: ["geocode"],
         });
         listenerRef.current = autocompleteRef.current.addListener("place_changed", () => {
           const place = autocompleteRef.current?.getPlace?.();
