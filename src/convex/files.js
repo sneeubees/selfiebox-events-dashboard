@@ -68,6 +68,22 @@ function parseLegacyTimestamp() {
   return Date.now();
 }
 
+async function deleteStoredFileIfPresent(ctx, storageId, fileName) {
+  if (!storageId) {
+    return;
+  }
+
+  try {
+    await ctx.storage.delete(storageId);
+  } catch (error) {
+    console.warn("Could not delete stored event file", {
+      storageId: String(storageId),
+      fileName,
+      message: error?.message || String(error),
+    });
+  }
+}
+
 
 export const listEventFiles = query({
   args: { eventKey: v.string() },
@@ -211,16 +227,12 @@ export const removeFile = mutation({
 
     const eventRecord = await ctx.db.get(fileRecord.eventId);
     if (!eventRecord) {
-      if (fileRecord.storageId) {
-        await ctx.storage.delete(fileRecord.storageId);
-      }
+      await deleteStoredFileIfPresent(ctx, fileRecord.storageId, fileRecord.name);
       await ctx.db.delete(args.fileId);
       return null;
     }
 
-    if (fileRecord.storageId) {
-      await ctx.storage.delete(fileRecord.storageId);
-    }
+    await deleteStoredFileIfPresent(ctx, fileRecord.storageId, fileRecord.name);
     await ctx.db.delete(args.fileId);
 
     const now = Date.now();
