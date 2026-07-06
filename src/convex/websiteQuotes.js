@@ -245,7 +245,6 @@ function buildQuoteSelectionNotes(formData) {
 }
 
 async function resolveBranchAbbreviation(ctx, region) {
-  const preferred = REGION_TO_BRANCH[region] || "";
   const activeBranchOptions = await ctx.db
     .query("labelOptions")
     .withIndex("by_column", (q) => q.eq("columnKey", "branch"))
@@ -257,10 +256,11 @@ async function resolveBranchAbbreviation(ctx, region) {
       .filter(Boolean)
   );
 
-  if (preferred && activeSet.has(preferred)) {
-    return preferred;
-  }
-
+  // A dedicated, active branch matching the submitted province's name wins
+  // first (branches for North West / Limpopo / Mpumalanga have since been
+  // added with their own office + email) - REGION_TO_BRANCH is only the
+  // fallback for provinces that have never had their own branch (e.g. Free
+  // State, Northern Cape), so it must not pre-empt a more specific match.
   const exactMatch = activeBranchOptions.find(
     (option) =>
       option.isActive !== false &&
@@ -268,6 +268,11 @@ async function resolveBranchAbbreviation(ctx, region) {
   );
   if (exactMatch) {
     return normalizeString(exactMatch.abbreviation || exactMatch.optionKey || exactMatch.name);
+  }
+
+  const preferred = REGION_TO_BRANCH[region] || "";
+  if (preferred && activeSet.has(preferred)) {
+    return preferred;
   }
 
   return activeSet.has("GP") ? "GP" : Array.from(activeSet)[0] || "";
