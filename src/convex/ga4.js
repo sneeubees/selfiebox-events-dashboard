@@ -2,10 +2,16 @@ import { v } from "convex/values";
 import { action, mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-const SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
+// analytics.readonly = GA4 traffic stats; webmasters.readonly = Search Console
+// (SEO rankings). Both are requested together so one connect flow covers both.
+const SCOPES = [
+  "https://www.googleapis.com/auth/analytics.readonly",
+  "https://www.googleapis.com/auth/webmasters.readonly",
+];
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const DATA_API = "https://analyticsdata.googleapis.com/v1beta";
+const GSC_API = "https://www.googleapis.com/webmasters/v3";
 
 // ---------- auth helpers ----------
 async function findUser(ctx, clerkId, email) {
@@ -60,7 +66,7 @@ export const getConnectUrl = query({
       client_id: clientId,
       redirect_uri: redirect,
       response_type: "code",
-      scope: SCOPE,
+      scope: SCOPES.join(" "),
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: "true",
@@ -305,5 +311,161 @@ export const fetchStats = internalAction({
     } catch (e) {
       return { connected: true, canManage: true, error: "report_failed", detail: String(e.message || e) };
     }
+  },
+});
+
+// ---------- Google Search Console (SEO rankings) ----------
+function ymd(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+function daysAgoDate(n) {
+  return ymd(new Date(Date.now() - n * 86400000));
+}
+
+async function gscSites(accessToken) {
+  const res = await fetch(`${GSC_API}/sites`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const json = await res.json();
+  if (!res.ok) {
+    const e = new Error("gsc_sites_failed:" + JSON.stringify(json.error || json).slice(0, 200));
+    e.status = res.status;
+    throw e;
+  }
+  return json.siteEntry || [];
+}
+
+async function gscQuery(accessToken, siteUrl, body) {
+  const res = await fetch(`${GSC_API}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const e = new Error("gsc_query_failed:" + JSON.stringify(json.error || json).slice(0, 300));
+    e.status = res.status;
+    throw e;
+  }
+  return json;
+}
+
+// Prefer the selfiebox.co.za domain property, then any verified property.
+function pickSite(entries) {
+  const usable = (entries || []).filter((s) => s.permissionLevel && s.permissionLevel !== "siteUnverifiedUser");
+  return (
+    usable.find((s) => s.siteUrl === "sc-domain:selfiebox.co.za") ||
+    usable.find((s) => String(s.siteUrl).includes("selfiebox.co.za")) ||
+    usable[0] ||
+    null
+  );
+}
+
+function aggRow(rep) {
+  const r = rep.rows && rep.rows[0];
+  return r
+    ? { clicks: num(r.clicks), impressions: num(r.impressions), ctr: r.ctr || 0, position: r.position || 0 }
+    : { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+}
+
+// Internal: pulls Search Console rankings. Compares a 28-day window (ending 3
+// days ago — GSC data lags ~2-3 days) against the prior 28 days so we can show
+// whether clicks/impressions/position moved up or down.
+export const fetchSeo = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
+    if (!refreshToken) return { connected: false, canManage: true };
+
+    let accessToken;
+    try {
+      accessToken = await accessTokenFromRefresh(refreshToken);
+    } catch (e) {
+      return { connected: true, canManage: true, error: "reauth_needed", detail: String(e.message || e) };
+    }
+
+    let sites;
+    try {
+      sites = await gscSites(accessToken);
+    } catch (e) {
+      // 403 here means the refresh token predates the webmasters scope.
+      if (e.status === 403) return { connected: true, canManage: true, needsSeoScope: true };
+      return { connected: true, canManage: true, error: "seo_failed", detail: String(e.message || e) };
+    }
+
+    const site = pickSite(sites);
+    if (!site) return { connected: true, canManage: true, noProperty: true };
+
+    const end = daysAgoDate(3);
+    const start = daysAgoDate(30);
+    const prevEnd = daysAgoDate(31);
+    const prevStart = daysAgoDate(58);
+
+    try {
+      const [curTot, prevTot, queries, pages, prevQueries] = await Promise.all([
+        gscQuery(accessToken, site.siteUrl, { startDate: start, endDate: end }),
+        gscQuery(accessToken, site.siteUrl, { startDate: prevStart, endDate: prevEnd }),
+        gscQuery(accessToken, site.siteUrl, { startDate: start, endDate: end, dimensions: ["query"], rowLimit: 12 }),
+        gscQuery(accessToken, site.siteUrl, { startDate: start, endDate: end, dimensions: ["page"], rowLimit: 8 }),
+        gscQuery(accessToken, site.siteUrl, { startDate: prevStart, endDate: prevEnd, dimensions: ["query"], rowLimit: 300 }),
+      ]);
+
+      const prevPosByQuery = {};
+      (prevQueries.rows || []).forEach((r) => { prevPosByQuery[r.keys[0]] = r.position; });
+
+      const c = aggRow(curTot);
+      const p = aggRow(prevTot);
+      return {
+        connected: true,
+        canManage: true,
+        fetchedAt: Date.now(),
+        property: site.siteUrl,
+        range: { start, end },
+        totals: {
+          clicks: c.clicks, clicksDelta: c.clicks - p.clicks,
+          impressions: c.impressions, impressionsDelta: c.impressions - p.impressions,
+          ctr: c.ctr, ctrDelta: c.ctr - p.ctr,
+          // position: lower is better, so a NEGATIVE delta = moved up the rankings.
+          position: c.position, positionDelta: c.position - p.position,
+        },
+        queries: (queries.rows || []).map((r) => {
+          const q = r.keys[0];
+          const prev = prevPosByQuery[q];
+          return {
+            query: q,
+            clicks: num(r.clicks),
+            impressions: num(r.impressions),
+            position: r.position || 0,
+            positionDelta: prev != null ? (r.position || 0) - prev : null,
+          };
+        }),
+        pages: (pages.rows || []).map((r) => ({
+          page: r.keys[0],
+          clicks: num(r.clicks),
+          impressions: num(r.impressions),
+          position: r.position || 0,
+        })),
+      };
+    } catch (e) {
+      if (e.status === 403) return { connected: true, canManage: true, needsSeoScope: true };
+      return { connected: true, canManage: true, error: "seo_failed", detail: String(e.message || e) };
+    }
+  },
+});
+
+// Public entry point for SEO stats: admin-gated, delegates to fetchSeo.
+export const getSeoStats = action({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { connected: false, canManage: false };
+    try {
+      const token = await ctx.runQuery(internal.ga4.getTokenIfAdmin, {
+        clerkId: identity.subject ?? identity.tokenIdentifier ?? "",
+        email: identity.email || "",
+      });
+      if (!token) return { connected: false, canManage: true };
+    } catch {
+      return { connected: false, canManage: false };
+    }
+    return await ctx.runAction(internal.ga4.fetchSeo, {});
   },
 });
