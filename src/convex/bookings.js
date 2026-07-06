@@ -284,9 +284,16 @@ async function buildLinkedFormFields(ctx, eventRecord) {
 
 async function buildMergedBookingFormData(ctx, eventRecord, formData) {
   const linkedFields = await buildLinkedFormFields(ctx, eventRecord);
+  const sanitized = sanitizeFormData(formData);
   return {
-    ...sanitizeFormData(formData),
+    ...sanitized,
     ...linkedFields,
+    // The customer's originally-submitted province must win over the event's
+    // operational branch (e.g. North West bookings route to the Gauteng branch
+    // for fulfillment) - only fall back to the branch name when no true region
+    // was ever submitted (e.g. an internally-created event), matching the same
+    // formData.region || regionName precedence used in BookingPage.js/bookingEmails.js.
+    region: sanitized.region || linkedFields.region,
   };
 }
 
