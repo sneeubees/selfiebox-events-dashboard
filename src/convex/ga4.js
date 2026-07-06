@@ -153,16 +153,16 @@ function num(v) {
 }
 
 // pull a totals row (no dimensions) into a labelled object using the metric order
-const TOTAL_METRICS = ["sessions", "totalUsers", "screenPageViews", "averageSessionDuration", "conversions"];
+const TOTAL_METRICS = ["sessions", "totalUsers", "screenPageViews", "averageSessionDuration"];
 function parseTotals(report) {
   const row = report.rows && report.rows[0];
-  const vals = row ? row.metricValues.map((m) => num(m.value)) : [0, 0, 0, 0, 0];
+  const vals = row ? row.metricValues.map((m) => num(m.value)) : [0, 0, 0, 0];
   return {
     sessions: vals[0],
     users: vals[1],
     pageviews: vals[2],
     avgEngagementSec: Math.round(vals[3]),
-    conversions: vals[4],
+    conversions: 0, // set from convRequest below (the built-in metric needs Key events configured)
   };
 }
 
@@ -171,6 +171,20 @@ function totalsRequest(startDate, endDate) {
     dateRanges: [{ startDate, endDate }],
     metrics: TOTAL_METRICS.map((name) => ({ name })),
   };
+}
+
+// Count our lead/form events directly (works whether or not they're marked as
+// Key events in GA4).
+function convRequest(startDate, endDate, events) {
+  return {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: "eventName" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: events } } },
+  };
+}
+function sumConv(report) {
+  return (report.rows || []).reduce((s, r) => s + num(r.metricValues[0].value), 0);
 }
 
 export const getTokenRaw = internalQuery({
@@ -218,10 +232,13 @@ export const fetchStats = internalAction({
 
     const CONV_EVENTS = ["quote_submit", "contact_submit", "generate_lead", "Lead"];
     try {
-      const [today, last7, last30, daily, pages, sources, convByEvent] = await Promise.all([
+      const [today, last7, last30, convToday, conv7, conv30, daily, pages, sources, convByEvent] = await Promise.all([
         runReport(accessToken, propertyId, totalsRequest("today", "today")),
         runReport(accessToken, propertyId, totalsRequest("6daysAgo", "today")),
         runReport(accessToken, propertyId, totalsRequest("29daysAgo", "today")),
+        runReport(accessToken, propertyId, convRequest("today", "today", CONV_EVENTS)),
+        runReport(accessToken, propertyId, convRequest("6daysAgo", "today", CONV_EVENTS)),
+        runReport(accessToken, propertyId, convRequest("29daysAgo", "today", CONV_EVENTS)),
         runReport(accessToken, propertyId, {
           dateRanges: [{ startDate: "29daysAgo", endDate: "today" }],
           dimensions: [{ name: "date" }],
@@ -259,13 +276,20 @@ export const fetchStats = internalAction({
         users: num(r.metricValues[1].value),
       }));
 
+      const todayTotals = parseTotals(today);
+      const last7Totals = parseTotals(last7);
+      const last30Totals = parseTotals(last30);
+      todayTotals.conversions = sumConv(convToday);
+      last7Totals.conversions = sumConv(conv7);
+      last30Totals.conversions = sumConv(conv30);
+
       return {
         connected: true,
         canManage: true,
         fetchedAt: Date.now(),
-        today: parseTotals(today),
-        last7: parseTotals(last7),
-        last30: parseTotals(last30),
+        today: todayTotals,
+        last7: last7Totals,
+        last30: last30Totals,
         daily: daysRows,
         topPages: (pages.rows || []).map((r) => ({
           path: r.dimensionValues[0].value,
