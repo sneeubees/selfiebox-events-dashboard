@@ -766,14 +766,28 @@ textarea { resize: vertical; min-height: 110px; }
 .logistics-bar-empty { left: 0; width: 100%; background: transparent; color: var(--muted); }
 .filter-group h4 { font-size: 0.7rem; margin-bottom: 6px; }
 .filter-options { gap: 2px; }
-.filter-options.is-scrollable { max-height: 170px; overflow-y: auto; padding-right: 2px; }
+.filter-options.is-scrollable { max-height: 300px; overflow-y: auto; padding-right: 2px; }
 .export-dialog p { margin: 0; color: var(--muted); font-size: 0.8rem; }
 .export-column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; max-height: 46vh; overflow-y: auto; padding-right: 4px; }
 .export-column-option { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--text); }
 .export-column-option input { margin: 0; }
-.filter-option { min-width: 0; font-size: 0.66rem; line-height: 1; padding: 1px 0; }
+.filter-option { min-width: 0; font-size: 0.68rem; line-height: 1; padding: 3px 0; }
 .filter-option span { display: inline-block; max-width: 19ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.filter-option input { transform: scale(0.85); }
+/* Custom-styled filter checkboxes (theme-aware) - replaces the plain native box
+   with a rounded box + brand-blue tick when checked. */
+.filter-option input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; transform: none;
+  width: 15px; height: 15px; margin: 0; flex: 0 0 auto;
+  border: 1.5px solid var(--line); border-radius: 4px; background: var(--panel-alt);
+  display: inline-grid; place-content: center; cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.filter-option input[type="checkbox"]:hover { border-color: var(--blue); }
+.filter-option input[type="checkbox"]:checked { background: var(--blue); border-color: var(--blue); }
+.filter-option input[type="checkbox"]:checked::after {
+  content: ''; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
 .changelog-modal { display: grid; gap: 12px; max-height: min(72vh, 700px); overflow: auto; padding-right: 4px; }
 .changelog-version { display: grid; gap: 10px; padding-top: 4px; }
 .changelog-version + .changelog-version { padding-top: 14px; border-top: 1px solid var(--line); }
