@@ -1434,15 +1434,6 @@ textarea { resize: vertical; min-height: 110px; }
   align-items: center;
   gap: 8px;
 }
-:root[data-theme="dark"] .month-header-main > strong::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-  flex: 0 0 auto;
-}
 :root[data-theme="dark"] .month-accent-1 { --month-accent: #b794f6; }
 :root[data-theme="dark"] .month-accent-2 { --month-accent: #2dd4bf; }
 :root[data-theme="dark"] .month-accent-3 { --month-accent: #60a5fa; }
