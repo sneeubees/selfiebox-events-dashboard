@@ -174,7 +174,7 @@ button { cursor: pointer; }
 .filter-save-button:hover { border-color: #9ad0a7; background: #d4f0db; color: #2f6e40; }
 .saved-filter-chip-stack { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 0; max-width: 100%; height: 34px; margin-left: 4px; flex: 1; }
 .saved-filter-chip-label { font-size: 0.48rem; line-height: 1; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5f8e69; padding-left: 4px; white-space: nowrap; }
-.saved-filter-chip-row { display: flex; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: none; }
+.saved-filter-chip-row { display: flex; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: none; padding: 2px 2px 2px 3px; }
 .saved-filter-chip-row::-webkit-scrollbar { display: none; }
 .saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 124px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 20px 0 0; flex: 0 0 auto; min-height: 18px; }
 .saved-filter-chip.is-active { border-color: #b6dfbf; background: #e4f8e8; }
