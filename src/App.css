@@ -1154,7 +1154,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .topbar-version-button { color: #b5ccff; }
 :root[data-theme="dark"] .topbar-version-button:hover { color: #d7e5ff; }
 :root[data-theme="dark"] .workspace-text-button,
-:root[data-theme="dark"] .saved-filter-chip-button,
 :root[data-theme="dark"] .search-clear-button,
 :root[data-theme="dark"] .profile-upload-button,
 :root[data-theme="dark"] .month-export-button,
@@ -1240,7 +1239,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .booking-address-popover,
 :root[data-theme="dark"] .booking-terms-card,
 :root[data-theme="dark"] .booking-extras-grid,
-:root[data-theme="dark"] .saved-filter-chip,
 :root[data-theme="dark"] .filter-open-button,
 :root[data-theme="dark"] .tag-empty,
 :root[data-theme="dark"] .compact-name-pill,
@@ -1299,6 +1297,42 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .row-copy:hover {
   background: #1c4a30;
 }
+/* Saved-filter chip: this pill has a deliberate two-state colour language in
+   light mode (warm gold = inactive, green = active) that got flattened into
+   the generic navy "misc pill" group in dark mode - the button INSIDE the
+   chip also had its own opaque navy background from the generic form-input
+   group, which visually sat on top of the pill's colour entirely (looked
+   like "the pill is behind a rectangular box"). Both needed their own
+   dedicated dark treatment instead of borrowing from unrelated groups. */
+:root[data-theme="dark"] .saved-filter-chip {
+  background: #3c2d15;
+  border-color: #6b5125;
+}
+:root[data-theme="dark"] .saved-filter-chip.is-active {
+  background: #1d3a28;
+  border-color: #2d5a3d;
+}
+:root[data-theme="dark"] .saved-filter-chip-button {
+  background: transparent;
+  color: #f4ddb0;
+}
+:root[data-theme="dark"] .saved-filter-chip-button:hover {
+  color: #ffe9c2;
+}
+:root[data-theme="dark"] .saved-filter-chip.is-active .saved-filter-chip-button {
+  color: #bde5c6;
+}
+:root[data-theme="dark"] .saved-filter-chip-close {
+  background: rgba(255, 255, 255, 0.14);
+  color: #f4ddb0;
+}
+:root[data-theme="dark"] .saved-filter-chip-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+:root[data-theme="dark"] .saved-filter-chip.is-active .saved-filter-chip-close {
+  background: rgba(255, 255, 255, 0.14);
+  color: #bde5c6;
+}
 /* Month header accents: the light-mode colours were tuned for a near-white
    background and read as muddy/low-contrast on dark navy, so dark mode gets
    its own brighter set (same hue per month, boosted for contrast) plus a
@@ -1333,7 +1367,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .workspace-text-button,
 :root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .profile-upload-button,
-:root[data-theme="dark"] .saved-filter-chip-button,
 :root[data-theme="dark"] .month-export-button,
 :root[data-theme="dark"] .location-pin-button,
 :root[data-theme="dark"] .modal-close-x {
