@@ -694,6 +694,21 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-toolbar label { display: grid; gap: 6px; min-width: 220px; }
 .turnover-profit-input { width: 120px; }
 .turnover-toolbar select, .turnover-toolbar input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+
+/* Fully-themed dropdown (replaces native <select> whose popup ignores CSS). */
+.custom-select { position: relative; width: 100%; }
+.custom-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.custom-select-trigger:hover, .custom-select.is-open .custom-select-trigger { border-color: var(--blue); }
+.custom-select-caret { flex: 0 0 auto; color: var(--muted); transition: transform 140ms ease; }
+.custom-select.is-open .custom-select-caret { transform: rotate(180deg); }
+.custom-select-menu { position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 60; display: grid; gap: 2px; padding: 6px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 40px rgba(2, 6, 18, 0.4); max-height: 260px; overflow-y: auto; }
+.custom-select-option { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.custom-select-option:hover { background: var(--panel-alt); }
+.custom-select-option.is-selected { background: var(--blue); color: #fff; }
+.custom-select-check { width: 12px; flex: 0 0 auto; display: inline-flex; justify-content: center; font-size: 0.8rem; }
+:root[data-theme="dark"] .custom-select-trigger { background: #1a2740; }
+:root[data-theme="dark"] .custom-select-menu { background: #16264a; border-color: #34507e; }
+:root[data-theme="dark"] .custom-select-option:hover { background: #22345c; }
 .turnover-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: min(68vh, 760px); min-height: 0; background: #fff; }
 .turnover-table { display: grid; grid-template-columns: 92px repeat(12, 112px) 112px 98px 112px 112px 110px; align-items: stretch; min-width: 1932px; }
 .turnover-table-header { position: sticky; top: 0; z-index: 1; background: #d3ddec; color: #43526d; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }

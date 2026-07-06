@@ -4921,11 +4921,7 @@ function DashboardApp() {
             <div className="turnover-toolbar">
               <label>
                 <span>Region</span>
-                <select value={turnoverRegion} onChange={(event) => setTurnoverRegion(event.target.value)}>
-                  {turnoverRegionOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <CustomSelect value={turnoverRegion} options={turnoverRegionOptions} onChange={setTurnoverRegion} />
               </label>
               <label>
                 <span>Nett profit %</span>
@@ -6574,6 +6570,42 @@ function ComingSoonView({ title, blurb }) {
 function ActivityEntry({ entry, title, eventName = '', eventKey = '', onEventClick = null }) {
   const clickableEvent = eventName && eventKey && typeof onEventClick === 'function';
   return <article className="activity-item" key={entry.id}><div className="activity-item-body"><p title={title}>{eventName ? <>{clickableEvent ? <button className="activity-event-link" type="button" onClick={() => onEventClick(eventKey)}><strong>{eventName}</strong></button> : <strong>{eventName}</strong>}{entry.text ? <> {entry.text}</> : null}</> : entry.text}</p><div className="activity-item-meta"><time>{entry.date}</time><span>-</span><span>{entry.user || 'Unknown user'}</span></div></div></article>;
+}
+
+// Themed dropdown that replaces the native <select> (whose popup the OS draws
+// and won't dark-theme). Fully styled + closes on outside click / Escape.
+function CustomSelect({ value, options, onChange, placeholder = 'Select', className = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const current = options.find((o) => o.value === value);
+  return (
+    <div className={`custom-select ${open ? 'is-open' : ''} ${className}`.trim()} ref={ref}>
+      <button type="button" className="custom-select-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span>{current ? current.label : placeholder}</span>
+        <svg className="custom-select-caret" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open ? (
+        <div className="custom-select-menu" role="listbox">
+          {options.map((o) => (
+            <button type="button" key={o.value} role="option" aria-selected={o.value === value}
+              className={`custom-select-option ${o.value === value ? 'is-selected' : ''}`}
+              onClick={() => { onChange(o.value); setOpen(false); }}>
+              <span className="custom-select-check">{o.value === value ? '✓' : ''}</span>
+              <span>{o.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function CustomSingleTag({ value, styles, width, placeholder = 'Select' }) {
