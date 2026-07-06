@@ -196,9 +196,12 @@ export const getTokenRaw = internalQuery({
 });
 
 // Public entry point: admin-gated, then delegates to the internal fetcher.
+// A date range drives EVERY section (KPIs + pages + sources + conversions +
+// trend), so the period toggle filters the whole page. GA4 accepts relative
+// strings ("today", "6daysAgo") or absolute "YYYY-MM-DD".
 export const getWebsiteStats = action({
-  args: {},
-  handler: async (ctx) => {
+  args: { startDate: v.optional(v.string()), endDate: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { connected: false, canManage: false };
     try {
@@ -210,15 +213,23 @@ export const getWebsiteStats = action({
     } catch {
       return { connected: false, canManage: false };
     }
-    return await ctx.runAction(internal.ga4.fetchStats, {});
+    return await ctx.runAction(internal.ga4.fetchStats, {
+      startDate: args.startDate || "6daysAgo",
+      endDate: args.endDate || "today",
+    });
   },
 });
 
+function trendLabel(raw, hourly) {
+  if (hourly) return `${String(raw).padStart(2, "0")}:00`;
+  return raw && raw.length === 8 ? `${raw.slice(6, 8)}/${raw.slice(4, 6)}` : raw;
+}
+
 // Internal: does the actual GA4 work (no auth) so it can be run standalone
-// via `convex run ga4:fetchStats` for validation.
+// via `convex run ga4:fetchStats '{"startDate":"today","endDate":"today"}'`.
 export const fetchStats = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: { startDate: v.string(), endDate: v.string() },
+  handler: async (ctx, { startDate, endDate }) => {
     const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
     if (!refreshToken) return { connected: false, canManage: true };
 
@@ -231,66 +242,52 @@ export const fetchStats = internalAction({
     }
 
     const CONV_EVENTS = ["quote_submit", "contact_submit", "generate_lead", "Lead"];
+    const dr = [{ startDate, endDate }];
+    const singleDay = startDate === endDate; // e.g. "today".."today" -> show hourly
     try {
-      const [today, last7, last30, convToday, conv7, conv30, daily, pages, sources, convByEvent] = await Promise.all([
-        runReport(accessToken, propertyId, totalsRequest("today", "today")),
-        runReport(accessToken, propertyId, totalsRequest("6daysAgo", "today")),
-        runReport(accessToken, propertyId, totalsRequest("29daysAgo", "today")),
-        runReport(accessToken, propertyId, convRequest("today", "today", CONV_EVENTS)),
-        runReport(accessToken, propertyId, convRequest("6daysAgo", "today", CONV_EVENTS)),
-        runReport(accessToken, propertyId, convRequest("29daysAgo", "today", CONV_EVENTS)),
+      const trendReq = singleDay
+        ? { dateRanges: dr, dimensions: [{ name: "hour" }], metrics: [{ name: "sessions" }], orderBys: [{ dimension: { dimensionName: "hour" } }] }
+        : { dateRanges: dr, dimensions: [{ name: "date" }], metrics: [{ name: "sessions" }], orderBys: [{ dimension: { dimensionName: "date" } }] };
+      const [totals, convTotal, trend, pages, sources, convByEvent] = await Promise.all([
+        runReport(accessToken, propertyId, { dateRanges: dr, metrics: TOTAL_METRICS.map((name) => ({ name })) }),
+        runReport(accessToken, propertyId, convRequest(startDate, endDate, CONV_EVENTS)),
+        runReport(accessToken, propertyId, trendReq),
         runReport(accessToken, propertyId, {
-          dateRanges: [{ startDate: "29daysAgo", endDate: "today" }],
-          dimensions: [{ name: "date" }],
-          metrics: [{ name: "sessions" }, { name: "totalUsers" }],
-          orderBys: [{ dimension: { dimensionName: "date" } }],
-        }),
-        runReport(accessToken, propertyId, {
-          dateRanges: [{ startDate: "29daysAgo", endDate: "today" }],
+          dateRanges: dr,
           dimensions: [{ name: "pagePath" }],
           metrics: [{ name: "screenPageViews" }, { name: "averageSessionDuration" }],
           orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
           limit: 8,
         }),
         runReport(accessToken, propertyId, {
-          dateRanges: [{ startDate: "29daysAgo", endDate: "today" }],
+          dateRanges: dr,
           dimensions: [{ name: "sessionDefaultChannelGroup" }],
           metrics: [{ name: "sessions" }],
           orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
           limit: 8,
         }),
         runReport(accessToken, propertyId, {
-          dateRanges: [{ startDate: "29daysAgo", endDate: "today" }],
+          dateRanges: dr,
           dimensions: [{ name: "eventName" }],
           metrics: [{ name: "eventCount" }],
-          dimensionFilter: {
-            filter: { fieldName: "eventName", inListFilter: { values: CONV_EVENTS } },
-          },
+          dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: CONV_EVENTS } } },
           orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
         }),
       ]);
 
-      const daysRows = (daily.rows || []).map((r) => ({
-        date: r.dimensionValues[0].value, // YYYYMMDD
-        sessions: num(r.metricValues[0].value),
-        users: num(r.metricValues[1].value),
-      }));
-
-      const todayTotals = parseTotals(today);
-      const last7Totals = parseTotals(last7);
-      const last30Totals = parseTotals(last30);
-      todayTotals.conversions = sumConv(convToday);
-      last7Totals.conversions = sumConv(conv7);
-      last30Totals.conversions = sumConv(conv30);
+      const kpi = parseTotals(totals);
+      kpi.conversions = sumConv(convTotal);
 
       return {
         connected: true,
         canManage: true,
         fetchedAt: Date.now(),
-        today: todayTotals,
-        last7: last7Totals,
-        last30: last30Totals,
-        daily: daysRows,
+        trendMode: singleDay ? "hourly" : "daily",
+        kpi,
+        daily: (trend.rows || []).map((r) => ({
+          label: trendLabel(r.dimensionValues[0].value, singleDay),
+          sessions: num(r.metricValues[0].value),
+        })),
         topPages: (pages.rows || []).map((r) => ({
           path: r.dimensionValues[0].value,
           views: num(r.metricValues[0].value),
