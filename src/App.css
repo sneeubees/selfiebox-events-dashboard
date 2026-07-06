@@ -187,7 +187,7 @@ button { cursor: pointer; }
 .board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: visible; }
-.board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #2f3440; background: #f3f5f9; }
+.board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #2f3440; background: #f3f5f9; }
 .column-header-label { line-height: 1.1; }
 .board-header .cell[draggable="true"] { cursor: grab; }
 .board-header .cell.is-dragging-column { opacity: 0.55; }
@@ -290,7 +290,7 @@ button { cursor: pointer; }
 .compact-tag-wrap.is-wide { width: 100%; justify-content: center; }
 .compact-tag-wrap.is-wide .compact-tag-slot { flex: 1 1 auto; }
 .compact-tag-wrap.is-wide .compact-tag-slot .tag { width: 100%; max-width: none; }
-.cell-products .compact-tag-slot .tag { font-size: 0.58rem; }
+.cell-products .compact-tag-slot .tag { font-size: 0.58rem; padding: 3px 9px; max-width: 66px; }
 .extra-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; background: #eef1f5; color: #445066; font-size: 0.58rem; font-weight: 700; }
 .extra-pill-corner { position: absolute; top: -5px; right: -6px; min-width: 14px; height: 14px; padding: 0 3px; font-size: 0.52rem; line-height: 1; box-shadow: 0 0 0 1px #fff; }
 .inline-input { width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; padding: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1178,8 +1178,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .file-card,
 :root[data-theme="dark"] .filter-group,
 :root[data-theme="dark"] .month-section,
-:root[data-theme="dark"] .cell,
-:root[data-theme="dark"] .board-entry .cell-name,
 :root[data-theme="dark"] .calendar-popover,
 :root[data-theme="dark"] .color-swatch-popover,
 :root[data-theme="dark"] .autocomplete-popover,
@@ -1187,6 +1185,19 @@ textarea { resize: vertical; min-height: 110px; }
   background: var(--panel);
   color: var(--text);
   border-color: var(--line);
+}
+/* Row cells default to the same muted blue as the Date field (a calmer,
+   less "everything shouting white" read) - Company/Event Name is the one
+   deliberate exception and stays bright white so it's still the clear
+   anchor of each row. Tag/pill values (branch, product, status...) are
+   unaffected - they set their own colour inline per option. */
+:root[data-theme="dark"] .cell {
+  background: var(--panel);
+  color: var(--muted);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .board-entry .cell-name {
+  color: var(--text);
 }
 :root[data-theme="dark"] .board-header,
 :root[data-theme="dark"] .board-header .cell,
@@ -1198,7 +1209,14 @@ textarea { resize: vertical; min-height: 110px; }
   border-color: var(--line);
 }
 :root[data-theme="dark"] .month-header-main {
-  box-shadow: 16px 0 14px -14px rgba(10, 16, 28, 0.94);
+  /* These sticky-edge shadows are meant to fade the scrolling row content
+     into the header's OWN background as it passes underneath - they need
+     to match the header chrome colour (#182b52) exactly, not an arbitrary
+     near-black/near-white tone, or they read as a stray glow/smudge. */
+  box-shadow: 16px 0 14px -14px rgba(24, 43, 82, 1);
+}
+:root[data-theme="dark"] .month-header-actions {
+  box-shadow: -16px 0 14px -14px rgba(24, 43, 82, 1);
 }
 :root[data-theme="dark"] .event-drawer,
 :root[data-theme="dark"] .auth-shell {
@@ -1273,6 +1291,13 @@ textarea { resize: vertical; min-height: 110px; }
   background: #ef4444;
   color: #fff;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.28);
+}
+:root[data-theme="dark"] .row-copy {
+  background: #163a26;
+  color: #4ade80;
+}
+:root[data-theme="dark"] .row-copy:hover {
+  background: #1c4a30;
 }
 /* Month header accents: the light-mode colours were tuned for a near-white
    background and read as muddy/low-contrast on dark navy, so dark mode gets

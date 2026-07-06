@@ -453,7 +453,7 @@ function getColumnWidth(column) {
   if (column.key === 'hours') return 120;
   if (column.key === 'time') return 130;
   if (column.key === 'branch') return 100;
-  if (column.key === 'products') return 136;
+  if (column.key === 'products') return 156;
   if (column.key === 'status') return 132;
   if (column.key === 'location') return 230;
   if (column.key === 'paymentStatus') return 104;
