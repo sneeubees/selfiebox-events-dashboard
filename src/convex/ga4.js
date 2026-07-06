@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import { action, mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
@@ -173,20 +173,39 @@ function totalsRequest(startDate, endDate) {
   };
 }
 
+export const getTokenRaw = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db.query("integrations").withIndex("by_key", (q) => q.eq("key", "ga4")).unique();
+    return row ? row.refreshToken : null;
+  },
+});
+
+// Public entry point: admin-gated, then delegates to the internal fetcher.
 export const getWebsiteStats = action({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { connected: false, canManage: false };
-    let refreshToken;
     try {
-      refreshToken = await ctx.runQuery(internal.ga4.getTokenIfAdmin, {
+      const token = await ctx.runQuery(internal.ga4.getTokenIfAdmin, {
         clerkId: identity.subject ?? identity.tokenIdentifier ?? "",
         email: identity.email || "",
       });
+      if (!token) return { connected: false, canManage: true };
     } catch {
       return { connected: false, canManage: false };
     }
+    return await ctx.runAction(internal.ga4.fetchStats, {});
+  },
+});
+
+// Internal: does the actual GA4 work (no auth) so it can be run standalone
+// via `convex run ga4:fetchStats` for validation.
+export const fetchStats = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
     if (!refreshToken) return { connected: false, canManage: true };
 
     const propertyId = process.env.GA4_PROPERTY_ID;
