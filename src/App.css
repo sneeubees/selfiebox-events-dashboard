@@ -153,11 +153,12 @@ button { cursor: pointer; }
 .month-export-button.turnover-top-button { white-space: nowrap; background: #c86a12; border-color: #c86a12; color: #ffffff; padding: 7px 16px; font-size: 0.72rem; font-weight: 700; }
 .month-export-button.turnover-top-button:hover { background: #a8570f; border-color: #a8570f; }
 /* Turnover Figures reduced to a money icon button next to the profile pill. */
-.turnover-top-icon { width: 36px; height: 36px; padding: 0; display: inline-grid; place-items: center; border-radius: 999px; background: #fbf1e6; border: 1px solid #eccaa0; color: #c86a12; cursor: pointer; }
-.turnover-top-icon:hover { background: #f6e4cf; border-color: #dca558; }
+/* Same neutral blue/dark as the other toolbar icons at rest; orange hover like
+   the Commission/Logistics month icons. */
+.turnover-top-icon { width: 36px; height: 36px; padding: 0; display: inline-grid; place-items: center; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-alt); color: #4a5f91; cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+.turnover-top-icon:hover { background: #fdf0e1; border-color: #f2b46f; color: #a5590f; }
 .turnover-top-icon svg { display: block; }
-:root[data-theme="dark"] .turnover-top-icon { background: #2c2010; border-color: #6a4c22; color: #f2a35a; }
-:root[data-theme="dark"] .turnover-top-icon:hover { background: #3a2a14; border-color: #a9772f; }
+:root[data-theme="dark"] .turnover-top-icon:hover { background: #33240f; border-color: #c98a3e; color: #f2a35a; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
 .rights-section { display: grid; gap: 10px; }
