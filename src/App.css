@@ -246,6 +246,10 @@ button { cursor: pointer; }
 .month-section.is-collapsed-month .month-header { border-radius: 12px; }
 .month-section.is-expanded-month .month-header { border-radius: 12px 12px 0 0; }
 .month-header:hover { background: #e5eeff; }
+/* TRIAL: tint expanded-month headers with a shade of the month's own accent
+   colour (collapsed months keep the neutral chrome). Easy to revert. */
+.month-section.is-expanded-month .month-header { background: color-mix(in srgb, var(--month-accent, var(--blue)) 15%, var(--panel)); }
+:root[data-theme="dark"] .month-section.is-expanded-month .month-header { background: color-mix(in srgb, var(--month-accent, var(--blue)) 24%, var(--panel)); }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
 .month-header-main { position: sticky; left: 5px; z-index: 20; display: grid; gap: 6px; align-items: start; flex: 0 0 auto; min-width: max-content; padding: 0 18px 0 5px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
@@ -1309,7 +1313,6 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .booking-terms-card,
 :root[data-theme="dark"] .booking-extras-grid,
 :root[data-theme="dark"] .filter-open-button,
-:root[data-theme="dark"] .tag-empty,
 :root[data-theme="dark"] .compact-name-pill,
 :root[data-theme="dark"] .row-creator-avatar,
 :root[data-theme="dark"] .extra-pill,
@@ -1318,6 +1321,11 @@ textarea { resize: vertical; min-height: 110px; }
   background: #1a2c50;
   color: var(--text);
 }
+/* Empty managed cells (Payment / Accounts / GS-AI / Images / Vinyl / Snappic)
+   render a Tag with no value -> keep it fully transparent so blank cells blend
+   into the row; a faint outline on hover keeps it discoverable. */
+:root[data-theme="dark"] .tag-empty { background: transparent; color: transparent; }
+.cell-select-button:hover .tag-empty { box-shadow: inset 0 0 0 1px var(--line); }
 :root[data-theme="dark"] .board-entry .cell,
 :root[data-theme="dark"] .board-entry .cell-name {
   background: var(--panel);
