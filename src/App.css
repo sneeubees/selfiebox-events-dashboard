@@ -658,6 +658,7 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-toolbar { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
 .turnover-toolbar label { display: grid; gap: 6px; min-width: 220px; }
 .turnover-profit-input { width: 120px; }
+.turnover-toolbar select, .turnover-toolbar input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
 .turnover-table-wrap { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: min(68vh, 760px); min-height: 0; background: #fff; }
 .turnover-table { display: grid; grid-template-columns: 92px repeat(12, 112px) 112px 98px 112px 112px 110px; align-items: stretch; min-width: 1932px; }
 .turnover-table-header { position: sticky; top: 0; z-index: 1; background: #d3ddec; color: #43526d; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -1201,6 +1202,8 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .auth-form input,
 :root[data-theme="dark"] .modal-form select,
 :root[data-theme="dark"] .modal-form input,
+:root[data-theme="dark"] .turnover-toolbar select,
+:root[data-theme="dark"] .turnover-toolbar input,
 :root[data-theme="dark"] textarea {
   background: #1a2740;
   color: var(--text);
@@ -1482,6 +1485,14 @@ textarea { resize: vertical; min-height: 110px; }
   background: #1a2742;
   color: #b8c8ec;
 }
+/* Dark scrollbar so the turnover sheet's scroller doesn't read as a bright
+   white bar against the navy. */
+:root[data-theme="dark"] .turnover-table-wrap { scrollbar-color: #33507e #0d1830; scrollbar-width: thin; }
+:root[data-theme="dark"] .turnover-table-wrap::-webkit-scrollbar { height: 12px; width: 12px; }
+:root[data-theme="dark"] .turnover-table-wrap::-webkit-scrollbar-track { background: #0d1830; border-radius: 8px; }
+:root[data-theme="dark"] .turnover-table-wrap::-webkit-scrollbar-thumb { background: #33507e; border-radius: 8px; border: 3px solid #0d1830; }
+:root[data-theme="dark"] .turnover-table-wrap::-webkit-scrollbar-thumb:hover { background: #456099; }
+:root[data-theme="dark"] .turnover-table-wrap::-webkit-scrollbar-corner { background: #0d1830; }
 :root[data-theme="dark"] .turnover-year-cell {
   color: #f4f7ff;
 }
