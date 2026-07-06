@@ -4479,43 +4479,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button type="button" onClick={() => setShowWebsiteStats(true)} style={{ background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Website Stats</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats && (() => {
-        const RANGES = [['today','Today',1],['7d','7 Days',7],['30d','30 Days',30],['6m','6 Months',182],['all','All Time',100000]];
-        let visits = 0, quotes = 0;
-        if (websiteStats && websiteStats.days) {
-          const n = (RANGES.find((r) => r[0] === statsRange) || RANGES[1])[2];
-          const c = new Date(websiteStats.today + 'T00:00:00');
-          c.setDate(c.getDate() - (n - 1));
-          const cutoff = c.toISOString().slice(0, 10);
-          for (const d of websiteStats.days) { if (d.date >= cutoff) { visits += d.visits; quotes += d.quotes; } }
-        }
-        return (
-          <div onClick={() => setShowWebsiteStats(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(6,12,26,.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: '26px 28px', width: 'min(480px,92vw)', boxShadow: '0 30px 80px -20px rgba(0,0,0,.5)' }}>
-              <div style={{ font: '800 20px/1.2 system-ui,sans-serif', color: '#14203a' }}>Website Stats</div>
-              <div style={{ fontSize: 13, color: '#6b7a99', margin: '4px 0 18px' }}>selfiebox.co.za</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
-                {RANGES.map(([key, label]) => (
-                  <button key={key} type="button" onClick={() => setStatsRange(key)} style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (statsRange === key ? '#2f6fdc' : '#d5deee'), background: statsRange === key ? '#2f6fdc' : '#fff', color: statsRange === key ? '#fff' : '#44557a', font: '600 12px system-ui,sans-serif', cursor: 'pointer' }}>{label}</button>
-                ))}
-              </div>
-              {!websiteStats ? (
-                <div style={{ color: '#6b7a99', padding: '10px 0' }}>Loading…</div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {[['Visits', visits], ['Quote Requests', quotes]].map(([label, num]) => (
-                    <div key={label} style={{ background: '#f2f6fc', borderRadius: 12, padding: '20px 14px', textAlign: 'center' }}>
-                      <div style={{ font: '800 30px/1 system-ui,sans-serif', color: '#2f6fdc' }}>{num}</div>
-                      <div style={{ fontSize: 12, color: '#54648a', marginTop: 6 }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button type="button" onClick={() => setShowWebsiteStats(false)} style={{ marginTop: 20, width: '100%', padding: 11, border: 0, borderRadius: 999, background: '#2f6fdc', color: '#fff', font: '700 14px system-ui,sans-serif', cursor: 'pointer' }}>Close</button>
-            </div>
-          </div>
-        );
-      })()}
+            {showWebsiteStats ? <WebsiteStatsModal onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -6295,6 +6259,97 @@ function BookingDrawerSummary({ booking }) {
 
 function ModalShell({ title, onClose, children, hideCloseButton = false, closeOnScrimClick = true, panelClassName = '' }) {
   return <div className="modal-scrim" onClick={closeOnScrimClick ? onClose : undefined}><div className={["modal-panel", panelClassName].join(' ').trim()} role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>{title}</h3>{!hideCloseButton ? <button className="modal-close-x" type="button" onClick={onClose}>x</button> : null}</div>{children}</div></div>;
+}
+
+function fmtDur(sec) {
+  const s = Math.max(0, Math.round(sec || 0));
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${s}s`;
+}
+function fmtGaDate(s) {
+  return (s && s.length === 8) ? `${s.slice(6, 8)}/${s.slice(4, 6)}` : s;
+}
+const CONV_LABELS = { generate_lead: 'Leads', quote_submit: 'Quote form', contact_submit: 'Contact form', Lead: 'Meta Lead' };
+
+function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
+  const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
+  const runStats = useAction(api.ga4.getWebsiteStats);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState('last7');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setData(await runStats()); } catch (e) { setData({ error: 'load_failed', detail: String(e?.message || e) }); }
+    setLoading(false);
+  }, [runStats]);
+  useEffect(() => { void load(); }, [load]);
+
+  const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
+  const cur = data && data[period];
+  const maxDaily = data?.daily?.length ? Math.max(...data.daily.map((d) => d.sessions), 1) : 1;
+  const maxPage = data?.topPages?.length ? Math.max(...data.topPages.map((p) => p.views), 1) : 1;
+  const maxSrc = data?.sources?.length ? Math.max(...data.sources.map((s) => s.sessions), 1) : 1;
+
+  let body;
+  if (loading && !data) {
+    body = <div className="webstats-empty">Loading your website stats…</div>;
+  } else if (data && data.connected === false) {
+    body = <div className="webstats-empty">
+      <p>Connect Google Analytics to see live website stats here.</p>
+      {isAdmin ? <><button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google Analytics</button>
+        <p className="webstats-muted">Approve in the Google popup, then come back and hit Refresh.</p></>
+        : <p className="webstats-muted">Ask an admin to connect Google Analytics.</p>}
+      <button className="ghost-button" type="button" onClick={() => void load()}>Refresh</button>
+    </div>;
+  } else if (data && data.error === 'reauth_needed') {
+    body = <div className="webstats-empty">
+      <p>The Google Analytics connection expired &mdash; reconnect to refresh the data.</p>
+      {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect</button> : <p className="webstats-muted">Ask an admin to reconnect.</p>}
+      <button className="ghost-button" type="button" onClick={() => void load()}>Refresh</button>
+    </div>;
+  } else if (data && data.error) {
+    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load()}>Retry</button></div>;
+  } else if (data && cur) {
+    const kpis = [['Visits', cur.sessions], ['Visitors', cur.users], ['Page views', cur.pageviews], ['Avg. time', fmtDur(cur.avgEngagementSec)], ['Leads', cur.conversions]];
+    body = <div className="webstats">
+      <div className="webstats-tabs">
+        {[['today', 'Today'], ['last7', '7 days'], ['last30', '30 days']].map(([k, l]) => (
+          <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => setPeriod(k)}>{l}</button>
+        ))}
+      </div>
+      <div className="webstats-kpis">
+        {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
+      </div>
+      <div className="webstats-section">
+        <h4>Daily visits <span>last 30 days</span></h4>
+        <div className="webstats-bars">
+          {data.daily.map((d) => <div className="webstats-bar" key={d.date} title={`${fmtGaDate(d.date)} - ${d.sessions} visits`}><span style={{ height: `${Math.max(3, (d.sessions / maxDaily) * 100)}%` }} /></div>)}
+        </div>
+      </div>
+      <div className="webstats-cols">
+        <div className="webstats-section">
+          <h4>Top pages <span>30 days</span></h4>
+          {data.topPages.map((p) => <div className="webstats-row" key={p.path}><div className="webstats-row-head"><span className="webstats-row-label" title={p.path}>{p.path}</span><span className="webstats-row-val">{p.views.toLocaleString()}</span></div><div className="webstats-track"><span style={{ width: `${(p.views / maxPage) * 100}%` }} /></div></div>)}
+        </div>
+        <div className="webstats-section">
+          <h4>Where visitors come from <span>30 days</span></h4>
+          {data.sources.map((s) => <div className="webstats-row" key={s.channel}><div className="webstats-row-head"><span className="webstats-row-label">{s.channel}</span><span className="webstats-row-val">{s.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(s.sessions / maxSrc) * 100}%` }} /></div></div>)}
+        </div>
+      </div>
+      {data.conversionsByEvent?.length ? <div className="webstats-section">
+        <h4>Conversions <span>30 days</span></h4>
+        <div className="webstats-conv">{data.conversionsByEvent.map((c) => <div key={c.event} className="webstats-conv-item"><strong>{c.count.toLocaleString()}</strong><span>{CONV_LABELS[c.event] || c.event}</span></div>)}</div>
+      </div> : null}
+      <div className="webstats-foot">
+        <span>Google Analytics{data.fetchedAt ? ` - updated ${new Date(data.fetchedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+        <button className="ghost-button" type="button" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+      </div>
+    </div>;
+  }
+
+  return <ModalShell title="Website Stats" onClose={onClose} panelClassName="webstats-panel">{body}</ModalShell>;
 }
 
 function ActivityEntry({ entry, title, eventName = '', eventKey = '', onEventClick = null }) {
