@@ -152,6 +152,12 @@ button { cursor: pointer; }
    single top-right action pill - enlarged to a fuller button to match. */
 .month-export-button.turnover-top-button { white-space: nowrap; background: #c86a12; border-color: #c86a12; color: #ffffff; padding: 7px 16px; font-size: 0.72rem; font-weight: 700; }
 .month-export-button.turnover-top-button:hover { background: #a8570f; border-color: #a8570f; }
+/* Turnover Figures reduced to a money icon button next to the profile pill. */
+.turnover-top-icon { width: 36px; height: 36px; padding: 0; display: inline-grid; place-items: center; border-radius: 999px; background: #fbf1e6; border: 1px solid #eccaa0; color: #c86a12; cursor: pointer; }
+.turnover-top-icon:hover { background: #f6e4cf; border-color: #dca558; }
+.turnover-top-icon svg { display: block; }
+:root[data-theme="dark"] .turnover-top-icon { background: #2c2010; border-color: #6a4c22; color: #f2a35a; }
+:root[data-theme="dark"] .turnover-top-icon:hover { background: #3a2a14; border-color: #a9772f; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
 .rights-section { display: grid; gap: 10px; }
@@ -813,6 +819,17 @@ textarea { resize: vertical; min-height: 110px; }
 }
 /* Empty single-select slot: no visible pill, blends into the cell. A faint
    outline appears on cell hover so it's still obviously clickable/editable. */
+/* Dark-mode styling for native <select> option popups (Region / year picker). */
+:root[data-theme="dark"] .turnover-toolbar select,
+:root[data-theme="dark"] .workspace-select-wrap select,
+:root[data-theme="dark"] .filters-grid select { color-scheme: dark; }
+:root[data-theme="dark"] .turnover-toolbar select option,
+:root[data-theme="dark"] .workspace-select-wrap select option,
+:root[data-theme="dark"] .filters-grid select option { background-color: #14213f; color: #eaf1ff; }
+:root[data-theme="dark"] .turnover-toolbar select option:checked,
+:root[data-theme="dark"] .workspace-select-wrap select option:checked,
+:root[data-theme="dark"] .filters-grid select option:checked { background: #2a4f8c; color: #ffffff; }
+
 .custom-single-empty { background: transparent; min-height: 26px; }
 .cell-select-button:hover .custom-single-empty { box-shadow: inset 0 0 0 1px var(--line); }
 .branch-manager, .branch-selector-list {
