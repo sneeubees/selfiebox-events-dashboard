@@ -1016,6 +1016,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 .branch-selector-item.is-selected {
   outline: 2px solid var(--blue);
+  background: #d7e6ff;
 }
 .product-selector-item { display: flex; flex-direction: column; gap: 6px; }
 .product-selector-item .branch-selector-item { width: 100%; box-sizing: border-box; }
@@ -1722,6 +1723,7 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .branch-selector-item.is-selected {
   outline-color: var(--blue);
+  background: #24427a;
 }
 :root[data-theme="dark"] .qty-stepper-btn {
   background: #101d3a;
