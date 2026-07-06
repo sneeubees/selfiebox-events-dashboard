@@ -80,11 +80,35 @@ function normalizeComparableValue(value) {
   return String(value ?? "");
 }
 
+const ACTIVITY_VALUE_MAX_LENGTH = 60;
+
+function formatEventFieldValueForActivity(value) {
+  let display;
+  if (Array.isArray(value)) {
+    display = value.filter(Boolean).join(", ");
+  } else if (value && typeof value === "object") {
+    display = "";
+  } else {
+    display = String(value ?? "").trim();
+  }
+  if (!display) {
+    return "";
+  }
+  return display.length > ACTIVITY_VALUE_MAX_LENGTH
+    ? `${display.slice(0, ACTIVITY_VALUE_MAX_LENGTH - 1)}…`
+    : display;
+}
+
+function describeChangedField(label, nextValue) {
+  const displayValue = formatEventFieldValueForActivity(nextValue);
+  return displayValue ? `${label} to ${displayValue}` : label;
+}
+
 function getChangedEventFields(previousRecord, nextRecord) {
   const changed = [];
   Object.entries(ACTIVITY_FIELD_LABELS).forEach(([fieldKey, label]) => {
     if (normalizeComparableValue(previousRecord?.[fieldKey]) !== normalizeComparableValue(nextRecord?.[fieldKey])) {
-      changed.push(label);
+      changed.push(describeChangedField(label, nextRecord?.[fieldKey]));
     }
   });
 
@@ -93,7 +117,7 @@ function getChangedEventFields(previousRecord, nextRecord) {
   const allCustomKeys = new Set([...Object.keys(previousCustom), ...Object.keys(nextCustom)]);
   allCustomKeys.forEach((customKey) => {
     if (normalizeComparableValue(previousCustom[customKey]) !== normalizeComparableValue(nextCustom[customKey])) {
-      changed.push(customKey);
+      changed.push(describeChangedField(customKey, nextCustom[customKey]));
     }
   });
 
