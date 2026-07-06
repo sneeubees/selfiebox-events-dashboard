@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Fredoka:wght@600;700&display=swap');
 :root {
+  color-scheme: light;
   --bg: #f5f6f8;
   --panel: #ffffff;
   --panel-alt: #f8f9fb;
@@ -12,6 +13,7 @@
   --board-width: 1844px;
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   /* SelfieBox brand navy (matches selfiebox.co.za --bg-base), extended into a
      tonal scale for the dashboard's chrome/surface/gutter hierarchy:
      --bg (page, darkest) < --panel-alt (gutter behind cards) < --panel
@@ -793,6 +795,10 @@ textarea { resize: vertical; min-height: 110px; }
   box-sizing: border-box;
   flex: 1 1 auto;
 }
+/* Empty single-select slot: no visible pill, blends into the cell. A faint
+   outline appears on cell hover so it's still obviously clickable/editable. */
+.custom-single-empty { background: transparent; min-height: 26px; }
+.cell-select-button:hover .custom-single-empty { box-shadow: inset 0 0 0 1px var(--line); }
 .branch-manager, .branch-selector-list {
   display: grid;
   gap: 12px;

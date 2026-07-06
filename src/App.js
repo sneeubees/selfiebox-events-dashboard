@@ -6583,10 +6583,14 @@ function ActivityEntry({ entry, title, eventName = '', eventKey = '', onEventCli
 }
 
 function CustomSingleTag({ value, styles, width, placeholder = 'Select' }) {
-  const label = value || placeholder;
-  const resolved = value ? (styles[value] || { background: '#d6d6d6', color: '#223042' }) : { background: '#eef1f5', color: '#60708b' };
-  const pillStyle = { ...resolved, width: '100%', minWidth: '100%', maxWidth: '100%', boxSizing: 'border-box' };
-  return <span className="custom-single-pill" style={pillStyle}>{label}</span>;
+  const sizing = { width: '100%', minWidth: '100%', maxWidth: '100%', boxSizing: 'border-box' };
+  // No value -> render an invisible (but still clickable) empty slot instead of a
+  // filled placeholder pill, so blank cells blend into the row in both themes.
+  if (!value) {
+    return <span className="custom-single-pill custom-single-empty" style={sizing} />;
+  }
+  const resolved = styles[value] || { background: '#d6d6d6', color: '#223042' };
+  return <span className="custom-single-pill" style={{ ...resolved, ...sizing }}>{value}</span>;
 }
 
 function Tag({ value, label, styles, width, placeholder = 'Select', className = '' }) {
