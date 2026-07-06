@@ -1344,15 +1344,17 @@ textarea { resize: vertical; min-height: 110px; }
    panel tone (not a flat brown/wine hex) so it reads as "flagged navy",
    plus a bright left accent bar - kept in one clear place so light and
    dark mode read as the same feature, just re-tinted for the dark palette. */
+/* New-request rows use the Commission green fill (the red tint read as brown on
+   navy). The thick red left line + red NEW badge stay as the urgency cue. */
 :root[data-theme="dark"] .board-entry.is-new-request .cell,
 :root[data-theme="dark"] .board-entry.is-new-request .cell-name {
-  background: linear-gradient(rgba(239, 68, 68, 0.16), rgba(239, 68, 68, 0.16)), var(--panel);
+  background: #163a20;
 }
 :root[data-theme="dark"] .board-entry.is-new-request .cell-name {
   box-shadow: inset 4px 0 0 #ff5c72, 1px 0 0 var(--line);
 }
 :root[data-theme="dark"] .board-entry.is-new-request:hover .cell {
-  background: linear-gradient(rgba(239, 68, 68, 0.24), rgba(239, 68, 68, 0.24)), var(--panel);
+  background: #1c4a2a;
 }
 :root[data-theme="dark"] .row-creator-avatar.is-new-request-badge {
   background: #ef4444;
