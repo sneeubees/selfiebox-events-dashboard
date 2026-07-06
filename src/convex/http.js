@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { sendQuoteEmails } from "./websiteQuoteEmail";
 import { sendContactEmails } from "./websiteContactEmail";
 
@@ -254,6 +254,61 @@ http.route({
     const origin = request.headers.get("origin") || "*";
     try { await ctx.runMutation(api.websiteStats.recordVisit, {}); } catch (e) {}
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }),
+});
+
+// ---- Google Analytics OAuth callback (one-time connect flow) ----
+function ga4Html(message, ok) {
+  return new Response(
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<body style="margin:0;font-family:system-ui,sans-serif;background:#070f24;color:#eef3fb;display:flex;min-height:100vh;align-items:center;justify-content:center">` +
+    `<div style="text-align:center;max-width:440px;padding:32px"><div style="font-size:44px;margin-bottom:10px">${ok ? "&#10003;" : "&#9888;"}</div>` +
+    `<h2 style="margin:0 0 8px">${message}</h2>` +
+    `<p style="color:#9db1d6">You can close this tab and return to the dashboard.</p></div></body>`,
+    { status: ok ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
+}
+
+http.route({
+  path: "/oauth/ga4/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const err = url.searchParams.get("error");
+    if (err) return ga4Html("Google sign-in was cancelled.", false);
+    if (!state || state !== process.env.GA4_OAUTH_STATE) return ga4Html("Security check failed (bad state).", false);
+    if (!code) return ga4Html("Missing authorization code.", false);
+    try {
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.GA4_OAUTH_CLIENT_ID,
+          client_secret: process.env.GA4_OAUTH_CLIENT_SECRET,
+          redirect_uri: process.env.GA4_REDIRECT_URI,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tok = await tokenRes.json();
+      if (!tok.refresh_token) {
+        return ga4Html("No refresh token returned - try disconnecting and reconnecting.", false);
+      }
+      // decode the id_token (if present) just to record which account connected
+      let email = "";
+      try {
+        if (tok.id_token) {
+          const payload = JSON.parse(atob(tok.id_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+          email = payload.email || "";
+        }
+      } catch { /* non-fatal */ }
+      await ctx.runMutation(internal.ga4.storeRefreshToken, { refreshToken: tok.refresh_token, email });
+      return ga4Html("Google Analytics connected", true);
+    } catch (e) {
+      return ga4Html("Connection failed: " + String(e.message || e), false);
+    }
   }),
 });
 

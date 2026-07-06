@@ -318,4 +318,13 @@ export default defineSchema({
     visits: v.number(),
     quotes: v.number(),
   }).index("by_date", ["date"]),
+  // Long-lived OAuth refresh tokens for external analytics integrations
+  // (currently "ga4"). One row per integration key.
+  integrations: defineTable({
+    key: v.string(),
+    refreshToken: v.string(),
+    connectedByEmail: v.optional(v.string()),
+    connectedAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });
