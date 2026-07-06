@@ -4322,13 +4322,7 @@ function DashboardApp() {
           <div className="topbar-brand">
             <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /></span>
             <div>
-              <div className="topbar-kicker-row">
-                <div className="topbar-kicker">Events Dashboard</div>
-                <button className="topbar-version-button" type="button" onClick={() => setShowChangelogModal(true)}>
-                  V1.3.002
-                </button>
-              </div>
-              <h1>Events Calendar {selectedWorkspaceYear}</h1>
+              <h1>Events Dashboard {selectedWorkspaceYear}</h1>
             </div>
           </div>
         <div className="topbar-actions compact-actions">
@@ -4449,7 +4443,7 @@ function DashboardApp() {
                       <span><strong>{fullyPaidCount}</strong> Fully Paid</span>
                     </div>
                   </div>
-              <div className="month-header-actions">{!collapsedMonths[month] && ['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-commission-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}>Commission</button> : null}{!collapsedMonths[month] && ['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-logistics-button" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}>Logistics</button> : null}<button className="month-export-button month-export-icon" type="button" title="Export to Excel" aria-label="Export to Excel" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
+              <div className="month-header-actions">{!collapsedMonths[month] && ['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-export-icon month-commission-icon" type="button" title="Commission" aria-label="Commission" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openCommissionDialog(month); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="19" x2="5" y1="5" y2="19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></svg></button> : null}{!collapsedMonths[month] && ['admin', 'manager'].includes(currentUser.role) ? <button className="month-export-button month-export-icon month-logistics-icon" type="button" title="Logistics" aria-label="Logistics" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLogisticsDialog(month); }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" /><path d="M15 18H9" /><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></svg></button> : null}<button className="month-export-button month-export-icon" type="button" title="Export to Excel" aria-label="Export to Excel" onClick={(event) => { event.preventDefault(); event.stopPropagation(); exportMonthToExcel(month, monthItems); }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></button><span className="month-toggle">{collapsedMonths[month] ? '+' : '-'}</span></div>
                 </button>
                 {!collapsedMonths[month] ? (
                   <>
@@ -4478,7 +4472,7 @@ function DashboardApp() {
         </div>
       </section>
 
-      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button type="button" onClick={() => setShowWebsiteStats(true)} style={{ background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Website Stats</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
+      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V1.3.002</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
             {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />

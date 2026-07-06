@@ -83,6 +83,9 @@ button { cursor: pointer; }
 .topbar-version-button:hover { color: #274582; }
 .topbar.compact h1, .auth-card h1, .drawer-header h3 { margin: 0; font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
 .topbar.compact h1 { font-size: 1.34rem; color: #2f3440; }
+:root[data-theme="dark"] .topbar.compact h1 { color: #ffffff; }
+.footer-version-button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.footer-version-button:hover { color: var(--blue); }
 .topbar-actions, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
 .workspace-prefix { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 .workspace-select-inline { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
@@ -273,6 +276,15 @@ button { cursor: pointer; }
    the tooltip) - declutters the 12 repeated month rows. */
 .month-export-icon { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; }
 .month-export-icon svg { display: block; }
+/* Commission (green) + Logistics (orange) reduced to colour-coded icons. */
+.month-commission-icon { color: #1c7a3c; border-color: #a9dcb8; }
+.month-commission-icon:hover { background: #e8f6ec; border-color: #77cb90; }
+.month-logistics-icon { color: #a5590f; border-color: #f2cc9a; }
+.month-logistics-icon:hover { background: #fdf0e1; border-color: #f2b46f; }
+:root[data-theme="dark"] .month-commission-icon { color: #6fe39a; border-color: #35814a; }
+:root[data-theme="dark"] .month-commission-icon:hover { background: #17331f; border-color: #4ade80; }
+:root[data-theme="dark"] .month-logistics-icon { color: #f2a35a; border-color: #8a5f27; }
+:root[data-theme="dark"] .month-logistics-icon:hover { background: #33240f; border-color: #c98a3e; }
 .month-section.is-dragging-month { opacity: 0.72; }
 .month-section.is-drag-target-month .month-header { background: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
 .month-toggle { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: #e8edf8; color: #355190; font-size: 1rem; font-weight: 700; }
