@@ -863,6 +863,13 @@ textarea { resize: vertical; min-height: 110px; }
 .branch-selector-item.is-selected {
   outline: 2px solid var(--blue);
 }
+.product-selector-item { display: flex; flex-direction: column; gap: 6px; }
+.product-selector-item .branch-selector-item { width: 100%; box-sizing: border-box; }
+.qty-stepper { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.qty-stepper-btn { width: 22px; height: 22px; min-width: 22px; border: 1px solid var(--line); background: #fff; border-radius: 6px; color: #355190; font-weight: 700; line-height: 1; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.qty-stepper-btn:hover:not(:disabled) { background: #eef4ff; border-color: var(--blue); }
+.qty-stepper-btn:disabled { opacity: 0.35; cursor: default; }
+.qty-stepper-value { min-width: 16px; text-align: center; font-weight: 700; font-size: 0.82rem; color: #223042; }
 
 @media (max-width: 900px) {
   .branch-editor-row {

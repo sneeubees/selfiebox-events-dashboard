@@ -83,6 +83,12 @@ export default defineSchema({
     time: v.optional(v.string()),
     branch: v.array(v.string()),
     products: v.array(v.string()),
+    // Per-product quantity (1-9), keyed by the same abbreviation used in
+    // `products`. Only entries for qty > 1 are meaningful for display -
+    // absence means qty 1. Kept separate from `products` (rather than
+    // duplicating array entries) since other code assumes that array is a
+    // deduplicated set (e.g. the product-rename remap uses `new Set(...)`).
+    productQuantities: v.optional(v.record(v.string(), v.number())),
     status: v.optional(v.string()),
     location: v.optional(v.string()),
     locationPlaceId: v.optional(v.string()),
