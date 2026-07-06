@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Fredoka:wght@600;700&display=swap');
 :root {
   --bg: #f5f6f8;
   --panel: #ffffff;
@@ -12,14 +12,19 @@
   --board-width: 1844px;
 }
 :root[data-theme="dark"] {
-  --bg: #0f1625;
-  --panel: #162033;
-  --panel-alt: #111a2b;
-  --line: #2a3956;
-  --text: #e7eefc;
-  --muted: #9fb0cf;
-  --blue: #5d8cff;
-  --shadow: 0 16px 36px rgba(2, 8, 23, 0.42);
+  /* SelfieBox brand navy (matches selfiebox.co.za --bg-base), extended into a
+     tonal scale for the dashboard's chrome/surface/gutter hierarchy:
+     --bg (page, darkest) < --panel-alt (gutter behind cards) < --panel
+     (cards + table rows) < the header "chrome" tone used directly on
+     .board-header/.month-header so header bars read as distinctly raised. */
+  --bg: #070f24;
+  --panel: #101d3a;
+  --panel-alt: #0a1530;
+  --line: #263a5e;
+  --text: #eef3fb;
+  --muted: #9db1d6;
+  --blue: #4c8dff;
+  --shadow: 0 16px 36px rgba(2, 6, 18, 0.55);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; transition: background 160ms ease, color 160ms ease; }
@@ -28,7 +33,39 @@ button { cursor: pointer; }
 .app-shell { height: 100vh; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.topbar-logo { width: 150px; height: auto; object-fit: contain; flex: 0 0 auto; }
+.topbar-logo {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  flex: 0 0 auto;
+  font-family: 'Fredoka', 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif;
+  font-weight: 700;
+  font-size: 1.7rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.topbar-logo-selfie { color: #1a2540; }
+.topbar-logo-box {
+  font-size: 1.06em;
+  line-height: 0.94;
+  background: linear-gradient(96deg, #2f73e6, #34c2f4 55%, #7fe3ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.topbar-logo-spark {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 1px;
+  margin-top: -2px;
+  vertical-align: top;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z' fill='%2354d4ff'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 4px rgba(84, 212, 255, 0.6));
+}
+:root[data-theme="dark"] .topbar-logo-selfie { color: #ffffff; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.54rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b5bcc8; }
 .topbar-kicker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .topbar-kicker-row .topbar-kicker { margin-bottom: 0; }
@@ -677,7 +714,7 @@ textarea { resize: vertical; min-height: 110px; }
 .changelog-section li { color: var(--muted); font-size: 0.76rem; line-height: 1.35; }
 .totals-row { min-width: max-content; }
 @media (max-width: 1200px) { .topbar { flex-direction: column; align-items: stretch; } .modal-form { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { .app-shell { padding: 8px; } .topbar-brand, .topbar-actions, .workspace-select-wrap { flex-direction: column; align-items: stretch; } .topbar-logo { width: 120px; height: auto; } .modal-form { grid-template-columns: 1fr; } .board-row { width: max-content; } .event-drawer { width: 100vw; } .search-wide { min-width: 220px; } .booking-page-card { padding: 18px; } .booking-form-grid, .booking-extras-grid, .booking-time-row { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .app-shell { padding: 8px; } .topbar-brand, .topbar-actions, .workspace-select-wrap { flex-direction: column; align-items: stretch; } .topbar-logo { font-size: 1.35rem; } .modal-form { grid-template-columns: 1fr; } .board-row { width: max-content; } .event-drawer { width: 100vw; } .search-wide { min-width: 220px; } .booking-page-card { padding: 18px; } .booking-form-grid, .booking-extras-grid, .booking-time-row { grid-template-columns: 1fr; } }
 
 
 
@@ -1140,10 +1177,7 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .activity-item,
 :root[data-theme="dark"] .file-card,
 :root[data-theme="dark"] .filter-group,
-:root[data-theme="dark"] .board-header,
-:root[data-theme="dark"] .board-header .cell,
 :root[data-theme="dark"] .month-section,
-:root[data-theme="dark"] .month-header,
 :root[data-theme="dark"] .cell,
 :root[data-theme="dark"] .board-entry .cell-name,
 :root[data-theme="dark"] .calendar-popover,
@@ -1154,16 +1188,27 @@ textarea { resize: vertical; min-height: 110px; }
   color: var(--text);
   border-color: var(--line);
 }
+:root[data-theme="dark"] .board-header,
+:root[data-theme="dark"] .board-header .cell,
+:root[data-theme="dark"] .month-header {
+  /* one step "up" from --panel so header bars read as distinct chrome,
+     not just another row */
+  background: #182b52;
+  color: var(--text);
+  border-color: var(--line);
+}
 :root[data-theme="dark"] .month-header-main {
   box-shadow: 16px 0 14px -14px rgba(10, 16, 28, 0.94);
 }
-:root[data-theme="dark"] .board-surface,
 :root[data-theme="dark"] .event-drawer,
 :root[data-theme="dark"] .auth-shell {
   background: var(--bg);
 }
+:root[data-theme="dark"] .board-surface {
+  background: var(--panel-alt);
+}
 :root[data-theme="dark"] .auth-shell {
-  background: radial-gradient(circle at top left, #1a2640 0%, #131d31 32%, #0f1625 72%, #0c1320 100%);
+  background: radial-gradient(circle at top left, #16233f 0%, #0e1830 32%, #0a1226 72%, #070f24 100%);
 }
 :root[data-theme="dark"] .auth-card,
 :root[data-theme="dark"] .profile-hero,
@@ -1185,41 +1230,81 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .extra-pill,
 :root[data-theme="dark"] .calendar-day,
 :root[data-theme="dark"] .location-field-popover {
-  background: #1b2942;
+  background: #1a2c50;
   color: var(--text);
 }
 :root[data-theme="dark"] .board-entry .cell,
 :root[data-theme="dark"] .board-entry .cell-name {
-  background: #162033;
+  background: var(--panel);
 }
 :root[data-theme="dark"] .board-entry.is-alt-day .cell,
 :root[data-theme="dark"] .board-entry.is-alt-day .cell-name {
-  background: #1d2940;
+  background: #0c1830;
 }
 :root[data-theme="dark"] .board-entry:hover .cell,
 :root[data-theme="dark"] .board-entry:hover .cell-name {
-  background: #1a2840;
+  background: #15294f;
 }
 :root[data-theme="dark"] .board-entry.is-active .cell,
 :root[data-theme="dark"] .board-entry.is-active .cell-name,
 :root[data-theme="dark"] .month-header:hover,
 :root[data-theme="dark"] .board-header .cell.is-drag-target,
 :root[data-theme="dark"] .month-section.is-drag-target-month .month-header {
-  background: #223556;
+  background: #1d3868;
 }
 :root[data-theme="dark"] .board-entry.is-active .cell-name {
-  box-shadow: inset 4px 0 0 #77a6ff, 1px 0 0 var(--line);
+  box-shadow: inset 4px 0 0 #5b9bff, 1px 0 0 var(--line);
 }
+/* New web-request row: a deliberate crimson wash layered OVER the normal
+   panel tone (not a flat brown/wine hex) so it reads as "flagged navy",
+   plus a bright left accent bar - kept in one clear place so light and
+   dark mode read as the same feature, just re-tinted for the dark palette. */
 :root[data-theme="dark"] .board-entry.is-new-request .cell,
 :root[data-theme="dark"] .board-entry.is-new-request .cell-name {
-  background: #402323;
+  background: linear-gradient(rgba(239, 68, 68, 0.16), rgba(239, 68, 68, 0.16)), var(--panel);
 }
 :root[data-theme="dark"] .board-entry.is-new-request .cell-name {
-  box-shadow: inset 4px 0 0 #e06a6a, 1px 0 0 var(--line);
+  box-shadow: inset 4px 0 0 #ff5c72, 1px 0 0 var(--line);
 }
 :root[data-theme="dark"] .board-entry.is-new-request:hover .cell {
-  background: #4a2828;
+  background: linear-gradient(rgba(239, 68, 68, 0.24), rgba(239, 68, 68, 0.24)), var(--panel);
 }
+:root[data-theme="dark"] .row-creator-avatar.is-new-request-badge {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.28);
+}
+/* Month header accents: the light-mode colours were tuned for a near-white
+   background and read as muddy/low-contrast on dark navy, so dark mode gets
+   its own brighter set (same hue per month, boosted for contrast) plus a
+   small colour dot before the month name for extra pop - the dot reuses
+   currentColor so it never needs its own colour list. */
+:root[data-theme="dark"] .month-header-main > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+:root[data-theme="dark"] .month-header-main > strong::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  flex: 0 0 auto;
+}
+:root[data-theme="dark"] .month-accent-1 .month-header-main > strong { color: #b794f6; }
+:root[data-theme="dark"] .month-accent-2 .month-header-main > strong { color: #2dd4bf; }
+:root[data-theme="dark"] .month-accent-3 .month-header-main > strong { color: #60a5fa; }
+:root[data-theme="dark"] .month-accent-4 .month-header-main > strong { color: #fb923c; }
+:root[data-theme="dark"] .month-accent-5 .month-header-main > strong { color: #4ade80; }
+:root[data-theme="dark"] .month-accent-6 .month-header-main > strong { color: #fb7185; }
+:root[data-theme="dark"] .month-accent-7 .month-header-main > strong { color: #818cf8; }
+:root[data-theme="dark"] .month-accent-8 .month-header-main > strong { color: #fbbf24; }
+:root[data-theme="dark"] .month-accent-9 .month-header-main > strong { color: #34d399; }
+:root[data-theme="dark"] .month-accent-10 .month-header-main > strong { color: #f59e0b; }
+:root[data-theme="dark"] .month-accent-11 .month-header-main > strong { color: #e879f9; }
+:root[data-theme="dark"] .month-accent-12 .month-header-main > strong { color: #38bdf8; }
 :root[data-theme="dark"] .workspace-text-button,
 :root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .profile-upload-button,
@@ -1408,6 +1493,28 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .booking-submission-link {
   color: #8db6ff;
+}
+/* Branch/product selector pills were hardcoded white with no dark variant -
+   fine in light mode, but a stark white card inside a dark modal otherwise. */
+:root[data-theme="dark"] .branch-selector-item {
+  background: #16264a;
+  border-color: var(--line);
+  color: var(--text);
+}
+:root[data-theme="dark"] .branch-selector-item.is-selected {
+  outline-color: var(--blue);
+}
+:root[data-theme="dark"] .qty-stepper-btn {
+  background: #101d3a;
+  border-color: var(--line);
+  color: #bcd0ff;
+}
+:root[data-theme="dark"] .qty-stepper-btn:hover:not(:disabled) {
+  background: #1d3868;
+  border-color: var(--blue);
+}
+:root[data-theme="dark"] .qty-stepper-value {
+  color: var(--text);
 }
 
 .profile-branch-list,

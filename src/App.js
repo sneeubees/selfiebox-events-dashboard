@@ -4319,7 +4319,7 @@ function DashboardApp() {
       <div className="app-shell">
         <header className="topbar compact">
           <div className="topbar-brand">
-            <img className="topbar-logo" src="/SB_Logo_60px.png" alt="SelfieBox" />
+            <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /></span>
             <div>
               <div className="topbar-kicker-row">
                 <div className="topbar-kicker">Events Dashboard</div>
