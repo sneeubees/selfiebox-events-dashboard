@@ -787,7 +787,9 @@ textarea { resize: vertical; min-height: 110px; }
 .export-column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; max-height: 46vh; overflow-y: auto; padding-right: 4px; }
 .export-column-option { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--text); }
 .export-column-option input { margin: 0; }
-.filter-option { min-width: 0; font-size: 0.68rem; line-height: 1; padding: 3px 0; }
+.filter-option { min-width: 0; font-size: 0.68rem; line-height: 1; padding: 4px 7px; border-radius: 6px; transition: background 120ms ease; }
+/* Selected rows take on the item's dashboard pill colour (set inline). */
+.filter-option.is-selected { font-weight: 600; }
 .filter-option span { display: inline-block; max-width: 19ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Custom-styled filter checkboxes (theme-aware) - replaces the plain native box
    with a rounded box + brand-blue tick when checked. */
