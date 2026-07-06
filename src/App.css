@@ -1262,6 +1262,21 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .board-surface {
   background: var(--panel-alt);
 }
+/* Dark "+ Add Event" row (was a bright white bar). */
+:root[data-theme="dark"] .add-inline-row {
+  background: #12203f;
+  color: #9db8ee;
+  border-color: #33507e;
+}
+:root[data-theme="dark"] .add-inline-row:hover { background: #182a52; }
+/* Global dark scrollbars so the board's vertical + horizontal scrollers (and
+   every other scroller) read as navy instead of bright white. */
+:root[data-theme="dark"] { scrollbar-color: #33507e #0d1830; }
+:root[data-theme="dark"] ::-webkit-scrollbar { width: 12px; height: 12px; }
+:root[data-theme="dark"] ::-webkit-scrollbar-track { background: #0d1830; }
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #33507e; border-radius: 8px; border: 3px solid #0d1830; }
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #456099; }
+:root[data-theme="dark"] ::-webkit-scrollbar-corner { background: #0d1830; }
 :root[data-theme="dark"] .auth-shell {
   background: radial-gradient(circle at top left, #16233f 0%, #0e1830 32%, #0a1226 72%, #070f24 100%);
 }
