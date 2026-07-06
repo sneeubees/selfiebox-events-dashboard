@@ -6273,7 +6273,8 @@ function fmtGaDate(s) {
 const CONV_LABELS = { generate_lead: 'Leads', quote_submit: 'Quote form', contact_submit: 'Contact form', Lead: 'Meta Lead' };
 
 // SEO delta helpers. For most metrics "up = good"; for search position, LOWER is
-// better, so `invert` flips the good/bad colouring. Returns null for no change.
+// better, so `invert` flips it. The ARROW tracks good/bad (not raw sign) so ▲=green
+// always means "improved" and ▼=red "declined" — intuitive for rankings too.
 function DeltaBadge({ value, invert = false, digits = 0, suffix = '' }) {
   if (value == null || Math.abs(value) < (digits ? 0.05 : 0.5)) {
     return <span className="webseo-delta is-flat">&mdash;</span>;
@@ -6282,7 +6283,7 @@ function DeltaBadge({ value, invert = false, digits = 0, suffix = '' }) {
   const good = invert ? !up : up;
   const mag = Math.abs(value);
   const shown = digits ? mag.toFixed(digits) : Math.round(mag).toLocaleString();
-  return <span className={`webseo-delta ${good ? 'is-good' : 'is-bad'}`}>{up ? '▲' : '▼'} {shown}{suffix}</span>;
+  return <span className={`webseo-delta ${good ? 'is-good' : 'is-bad'}`}>{good ? '▲' : '▼'} {shown}{suffix}</span>;
 }
 function fmtPos(p) { return (p || 0) > 0 ? (p).toFixed(1) : '—'; }
 function fmtPct(x) { return `${((x || 0) * 100).toFixed(1)}%`; }
