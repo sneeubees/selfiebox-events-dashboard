@@ -394,12 +394,13 @@ function aggRow(rep) {
     : { clicks: 0, impressions: 0, ctr: 0, position: 0 };
 }
 
-// Internal: pulls Search Console rankings. Compares a 28-day window (ending 3
-// days ago — GSC data lags ~2-3 days) against the prior 28 days so we can show
-// whether clicks/impressions/position moved up or down.
+// Internal: pulls Search Console rankings for a date window and compares it
+// against the equal-length window immediately before, so we can show whether
+// clicks/impressions/position moved up or down. Defaults to a 28-day window
+// ending 3 days ago (GSC data lags ~2-3 days) when no range is given.
 export const fetchSeo = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: { startDate: v.optional(v.string()), endDate: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
     if (!refreshToken) return { connected: false, canManage: true };
 
@@ -422,10 +423,23 @@ export const fetchSeo = internalAction({
     const site = pickSite(sites);
     if (!site) return { connected: true, canManage: true, noProperty: true };
 
-    const end = daysAgoDate(3);
-    const start = daysAgoDate(30);
-    const prevEnd = daysAgoDate(31);
-    const prevStart = daysAgoDate(58);
+    let start, end, prevStart, prevEnd;
+    if (args.startDate && args.endDate) {
+      start = args.startDate;
+      end = args.endDate;
+      const s = new Date(start + "T00:00:00Z");
+      const e = new Date(end + "T00:00:00Z");
+      const lenDays = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
+      const pe = new Date(s.getTime() - 86400000);
+      const ps = new Date(pe.getTime() - (lenDays - 1) * 86400000);
+      prevEnd = ymd(pe);
+      prevStart = ymd(ps);
+    } else {
+      end = daysAgoDate(3);
+      start = daysAgoDate(30);
+      prevEnd = daysAgoDate(31);
+      prevStart = daysAgoDate(58);
+    }
 
     try {
       const [curTot, prevTot, queries, pages, prevQueries] = await Promise.all([
@@ -481,8 +495,8 @@ export const fetchSeo = internalAction({
 
 // Public entry point for SEO stats: admin-gated, delegates to fetchSeo.
 export const getSeoStats = action({
-  args: {},
-  handler: async (ctx) => {
+  args: { startDate: v.optional(v.string()), endDate: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { connected: false, canManage: false };
     try {
@@ -494,6 +508,9 @@ export const getSeoStats = action({
     } catch {
       return { connected: false, canManage: false };
     }
-    return await ctx.runAction(internal.ga4.fetchSeo, {});
+    return await ctx.runAction(internal.ga4.fetchSeo, {
+      startDate: args.startDate || undefined,
+      endDate: args.endDate || undefined,
+    });
   },
 });

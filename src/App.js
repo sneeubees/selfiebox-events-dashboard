@@ -4479,7 +4479,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button type="button" onClick={() => setShowWebsiteStats(true)} style={{ background: 'none', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Website Stats</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats ? <WebsiteStatsModal onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} /> : null}
+            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -6301,16 +6301,78 @@ const STATS_PERIODS = [
   ['launch', 'Since new site', { startDate: SITE_LAUNCH_DATE, endDate: 'today' }, 'since new site'],
 ];
 
-function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
+// Left-nav for the full-screen analytics area. Third tuple item = "coming soon".
+const STATS_NAV = [
+  ['website', 'Website Stats'],
+  ['seo', 'SEO Stats'],
+  ['ads', 'Google Ads', true],
+  ['ai', 'AI Analysis', true],
+];
+
+function daysAgoISO(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Search Console has its own ranges (its data lags ~2 days, so windows end 2 days
+// back and it has no meaningful "today"). Each maps to absolute GSC dates.
+const SEO_PERIODS = [
+  ['7d', '7 days'],
+  ['28d', '28 days'],
+  ['3mo', '3 months'],
+  ['launch', 'Since new site'],
+];
+function seoRange(key) {
+  const end = daysAgoISO(2);
+  if (key === 'launch') return { startDate: SITE_LAUNCH_DATE, endDate: end, label: 'since new site' };
+  const days = key === '7d' ? 7 : key === '3mo' ? 90 : 28;
+  const label = key === '7d' ? 'last 7 days' : key === '3mo' ? 'last 3 months' : 'last 28 days';
+  return { startDate: daysAgoISO(1 + days), endDate: end, label };
+}
+
+// Full-screen analytics area with its own left-nav. Replaces the old popup.
+function WebsiteStatsPage({ onClose, isAdmin, canAccess }) {
+  const [tab, setTab] = useState('website');
   const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
+  const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="statspage">
+      <aside className="statspage-nav">
+        <button className="statspage-back" type="button" onClick={onClose}><span aria-hidden="true">&larr;</span> Back to Dashboard</button>
+        <div className="statspage-navlabel">Analytics</div>
+        <nav className="statspage-menu">
+          {STATS_NAV.map(([k, label, soon]) => (
+            <button key={k} type="button" className={`statspage-navitem${tab === k ? ' is-active' : ''}${soon ? ' is-soon' : ''}`} onClick={() => setTab(k)}>
+              <span>{label}</span>{soon ? <span className="statspage-soon-tag">Soon</span> : null}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <main className="statspage-body">
+        {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
+        {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
+        {tab === 'ads' ? <ComingSoonView title="Google Ads" blurb="Ad spend, clicks, conversions, cost-per-lead and audience demographics — pulled straight from your Google Ads account into this same friendly view." /> : null}
+        {tab === 'ai' ? <ComingSoonView title="AI Analysis" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
+      </main>
+    </div>
+  );
+}
+
+// GA4 website traffic (visits / pages / sources / countries / conversions).
+function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
   const runStats = useAction(api.ga4.getWebsiteStats);
-  const runSeo = useAction(api.ga4.getSeoStats);
   const [byPeriod, setByPeriod] = useState({});
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('last7');
   const [saOnly, setSaOnly] = useState(false);
-  const [seo, setSeo] = useState(null);
-  const [seoLoading, setSeoLoading] = useState(true);
 
   const load = useCallback(async (p, sa, force) => {
     const meta = STATS_PERIODS.find((x) => x[0] === p) || STATS_PERIODS[1];
@@ -6328,17 +6390,8 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
   }, [runStats, byPeriod]);
 
   const toggleSa = (v) => { setSaOnly(v); void load(period, v, false); };
+  useEffect(() => { void load('last7', false, false); /* eslint-disable-next-line */ }, []);
 
-  const loadSeo = useCallback(async () => {
-    setSeoLoading(true);
-    try { setSeo(await runSeo({})); }
-    catch (e) { setSeo({ error: 'load_failed', detail: String(e?.message || e) }); }
-    setSeoLoading(false);
-  }, [runSeo]);
-
-  useEffect(() => { void load('last7', false, false); void loadSeo(); /* eslint-disable-next-line */ }, []);
-
-  const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
   const data = byPeriod[`${period}${saOnly ? '|sa' : ''}`];
   const meta = STATS_PERIODS.find((x) => x[0] === period) || STATS_PERIODS[1];
   const periodLabel = meta[3];
@@ -6348,25 +6401,28 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
   const maxSrc = data?.sources?.length ? Math.max(...data.sources.map((s) => s.sessions), 1) : 1;
   const maxCountry = data?.countries?.length ? Math.max(...data.countries.map((c) => c.sessions), 1) : 1;
 
-  const controls = (
-    <div className="webstats-controls">
-      <div className="webstats-tabs">
-        {STATS_PERIODS.map(([k, l]) => (
-          <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, saOnly, false)}>{l}</button>
-        ))}
+  const head = (
+    <header className="statspage-viewhead">
+      <div><h2>Website Stats</h2><p>Live visitor activity from Google Analytics.</p></div>
+      <div className="webstats-controls">
+        <div className="webstats-tabs">
+          {STATS_PERIODS.map(([k, l]) => (
+            <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, saOnly, false)}>{l}</button>
+          ))}
+        </div>
+        <label className="webstats-sa" title="Show only visits from South Africa">
+          <input type="checkbox" checked={saOnly} onChange={(e) => toggleSa(e.target.checked)} />
+          <span>South Africa only</span>
+        </label>
       </div>
-      <label className="webstats-sa" title="Show only visits from South Africa">
-        <input type="checkbox" checked={saOnly} onChange={(e) => toggleSa(e.target.checked)} />
-        <span>South Africa only</span>
-      </label>
-    </div>
+    </header>
   );
 
-  let body;
+  let inner;
   if (loading && !data) {
-    body = <div className="webstats-empty">Loading your website stats…</div>;
+    inner = <div className="webstats-empty">Loading your website stats…</div>;
   } else if (data && data.connected === false) {
-    body = <div className="webstats-empty">
+    inner = <div className="webstats-empty">
       <p>Connect Google Analytics to see live website stats here.</p>
       {isAdmin ? <><button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google Analytics</button>
         <p className="webstats-muted">Approve in the Google popup, then come back and hit Refresh.</p></>
@@ -6374,17 +6430,16 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
       <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Refresh</button>
     </div>;
   } else if (data && data.error === 'reauth_needed') {
-    body = <div className="webstats-empty">
+    inner = <div className="webstats-empty">
       <p>The Google Analytics connection expired &mdash; reconnect to refresh the data.</p>
       {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect</button> : <p className="webstats-muted">Ask an admin to reconnect.</p>}
       <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Refresh</button>
     </div>;
   } else if (data && data.error) {
-    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Retry</button></div>;
+    inner = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Retry</button></div>;
   } else if (data && cur) {
     const kpis = [['Visits', cur.sessions], ['Visitors', cur.users], ['Page views', cur.pageviews], ['Avg. time', fmtDur(cur.avgEngagementSec)], ['Leads', cur.conversions]];
-    body = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
-      {controls}
+    inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
       <div className="webstats-kpis">
         {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
       </div>
@@ -6412,7 +6467,6 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
         <h4>Conversions <span>{periodLabel}</span></h4>
         <div className="webstats-conv">{data.conversionsByEvent.map((c) => <div key={c.event} className="webstats-conv-item"><strong>{c.count.toLocaleString()}</strong><span>{CONV_LABELS[c.event] || c.event}</span></div>)}</div>
       </div> : null}
-      <SeoSection seo={seo} loading={seoLoading} isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} onRefresh={() => void loadSeo()} />
       <div className="webstats-foot">
         <span>Google Analytics{data.fetchedAt ? ` - updated ${new Date(data.fetchedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
         <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
@@ -6420,55 +6474,106 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
     </div>;
   }
 
-  return <ModalShell title="Website Stats" onClose={onClose} panelClassName="webstats-panel">{body}</ModalShell>;
+  return <div className="statspage-view">{head}{inner}</div>;
 }
 
-// Google Search Console — where we rank on Google and whether we're moving up or
-// down over the last 28 days vs the previous 28.
-function SeoSection({ seo, loading, isAdmin, connectUrl, openConnect, onRefresh }) {
+// Google Search Console — rankings and search terms, with its own date ranges.
+function SeoStatsView({ isAdmin, connectUrl, openConnect }) {
+  const runSeo = useAction(api.ga4.getSeoStats);
+  const [byPeriod, setByPeriod] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState('28d');
+
+  const load = useCallback(async (p, force) => {
+    setPeriod(p);
+    if (!force && byPeriod[p] && !byPeriod[p].error) return;
+    setLoading(true);
+    const r = seoRange(p);
+    try {
+      const res = await runSeo({ startDate: r.startDate, endDate: r.endDate });
+      setByPeriod((cur) => ({ ...cur, [p]: res }));
+    } catch (e) {
+      setByPeriod((cur) => ({ ...cur, [p]: { error: 'load_failed', detail: String(e?.message || e) } }));
+    }
+    setLoading(false);
+  }, [runSeo, byPeriod]);
+
+  useEffect(() => { void load('28d', false); /* eslint-disable-next-line */ }, []);
+
+  const seo = byPeriod[period];
+  const periodLabel = seoRange(period).label;
+  const tabs = (
+    <div className="webstats-tabs">
+      {SEO_PERIODS.map(([k, l]) => <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, false)}>{l}</button>)}
+    </div>
+  );
+  const head = (
+    <header className="statspage-viewhead">
+      <div><h2>SEO Stats</h2><p>Where you rank on Google and how it&apos;s moving. Search Console data is ~2 days delayed.</p></div>
+      {tabs}
+    </header>
+  );
+
+  let inner;
   if (loading && !seo) {
-    return <div className="webseo"><div className="webseo-head"><h4>Google Search &amp; rankings</h4></div><div className="webstats-muted">Loading search rankings…</div></div>;
+    inner = <div className="webstats-empty">Loading search rankings…</div>;
+  } else if (seo && seo.needsSeoScope) {
+    inner = <div className="webstats-empty"><p>SEO rankings need one extra Google permission (Search Console).</p>
+      {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect to enable SEO</button>
+        : <p className="webstats-muted">Ask an admin to reconnect Google.</p>}
+      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button></div>;
+  } else if (seo && seo.connected === false) {
+    inner = <div className="webstats-empty"><p>Connect Google to see search rankings here.</p>
+      {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google</button> : <p className="webstats-muted">Ask an admin to connect Google.</p>}</div>;
+  } else if (seo && seo.noProperty) {
+    inner = <div className="webstats-empty"><p className="webstats-muted">No Search Console property found for this Google account. Add &amp; verify selfiebox.co.za in Search Console, then Refresh.</p>
+      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button></div>;
+  } else if (seo && (seo.error || !seo.totals)) {
+    inner = <div className="webstats-empty"><p>Couldn&apos;t load SEO data{seo.detail ? ` (${seo.detail})` : ''}.</p><button className="ghost-button" type="button" onClick={() => void load(period, true)}>Retry</button></div>;
+  } else if (seo && seo.totals) {
+    const t = seo.totals;
+    const maxQ = seo.queries?.length ? Math.max(...seo.queries.map((q) => q.impressions), 1) : 1;
+    const maxP = seo.pages?.length ? Math.max(...seo.pages.map((p) => p.clicks), 1) : 1;
+    inner = <div className={`webseo${loading ? ' is-refetching' : ''}`}>
+      <div className="webseo-kpis">
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{t.clicks.toLocaleString()}</strong><DeltaBadge value={t.clicksDelta} /></div><span>Clicks from Google</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{t.impressions.toLocaleString()}</strong><DeltaBadge value={t.impressionsDelta} /></div><span>Times shown</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{fmtPos(t.position)}</strong><DeltaBadge value={t.positionDelta} invert digits={1} /></div><span>Avg. position</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{fmtPct(t.ctr)}</strong><DeltaBadge value={t.ctrDelta * 100} digits={1} suffix="%" /></div><span>Click rate</span></div>
+      </div>
+      <div className="webstats-section">
+        <h4>Search terms <span>{periodLabel}</span></h4>
+        {seo.queries?.length ? <div className="webseo-queries">
+          <div className="webseo-q-head"><span>Search term</span><span className="webseo-q-pos">Position</span><span className="webseo-q-move">Movement</span></div>
+          {seo.queries.map((q) => <div className="webseo-q" key={q.query}>
+            <span className="webseo-q-term" title={q.query}>{q.query}<em className="webseo-q-clicks">{q.clicks} clicks · {q.impressions.toLocaleString()} shown</em>
+              <span className="webseo-q-track"><span style={{ width: `${(q.impressions / maxQ) * 100}%` }} /></span></span>
+            <span className="webseo-q-pos">{fmtPos(q.position)}</span>
+            <span className="webseo-q-move"><DeltaBadge value={q.positionDelta} invert digits={1} /></span>
+          </div>)}
+        </div> : <div className="webstats-muted">No search terms recorded yet.</div>}
+      </div>
+      {seo.pages?.length ? <div className="webstats-section">
+        <h4>Top landing pages <span>{periodLabel}</span></h4>
+        {seo.pages.map((p) => <div className="webstats-row" key={p.page}><div className="webstats-row-head"><span className="webstats-row-label" title={p.page}>{prettyDomain(p.page) || p.page}</span><span className="webstats-row-val">{p.clicks.toLocaleString()} clicks · pos {fmtPos(p.position)}</span></div><div className="webstats-track"><span style={{ width: `${(p.clicks / maxP) * 100}%` }} /></div></div>)}
+      </div> : null}
+      <div className="webstats-foot">
+        <span>Google Search Console{seo.property ? ` · ${prettyDomain(seo.property)}` : ''}{seo.range ? ` · ${fmtGaDate(seo.range.start.replace(/-/g, ''))}–${fmtGaDate(seo.range.end.replace(/-/g, ''))}` : ''}</span>
+        <button className="ghost-button" type="button" onClick={() => void load(period, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+      </div>
+    </div>;
   }
-  if (!seo) return null;
 
-  if (seo.needsSeoScope) {
-    return <div className="webseo"><div className="webseo-head"><h4>Google Search &amp; rankings</h4></div>
-      <div className="webseo-empty"><p>SEO rankings need one extra Google permission (Search Console).</p>
-        {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect to enable SEO</button>
-          : <p className="webstats-muted">Ask an admin to reconnect Google.</p>}
-        <button className="ghost-button" type="button" onClick={onRefresh}>Refresh</button></div></div>;
-  }
-  if (seo.noProperty) {
-    return <div className="webseo"><div className="webseo-head"><h4>Google Search &amp; rankings</h4></div>
-      <div className="webstats-muted">No Search Console property found for this Google account. Add &amp; verify selfiebox.co.za in Search Console, then Refresh.</div></div>;
-  }
-  if (seo.error || seo.connected === false || !seo.totals) {
-    return <div className="webseo"><div className="webseo-head"><h4>Google Search &amp; rankings</h4></div>
-      <div className="webseo-empty"><p className="webstats-muted">Couldn&apos;t load SEO data{seo.detail ? ` (${seo.detail})` : ''}.</p>
-        <button className="ghost-button" type="button" onClick={onRefresh}>Retry</button></div></div>;
-  }
+  return <div className="statspage-view">{head}{inner}</div>;
+}
 
-  const t = seo.totals;
-  const maxQClicks = seo.queries?.length ? Math.max(...seo.queries.map((q) => q.impressions), 1) : 1;
-  return <div className={`webseo${loading ? ' is-refetching' : ''}`}>
-    <div className="webseo-head">
-      <h4>Google Search &amp; rankings <span>{prettyDomain(seo.property)} · last 28 days</span></h4>
+function ComingSoonView({ title, blurb }) {
+  return <div className="statspage-view">
+    <header className="statspage-viewhead"><div><h2>{title}</h2></div></header>
+    <div className="statspage-soon-panel">
+      <div className="statspage-soon-badge">Coming soon</div>
+      <p>{blurb}</p>
     </div>
-    <div className="webseo-kpis">
-      <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{t.clicks.toLocaleString()}</strong><DeltaBadge value={t.clicksDelta} /></div><span>Clicks from Google</span></div>
-      <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{t.impressions.toLocaleString()}</strong><DeltaBadge value={t.impressionsDelta} /></div><span>Times shown</span></div>
-      <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{fmtPos(t.position)}</strong><DeltaBadge value={t.positionDelta} invert digits={1} /></div><span>Avg. position</span></div>
-      <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{fmtPct(t.ctr)}</strong><DeltaBadge value={t.ctrDelta * 100} digits={1} suffix="%" /></div><span>Click rate</span></div>
-    </div>
-    {seo.queries?.length ? <div className="webseo-queries">
-      <div className="webseo-q-head"><span>Search term</span><span className="webseo-q-pos">Position</span><span className="webseo-q-move">Movement</span></div>
-      {seo.queries.map((q) => <div className="webseo-q" key={q.query}>
-        <span className="webseo-q-term" title={q.query}>{q.query}<em className="webseo-q-clicks">{q.clicks} clicks · {q.impressions.toLocaleString()} shown</em>
-          <span className="webseo-q-track"><span style={{ width: `${(q.impressions / maxQClicks) * 100}%` }} /></span></span>
-        <span className="webseo-q-pos">{fmtPos(q.position)}</span>
-        <span className="webseo-q-move"><DeltaBadge value={q.positionDelta} invert digits={1} /></span>
-      </div>)}
-    </div> : <div className="webstats-muted">No search terms recorded yet.</div>}
   </div>;
 }
 
