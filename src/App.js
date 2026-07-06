@@ -6272,25 +6272,55 @@ function fmtGaDate(s) {
 }
 const CONV_LABELS = { generate_lead: 'Leads', quote_submit: 'Quote form', contact_submit: 'Contact form', Lead: 'Meta Lead' };
 
+// Temp filter: the day the new site went live (adjust if needed).
+const SITE_LAUNCH_DATE = '2026-07-02';
+const STATS_PERIODS = [
+  ['today', 'Today', { startDate: 'today', endDate: 'today' }, 'today'],
+  ['last7', '7 days', { startDate: '6daysAgo', endDate: 'today' }, 'last 7 days'],
+  ['last30', '30 days', { startDate: '29daysAgo', endDate: 'today' }, 'last 30 days'],
+  ['launch', 'Since new site', { startDate: SITE_LAUNCH_DATE, endDate: 'today' }, 'since new site'],
+];
+
 function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
   const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
   const runStats = useAction(api.ga4.getWebsiteStats);
-  const [data, setData] = useState(null);
+  const [byPeriod, setByPeriod] = useState({});
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('last7');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (p, force) => {
+    const meta = STATS_PERIODS.find((x) => x[0] === p) || STATS_PERIODS[1];
+    setPeriod(p);
+    setByPeriod((cur) => (!force && cur[p] ? cur : cur)); // no-op keeps cache
+    if (!force && byPeriod[p] && !byPeriod[p].error) return;
     setLoading(true);
-    try { setData(await runStats()); } catch (e) { setData({ error: 'load_failed', detail: String(e?.message || e) }); }
+    try {
+      const res = await runStats(meta[2]);
+      setByPeriod((cur) => ({ ...cur, [p]: res }));
+    } catch (e) {
+      setByPeriod((cur) => ({ ...cur, [p]: { error: 'load_failed', detail: String(e?.message || e) } }));
+    }
     setLoading(false);
-  }, [runStats]);
-  useEffect(() => { void load(); }, [load]);
+  }, [runStats, byPeriod]);
+
+  useEffect(() => { void load('last7', false); /* eslint-disable-next-line */ }, []);
 
   const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
-  const cur = data && data[period];
+  const data = byPeriod[period];
+  const meta = STATS_PERIODS.find((x) => x[0] === period) || STATS_PERIODS[1];
+  const periodLabel = meta[3];
+  const cur = data && data.kpi;
   const maxDaily = data?.daily?.length ? Math.max(...data.daily.map((d) => d.sessions), 1) : 1;
   const maxPage = data?.topPages?.length ? Math.max(...data.topPages.map((p) => p.views), 1) : 1;
   const maxSrc = data?.sources?.length ? Math.max(...data.sources.map((s) => s.sessions), 1) : 1;
+
+  const tabs = (
+    <div className="webstats-tabs">
+      {STATS_PERIODS.map(([k, l]) => (
+        <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, false)}>{l}</button>
+      ))}
+    </div>
+  );
 
   let body;
   if (loading && !data) {
@@ -6301,50 +6331,46 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
       {isAdmin ? <><button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google Analytics</button>
         <p className="webstats-muted">Approve in the Google popup, then come back and hit Refresh.</p></>
         : <p className="webstats-muted">Ask an admin to connect Google Analytics.</p>}
-      <button className="ghost-button" type="button" onClick={() => void load()}>Refresh</button>
+      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
     </div>;
   } else if (data && data.error === 'reauth_needed') {
     body = <div className="webstats-empty">
       <p>The Google Analytics connection expired &mdash; reconnect to refresh the data.</p>
       {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect</button> : <p className="webstats-muted">Ask an admin to reconnect.</p>}
-      <button className="ghost-button" type="button" onClick={() => void load()}>Refresh</button>
+      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
     </div>;
   } else if (data && data.error) {
-    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load()}>Retry</button></div>;
+    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, true)}>Retry</button></div>;
   } else if (data && cur) {
     const kpis = [['Visits', cur.sessions], ['Visitors', cur.users], ['Page views', cur.pageviews], ['Avg. time', fmtDur(cur.avgEngagementSec)], ['Leads', cur.conversions]];
-    body = <div className="webstats">
-      <div className="webstats-tabs">
-        {[['today', 'Today'], ['last7', '7 days'], ['last30', '30 days']].map(([k, l]) => (
-          <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => setPeriod(k)}>{l}</button>
-        ))}
-      </div>
+    body = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
+      {tabs}
       <div className="webstats-kpis">
         {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
       </div>
       <div className="webstats-section">
-        <h4>Daily visits <span>last 30 days</span></h4>
+        <h4>{data.trendMode === 'hourly' ? 'Visits by hour' : 'Daily visits'} <span>{periodLabel}</span></h4>
         <div className="webstats-bars">
-          {data.daily.map((d) => <div className="webstats-bar" key={d.date} title={`${fmtGaDate(d.date)} - ${d.sessions} visits`}><span style={{ height: `${Math.max(3, (d.sessions / maxDaily) * 100)}%` }} /></div>)}
+          {data.daily.map((d, i) => <div className="webstats-bar" key={d.label + i} title={`${d.label} - ${d.sessions} visits`}><span style={{ height: `${Math.max(3, (d.sessions / maxDaily) * 100)}%` }} /></div>)}
         </div>
       </div>
       <div className="webstats-cols">
         <div className="webstats-section">
-          <h4>Top pages <span>30 days</span></h4>
-          {data.topPages.map((p) => <div className="webstats-row" key={p.path}><div className="webstats-row-head"><span className="webstats-row-label" title={p.path}>{p.path}</span><span className="webstats-row-val">{p.views.toLocaleString()}</span></div><div className="webstats-track"><span style={{ width: `${(p.views / maxPage) * 100}%` }} /></div></div>)}
+          <h4>Top pages <span>{periodLabel}</span></h4>
+          {data.topPages.length ? data.topPages.map((p) => <div className="webstats-row" key={p.path}><div className="webstats-row-head"><span className="webstats-row-label" title={p.path}>{p.path}</span><span className="webstats-row-val">{p.views.toLocaleString()}</span></div><div className="webstats-track"><span style={{ width: `${(p.views / maxPage) * 100}%` }} /></div></div>) : <div className="webstats-muted">No data yet.</div>}
         </div>
         <div className="webstats-section">
-          <h4>Where visitors come from <span>30 days</span></h4>
-          {data.sources.map((s) => <div className="webstats-row" key={s.channel}><div className="webstats-row-head"><span className="webstats-row-label">{s.channel}</span><span className="webstats-row-val">{s.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(s.sessions / maxSrc) * 100}%` }} /></div></div>)}
+          <h4>Where visitors come from <span>{periodLabel}</span></h4>
+          {data.sources.length ? data.sources.map((s) => <div className="webstats-row" key={s.channel}><div className="webstats-row-head"><span className="webstats-row-label">{s.channel}</span><span className="webstats-row-val">{s.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(s.sessions / maxSrc) * 100}%` }} /></div></div>) : <div className="webstats-muted">No data yet.</div>}
         </div>
       </div>
       {data.conversionsByEvent?.length ? <div className="webstats-section">
-        <h4>Conversions <span>30 days</span></h4>
+        <h4>Conversions <span>{periodLabel}</span></h4>
         <div className="webstats-conv">{data.conversionsByEvent.map((c) => <div key={c.event} className="webstats-conv-item"><strong>{c.count.toLocaleString()}</strong><span>{CONV_LABELS[c.event] || c.event}</span></div>)}</div>
       </div> : null}
       <div className="webstats-foot">
         <span>Google Analytics{data.fetchedAt ? ` - updated ${new Date(data.fetchedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-        <button className="ghost-button" type="button" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+        <button className="ghost-button" type="button" onClick={() => void load(period, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
       </div>
     </div>;
   }

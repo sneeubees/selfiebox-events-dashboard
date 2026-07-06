@@ -1651,6 +1651,7 @@ textarea { resize: vertical; min-height: 110px; }
 
 /* ---- Website Stats (GA4) modal ---- */
 .webstats-panel { width: min(880px, 96vw); }
+.webstats.is-refetching { opacity: 0.5; pointer-events: none; transition: opacity 120ms ease; }
 .webstats-empty { text-align: center; padding: 26px 10px 10px; display: grid; gap: 14px; justify-items: center; color: var(--muted); }
 .webstats-empty p { margin: 0; }
 .webstats-muted { color: var(--muted); font-size: 0.84rem; }
