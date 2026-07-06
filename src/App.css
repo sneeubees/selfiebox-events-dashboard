@@ -1650,7 +1650,14 @@ textarea { resize: vertical; min-height: 110px; }
 }
 
 /* ---- Website Stats (GA4) modal ---- */
-.webstats-panel { width: min(880px, 96vw); }
+.webstats-panel { width: min(880px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+.webstats-panel > .modal-header { flex: 0 0 auto; }
+.webstats-panel > .webstats, .webstats-panel > .webstats-empty { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; margin: 0 -4px; padding: 2px 8px 2px 4px; }
+.webstats-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.webstats-controls .webstats-tabs { margin-bottom: 0; }
+.webstats-sa { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.82rem; color: var(--text); user-select: none; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel-alt); }
+.webstats-sa input { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; margin: 0; }
+.webstats-track span.is-country { background: linear-gradient(90deg, #22c55e, #38bdf8); }
 .webstats.is-refetching { opacity: 0.5; pointer-events: none; transition: opacity 120ms ease; }
 .webstats-empty { text-align: center; padding: 26px 10px 10px; display: grid; gap: 14px; justify-items: center; color: var(--muted); }
 .webstats-empty p { margin: 0; }

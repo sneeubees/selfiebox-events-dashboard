@@ -6307,23 +6307,26 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
   const [byPeriod, setByPeriod] = useState({});
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('last7');
+  const [saOnly, setSaOnly] = useState(false);
   const [seo, setSeo] = useState(null);
   const [seoLoading, setSeoLoading] = useState(true);
 
-  const load = useCallback(async (p, force) => {
+  const load = useCallback(async (p, sa, force) => {
     const meta = STATS_PERIODS.find((x) => x[0] === p) || STATS_PERIODS[1];
+    const key = `${p}${sa ? '|sa' : ''}`;
     setPeriod(p);
-    setByPeriod((cur) => (!force && cur[p] ? cur : cur)); // no-op keeps cache
-    if (!force && byPeriod[p] && !byPeriod[p].error) return;
+    if (!force && byPeriod[key] && !byPeriod[key].error) return;
     setLoading(true);
     try {
-      const res = await runStats(meta[2]);
-      setByPeriod((cur) => ({ ...cur, [p]: res }));
+      const res = await runStats({ ...meta[2], country: sa ? 'South Africa' : undefined });
+      setByPeriod((cur) => ({ ...cur, [key]: res }));
     } catch (e) {
-      setByPeriod((cur) => ({ ...cur, [p]: { error: 'load_failed', detail: String(e?.message || e) } }));
+      setByPeriod((cur) => ({ ...cur, [key]: { error: 'load_failed', detail: String(e?.message || e) } }));
     }
     setLoading(false);
   }, [runStats, byPeriod]);
+
+  const toggleSa = (v) => { setSaOnly(v); void load(period, v, false); };
 
   const loadSeo = useCallback(async () => {
     setSeoLoading(true);
@@ -6332,22 +6335,29 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
     setSeoLoading(false);
   }, [runSeo]);
 
-  useEffect(() => { void load('last7', false); void loadSeo(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { void load('last7', false, false); void loadSeo(); /* eslint-disable-next-line */ }, []);
 
   const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
-  const data = byPeriod[period];
+  const data = byPeriod[`${period}${saOnly ? '|sa' : ''}`];
   const meta = STATS_PERIODS.find((x) => x[0] === period) || STATS_PERIODS[1];
   const periodLabel = meta[3];
   const cur = data && data.kpi;
   const maxDaily = data?.daily?.length ? Math.max(...data.daily.map((d) => d.sessions), 1) : 1;
   const maxPage = data?.topPages?.length ? Math.max(...data.topPages.map((p) => p.views), 1) : 1;
   const maxSrc = data?.sources?.length ? Math.max(...data.sources.map((s) => s.sessions), 1) : 1;
+  const maxCountry = data?.countries?.length ? Math.max(...data.countries.map((c) => c.sessions), 1) : 1;
 
-  const tabs = (
-    <div className="webstats-tabs">
-      {STATS_PERIODS.map(([k, l]) => (
-        <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, false)}>{l}</button>
-      ))}
+  const controls = (
+    <div className="webstats-controls">
+      <div className="webstats-tabs">
+        {STATS_PERIODS.map(([k, l]) => (
+          <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, saOnly, false)}>{l}</button>
+        ))}
+      </div>
+      <label className="webstats-sa" title="Show only visits from South Africa">
+        <input type="checkbox" checked={saOnly} onChange={(e) => toggleSa(e.target.checked)} />
+        <span>South Africa only</span>
+      </label>
     </div>
   );
 
@@ -6360,20 +6370,20 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
       {isAdmin ? <><button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google Analytics</button>
         <p className="webstats-muted">Approve in the Google popup, then come back and hit Refresh.</p></>
         : <p className="webstats-muted">Ask an admin to connect Google Analytics.</p>}
-      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
+      <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Refresh</button>
     </div>;
   } else if (data && data.error === 'reauth_needed') {
     body = <div className="webstats-empty">
       <p>The Google Analytics connection expired &mdash; reconnect to refresh the data.</p>
       {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect</button> : <p className="webstats-muted">Ask an admin to reconnect.</p>}
-      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
+      <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Refresh</button>
     </div>;
   } else if (data && data.error) {
-    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, true)}>Retry</button></div>;
+    body = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Retry</button></div>;
   } else if (data && cur) {
     const kpis = [['Visits', cur.sessions], ['Visitors', cur.users], ['Page views', cur.pageviews], ['Avg. time', fmtDur(cur.avgEngagementSec)], ['Leads', cur.conversions]];
     body = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
-      {tabs}
+      {controls}
       <div className="webstats-kpis">
         {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
       </div>
@@ -6393,6 +6403,10 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
           {data.sources.length ? data.sources.map((s) => <div className="webstats-row" key={s.channel}><div className="webstats-row-head"><span className="webstats-row-label">{s.channel}</span><span className="webstats-row-val">{s.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(s.sessions / maxSrc) * 100}%` }} /></div></div>) : <div className="webstats-muted">No data yet.</div>}
         </div>
       </div>
+      {data.countries?.length ? <div className="webstats-section">
+        <h4>By country <span>{periodLabel}</span></h4>
+        {data.countries.map((c) => <div className="webstats-row" key={c.country}><div className="webstats-row-head"><span className="webstats-row-label">{c.country}</span><span className="webstats-row-val">{c.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-country" style={{ width: `${(c.sessions / maxCountry) * 100}%` }} /></div></div>)}
+      </div> : null}
       {data.conversionsByEvent?.length ? <div className="webstats-section">
         <h4>Conversions <span>{periodLabel}</span></h4>
         <div className="webstats-conv">{data.conversionsByEvent.map((c) => <div key={c.event} className="webstats-conv-item"><strong>{c.count.toLocaleString()}</strong><span>{CONV_LABELS[c.event] || c.event}</span></div>)}</div>
@@ -6400,7 +6414,7 @@ function WebsiteStatsModal({ onClose, isAdmin, canAccess }) {
       <SeoSection seo={seo} loading={seoLoading} isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} onRefresh={() => void loadSeo()} />
       <div className="webstats-foot">
         <span>Google Analytics{data.fetchedAt ? ` - updated ${new Date(data.fetchedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-        <button className="ghost-button" type="button" onClick={() => void load(period, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+        <button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
       </div>
     </div>;
   }

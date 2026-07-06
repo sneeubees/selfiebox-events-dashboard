@@ -206,7 +206,7 @@ export const getTokenRaw = internalQuery({
 // trend), so the period toggle filters the whole page. GA4 accepts relative
 // strings ("today", "6daysAgo") or absolute "YYYY-MM-DD".
 export const getWebsiteStats = action({
-  args: { startDate: v.optional(v.string()), endDate: v.optional(v.string()) },
+  args: { startDate: v.optional(v.string()), endDate: v.optional(v.string()), country: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return { connected: false, canManage: false };
@@ -222,9 +222,21 @@ export const getWebsiteStats = action({
     return await ctx.runAction(internal.ga4.fetchStats, {
       startDate: args.startDate || "6daysAgo",
       endDate: args.endDate || "today",
+      country: args.country || "",
     });
   },
 });
+
+// Wrap a runReport body with a country filter, AND-combining it with any
+// existing dimensionFilter (e.g. the conversions eventName list).
+function withCountry(body, country) {
+  if (!country) return body;
+  const cf = { filter: { fieldName: "country", stringFilter: { value: country } } };
+  if (body.dimensionFilter) {
+    return { ...body, dimensionFilter: { andGroup: { expressions: [cf, body.dimensionFilter] } } };
+  }
+  return { ...body, dimensionFilter: cf };
+}
 
 function trendLabel(raw, hourly) {
   if (hourly) return `${String(raw).padStart(2, "0")}:00`;
@@ -234,8 +246,8 @@ function trendLabel(raw, hourly) {
 // Internal: does the actual GA4 work (no auth) so it can be run standalone
 // via `convex run ga4:fetchStats '{"startDate":"today","endDate":"today"}'`.
 export const fetchStats = internalAction({
-  args: { startDate: v.string(), endDate: v.string() },
-  handler: async (ctx, { startDate, endDate }) => {
+  args: { startDate: v.string(), endDate: v.string(), country: v.optional(v.string()) },
+  handler: async (ctx, { startDate, endDate, country }) => {
     const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
     if (!refreshToken) return { connected: false, canManage: true };
 
@@ -247,38 +259,49 @@ export const fetchStats = internalAction({
       return { connected: true, canManage: true, error: "reauth_needed", detail: String(e.message || e) };
     }
 
+    const geo = String(country || "").trim(); // e.g. "South Africa" — empty = worldwide
     const CONV_EVENTS = ["quote_submit", "contact_submit", "generate_lead", "Lead"];
     const dr = [{ startDate, endDate }];
     const singleDay = startDate === endDate; // e.g. "today".."today" -> show hourly
+    const wc = (body) => withCountry(body, geo);
     try {
       const trendReq = singleDay
         ? { dateRanges: dr, dimensions: [{ name: "hour" }], metrics: [{ name: "sessions" }], orderBys: [{ dimension: { dimensionName: "hour" } }] }
         : { dateRanges: dr, dimensions: [{ name: "date" }], metrics: [{ name: "sessions" }], orderBys: [{ dimension: { dimensionName: "date" } }] };
-      const [totals, convTotal, trend, pages, sources, convByEvent] = await Promise.all([
-        runReport(accessToken, propertyId, { dateRanges: dr, metrics: TOTAL_METRICS.map((name) => ({ name })) }),
-        runReport(accessToken, propertyId, convRequest(startDate, endDate, CONV_EVENTS)),
-        runReport(accessToken, propertyId, trendReq),
-        runReport(accessToken, propertyId, {
+      // By-country breakdown only when NOT filtered to a single country.
+      const countriesReq = geo ? null : {
+        dateRanges: dr,
+        dimensions: [{ name: "country" }],
+        metrics: [{ name: "sessions" }],
+        orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 10,
+      };
+      const [totals, convTotal, trend, pages, sources, convByEvent, countries] = await Promise.all([
+        runReport(accessToken, propertyId, wc({ dateRanges: dr, metrics: TOTAL_METRICS.map((name) => ({ name })) })),
+        runReport(accessToken, propertyId, wc(convRequest(startDate, endDate, CONV_EVENTS))),
+        runReport(accessToken, propertyId, wc(trendReq)),
+        runReport(accessToken, propertyId, wc({
           dateRanges: dr,
           dimensions: [{ name: "pagePath" }],
           metrics: [{ name: "screenPageViews" }, { name: "averageSessionDuration" }],
           orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
           limit: 8,
-        }),
-        runReport(accessToken, propertyId, {
+        })),
+        runReport(accessToken, propertyId, wc({
           dateRanges: dr,
           dimensions: [{ name: "sessionDefaultChannelGroup" }],
           metrics: [{ name: "sessions" }],
           orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
           limit: 8,
-        }),
-        runReport(accessToken, propertyId, {
+        })),
+        runReport(accessToken, propertyId, wc({
           dateRanges: dr,
           dimensions: [{ name: "eventName" }],
           metrics: [{ name: "eventCount" }],
           dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: CONV_EVENTS } } },
           orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
-        }),
+        })),
+        countriesReq ? runReport(accessToken, propertyId, countriesReq) : Promise.resolve(null),
       ]);
 
       const kpi = parseTotals(totals);
@@ -289,6 +312,7 @@ export const fetchStats = internalAction({
         canManage: true,
         fetchedAt: Date.now(),
         trendMode: singleDay ? "hourly" : "daily",
+        country: geo,
         kpi,
         daily: (trend.rows || []).map((r) => ({
           label: trendLabel(r.dimensionValues[0].value, singleDay),
@@ -306,6 +330,10 @@ export const fetchStats = internalAction({
         conversionsByEvent: (convByEvent.rows || []).map((r) => ({
           event: r.dimensionValues[0].value,
           count: num(r.metricValues[0].value),
+        })),
+        countries: (countries?.rows || []).map((r) => ({
+          country: r.dimensionValues[0].value || "(unknown)",
+          sessions: num(r.metricValues[0].value),
         })),
       };
     } catch (e) {
