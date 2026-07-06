@@ -4346,7 +4346,7 @@ function DashboardApp() {
           </div>
           {currentUser.role === 'admin' ? (
             <div className="topbar-admin-actions">
-              <button className="turnover-top-icon" type="button" title="Turnover Figures" aria-label="Turnover Figures" onClick={openTurnoverDialog}><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 18V6" /></svg></button>
+              <button className="turnover-top-icon" type="button" title="Turnover Figures" aria-label="Turnover Figures" onClick={openTurnoverDialog}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg></button>
             </div>
           ) : null}
           <div className={`profile-menu-wrap${currentUser.role === 'admin' ? ' is-admin' : ''}`} onMouseEnter={currentUser.role === 'admin' ? () => setProfileMenuOpen(true) : undefined} onMouseLeave={currentUser.role === 'admin' ? () => setProfileMenuOpen(false) : undefined}>
