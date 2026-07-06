@@ -917,6 +917,7 @@ function DashboardApp() {
   const [newColumnType, setNewColumnType] = useState('text');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [exportDialog, setExportDialog] = useState({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] });
   const [previewFile, setPreviewFile] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null);
@@ -4351,11 +4352,20 @@ function DashboardApp() {
           </div>
           {currentUser.role === 'admin' ? (
             <div className="topbar-admin-actions">
-              <button className="month-export-button manage-users-button" type="button" onClick={() => setShowUsersModal(true)}>Manage Users</button>
               <button className="month-export-button turnover-top-button" type="button" onClick={openTurnoverDialog}>Turnover Figures</button>
             </div>
           ) : null}
-          <button className="profile-pill" type="button" onClick={() => setShowProfileModal(true)}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span><strong>{currentUser.firstName} {currentUser.surname}</strong></button>
+          <div className={`profile-menu-wrap${currentUser.role === 'admin' ? ' is-admin' : ''}`} onMouseEnter={currentUser.role === 'admin' ? () => setProfileMenuOpen(true) : undefined} onMouseLeave={currentUser.role === 'admin' ? () => setProfileMenuOpen(false) : undefined}>
+            <button className="profile-pill" type="button" aria-haspopup={currentUser.role === 'admin' ? 'menu' : undefined} aria-expanded={currentUser.role === 'admin' ? profileMenuOpen : undefined} onClick={() => { if (currentUser.role === 'admin') { setProfileMenuOpen((open) => !open); } else { setShowProfileModal(true); } }}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span><strong>{currentUser.firstName} {currentUser.surname}</strong></button>
+            {currentUser.role === 'admin' && profileMenuOpen ? (
+              <div className="profile-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowProfileModal(true); }}>Profile</button>
+                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowUsersModal(true); }}>Manage Users</button>
+                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); openTurnoverDialog(); }}>Reports</button>
+                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowWebsiteStats(true); }}>Website Stats</button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -4404,8 +4414,8 @@ function DashboardApp() {
             ) : null}
           </div>
           <div className="board-toolbar-actions">
-            {currentUser.role === 'admin' ? <button className="workspace-text-button board-export-link" type="button" onClick={exportWorkspaceToExcel}>Export to Excel</button> : null}
-            <button className="workspace-text-button board-activities-link" type="button" onClick={() => setActivitiesOpen(true)}>Activities</button>
+            {currentUser.role === 'admin' ? <button className="workspace-text-button board-export-link board-toolbar-icon" type="button" title="Export to Excel" aria-label="Export to Excel" onClick={exportWorkspaceToExcel}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg></button> : null}
+            <button className="workspace-text-button board-activities-link board-toolbar-icon" type="button" title="Activities" aria-label="Activities" onClick={() => setActivitiesOpen(true)}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></button>
           </div>
         </div>
         <div className="board-surface" ref={boardSurfaceRef} style={{ '--board-columns': boardColumnTemplate, '--board-width': `${boardWidth}px` }}>

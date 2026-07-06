@@ -103,8 +103,17 @@ button { cursor: pointer; }
 .primary-button { background: var(--blue); color: #fff; padding: 8px 12px; box-shadow: 0 10px 20px rgba(37, 88, 199, 0.16); }
 .ghost-button { background: #eef2ff; color: #26427b; padding: 8px 12px; }
 .profile-pill { border: 0; background: transparent; padding: 0; border-radius: 0; gap: 6px; font-size: 0.9rem; }
+.profile-menu-wrap.is-admin .profile-pill { cursor: pointer; }
 .profile-pill-media { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; overflow: hidden; background: var(--blue); color: #fff; font-weight: 700; font-size: 0.72rem; }
 .profile-pill-image { width: 100%; height: 100%; object-fit: cover; }
+/* Admin quick-menu that drops under the profile pill on hover. Sits flush
+   (top:100%, no gap) so the pointer can move from pill to menu without
+   crossing empty space that would trigger onMouseLeave and close it. */
+.profile-menu-wrap { position: relative; }
+.profile-menu { position: absolute; top: 100%; right: 0; z-index: 9999; display: grid; gap: 2px; min-width: 182px; margin-top: 6px; padding: 7px; border-radius: 12px; background: #fff; border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18); }
+.profile-menu::before { content: ''; position: absolute; top: -8px; left: 0; right: 0; height: 8px; }
+.profile-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 9px 11px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.profile-menu button:hover { background: rgba(59, 130, 246, 0.1); }
 .profile-pill, .profile-field small, .month-header span, .activity-item p, .file-card p, .auth-card p { color: var(--muted); }
 .board-shell, .auth-card, .modal-panel, .drawer-card, .profile-field { background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .profile-modal { display: grid; gap: 18px; max-height: min(82vh, 860px); overflow: auto; padding-right: 4px; }
@@ -127,7 +136,9 @@ button { cursor: pointer; }
 .topbar-admin-actions { display: grid; gap: 6px; }
 .month-export-button.manage-users-button { white-space: nowrap; background: #1f4d8a; border-color: #1f4d8a; color: #ffffff; }
 .month-export-button.manage-users-button:hover { background: #183e70; border-color: #183e70; }
-.month-export-button.turnover-top-button { white-space: nowrap; background: #c86a12; border-color: #c86a12; color: #ffffff; }
+/* Manage Users moved into the profile dropdown, so Turnover Figures is now the
+   single top-right action pill - enlarged to a fuller button to match. */
+.month-export-button.turnover-top-button { white-space: nowrap; background: #c86a12; border-color: #c86a12; color: #ffffff; padding: 7px 16px; font-size: 0.72rem; font-weight: 700; }
 .month-export-button.turnover-top-button:hover { background: #a8570f; border-color: #a8570f; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
@@ -155,8 +166,13 @@ button { cursor: pointer; }
 .danger-button:hover { background: #ffdce5; }
 .board-shell { border-radius: 14px; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .board-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
-.board-toolbar-actions { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; }
+.board-toolbar-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .board-activities-link, .board-export-link { font-size: 0.78rem; }
+/* Export + Activities reduced to icon buttons (labels in tooltip). Base class
+   is still .workspace-text-button so dark-mode colour is inherited. */
+.board-toolbar-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-alt); color: #4a5f91; }
+.board-toolbar-icon:hover { background: #eaf1ff; color: #274582; text-decoration: none; }
+.board-toolbar-icon svg { display: block; }
 .filters-grid.single-row-tools { display: flex; align-items: end; gap: 8px; width: 100%; min-width: 0; }
 .search-input-wrap { position: relative; flex: 0 1 380px; min-width: 260px; }
 .search-wide { min-width: 0; }
@@ -1485,6 +1501,20 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .admin-menu button:hover {
   background: #223556;
+}
+:root[data-theme="dark"] .profile-menu {
+  background: var(--panel);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .profile-menu button {
+  color: #dce8ff;
+}
+:root[data-theme="dark"] .profile-menu button:hover {
+  background: #1d3868;
+}
+:root[data-theme="dark"] .board-toolbar-icon:hover {
+  background: #1d3868;
+  color: #dbe8ff;
 }
 :root[data-theme="dark"] .inline-input:hover,
 :root[data-theme="dark"] .inline-input:focus {
