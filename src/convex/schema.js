@@ -106,6 +106,10 @@ export default defineSchema({
     files: v.array(eventFile),
     activity: v.array(eventEntry),
     createdByUserId: v.optional(v.id("users")),
+    // Stamped once, the first time status moves away from "Web Request" -
+    // never overwritten again. Drives the dashboard's new-request row
+    // highlight + avatar swap (see events.js upsert()).
+    firstStatusChangeByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

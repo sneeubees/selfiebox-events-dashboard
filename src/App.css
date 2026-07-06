@@ -222,6 +222,10 @@ button { cursor: pointer; }
 .board-entry.is-active .cell { background: #eef4ff; }
 .board-entry.is-active .cell-name { background: #e6efff; box-shadow: inset 4px 0 0 #2f5cae, 1px 0 0 var(--line); }
 .board-entry.is-active .cell-date { background: #eef4ff; }
+.board-entry.is-new-request .cell { background: #fdeaea; }
+.board-entry.is-new-request .cell-name { background: #fbdbdb; box-shadow: inset 4px 0 0 #d64545, 1px 0 0 var(--line); }
+.board-entry.is-new-request .cell-date { background: #fbdbdb; }
+.board-entry.is-new-request:hover .cell { background: #fadcdc; }
 .month-section > .board-row.board-entry:first-of-type .cell { border-top: 1px solid var(--line); }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }
@@ -230,6 +234,7 @@ button { cursor: pointer; }
 .plus-trigger { font-weight: 700; letter-spacing: -0.06em; }
 .row-creator-avatar { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; overflow: hidden; background: #dfe8fb; color: #294777; font-size: 0.55rem; font-weight: 700; }
 .row-creator-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.row-creator-avatar.is-new-request-badge { background: #d64545; color: #fff; font-size: 0.42rem; letter-spacing: 0.02em; }
 .row-copy { width: 24px; height: 24px; border-radius: 999px; background: #e8edf8; color: #355190; font-weight: 700; }
 .row-copy:hover { background: #dbe6ff; }
 .row-delete { width: 24px; height: 24px; border-radius: 999px; background: transparent; color: #cf334e; font-weight: 700; }
@@ -1197,6 +1202,16 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .board-entry.is-active .cell-name {
   box-shadow: inset 4px 0 0 #77a6ff, 1px 0 0 var(--line);
+}
+:root[data-theme="dark"] .board-entry.is-new-request .cell,
+:root[data-theme="dark"] .board-entry.is-new-request .cell-name {
+  background: #402323;
+}
+:root[data-theme="dark"] .board-entry.is-new-request .cell-name {
+  box-shadow: inset 4px 0 0 #e06a6a, 1px 0 0 var(--line);
+}
+:root[data-theme="dark"] .board-entry.is-new-request:hover .cell {
+  background: #4a2828;
 }
 :root[data-theme="dark"] .workspace-text-button,
 :root[data-theme="dark"] .ghost-button,

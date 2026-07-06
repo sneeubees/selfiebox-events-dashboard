@@ -100,7 +100,7 @@ function getChangedEventFields(previousRecord, nextRecord) {
   return changed;
 }
 
-function toEventDto(record, creator = null) {
+function toEventDto(record, creator = null, statusChanger = null) {
   return {
     id: record.eventKey,
     workspaceYear: record.workspaceYear,
@@ -137,10 +137,13 @@ function toEventDto(record, creator = null) {
     createdByUserId: record.createdByUserId || null,
     createdByName: creator?.fullName || "",
     createdByProfilePic: creator?.profilePic || "",
+    firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
+    firstStatusChangeByName: statusChanger?.fullName || "",
+    firstStatusChangeByProfilePic: statusChanger?.profilePic || "",
   };
 }
 
-function toEventListDto(record, creator = null) {
+function toEventListDto(record, creator = null, statusChanger = null) {
   return {
     id: record.eventKey,
     workspaceYear: record.workspaceYear,
@@ -173,6 +176,9 @@ function toEventListDto(record, creator = null) {
     customFields: record.customFields || {},
     createdByUserId: record.createdByUserId || null,
     createdByName: creator?.fullName || "",
+    firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
+    firstStatusChangeByName: statusChanger?.fullName || "",
+    firstStatusChangeByProfilePic: statusChanger?.profilePic || "",
     duplicatedFromEventKey: record.duplicatedFromEventKey || "",
     duplicatedFromEventName: record.duplicatedFromEventName || "",
   };
@@ -199,18 +205,25 @@ async function generateUniqueBookingToken(ctx) {
 }
 
 async function attachCreatorDetails(ctx, events, dtoMapper) {
-  const creatorIdsByKey = new Map();
+  const userIdsByKey = new Map();
   events.forEach((record) => {
     if (record.createdByUserId) {
-      creatorIdsByKey.set(String(record.createdByUserId), record.createdByUserId);
+      userIdsByKey.set(String(record.createdByUserId), record.createdByUserId);
+    }
+    if (record.firstStatusChangeByUserId) {
+      userIdsByKey.set(String(record.firstStatusChangeByUserId), record.firstStatusChangeByUserId);
     }
   });
-  const creatorEntries = await Promise.all(
-    Array.from(creatorIdsByKey.entries()).map(async ([creatorKey, creatorId]) => [creatorKey, await ctx.db.get(creatorId)])
+  const userEntries = await Promise.all(
+    Array.from(userIdsByKey.entries()).map(async ([userKey, userId]) => [userKey, await ctx.db.get(userId)])
   );
-  const userById = new Map(creatorEntries);
+  const userById = new Map(userEntries);
   return events.map((record) =>
-    dtoMapper(record, userById.get(String(record.createdByUserId || "")) || null)
+    dtoMapper(
+      record,
+      userById.get(String(record.createdByUserId || "")) || null,
+      userById.get(String(record.firstStatusChangeByUserId || "")) || null
+    )
   );
 }
 
@@ -425,6 +438,17 @@ export const upsert = mutation({
     };
 
     if (existing) {
+      // Stamp who moved this off "Web Request" - the FIRST time only. Convex
+      // patch() shallow-merges, so once set this key is simply omitted from
+      // future payloads and the stored value is never touched again.
+      if (
+        existing.status === "Web Request" &&
+        payload.status &&
+        payload.status !== "Web Request" &&
+        !existing.firstStatusChangeByUserId
+      ) {
+        payload.firstStatusChangeByUserId = currentUser._id;
+      }
       await ctx.db.patch(existing._id, payload);
       const refreshed = await ctx.db.get(existing._id);
       const changedFields = getChangedEventFields(existing, refreshed);
