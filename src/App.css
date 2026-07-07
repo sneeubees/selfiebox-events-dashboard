@@ -298,8 +298,11 @@ button { cursor: pointer; }
    the corners "cut out" to panel-alt instead of revealing the table.
    Accent colour + radius flow through --header-bg / --header-radius so all the
    hover/expanded/drag/dark rules keep working by setting those vars. */
-.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; overflow: clip; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: var(--panel-alt); --header-bg: #edf3ff; --header-radius: 12px 12px 0 0; text-align: left; box-sizing: border-box; box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); }
-.month-header::before { content: ''; position: absolute; inset: 0; background: var(--header-bg); border-radius: var(--header-radius, 12px 12px 0 0); z-index: -1; transition: background 140ms ease; }
+.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: var(--panel-alt); --header-bg: #edf3ff; --header-radius: 12px 12px 0 0; text-align: left; box-sizing: border-box; }
+/* The rounded accent + its bottom accent line both live on ::before so the line
+   follows the rounded corners (curls at the collapsed pill, straight along the
+   expanded bottom) instead of running past them as a square element shadow. */
+.month-header::before { content: ''; position: absolute; inset: 0; background: var(--header-bg); border-radius: var(--header-radius, 12px 12px 0 0); box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); z-index: -1; transition: background 140ms ease; }
 .month-section.is-collapsed-month .month-header { --header-radius: 12px; }
 .month-section.is-expanded-month .month-header { --header-radius: 12px 12px 0 0; }
 .month-header:hover { --header-bg: #e5eeff; }
