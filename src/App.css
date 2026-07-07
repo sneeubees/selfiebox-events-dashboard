@@ -33,6 +33,20 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Monts
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 .app-shell { height: 100vh; padding: 10px; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Dark-mode ambient glow, matching the marketing website's background treatment
+   (selfiebox.co.za): a few large blurred blue/cyan blobs, fixed to the
+   viewport, gently pulsing. Hidden in light mode. Sits behind everything
+   (z-index -1) - since the board/panels are opaque it mainly reads in the
+   gaps/edges around the UI, same as it only shows through negative space on
+   the website. */
+.dashboard-ambient { display: none; position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+:root[data-theme="dark"] .dashboard-ambient { display: block; }
+.dashboard-ambient-glow { position: absolute; border-radius: 50%; filter: blur(120px); animation: dashboard-ambient-pulse 9s ease-in-out infinite; }
+.dashboard-ambient-glow--tr { top: -260px; right: -180px; width: 720px; height: 720px; background: radial-gradient(closest-side, rgba(90, 160, 255, 0.4), rgba(60, 120, 240, 0.18) 58%, transparent 74%); }
+.dashboard-ambient-glow--bl { bottom: -240px; left: -180px; width: 700px; height: 700px; background: radial-gradient(closest-side, rgba(64, 190, 245, 0.34), rgba(40, 160, 235, 0.16) 58%, transparent 74%); animation-delay: 3s; }
+.dashboard-ambient-glow--l { top: 44%; left: -340px; width: 540px; height: 540px; background: radial-gradient(closest-side, rgba(52, 182, 240, 0.4), transparent 70%); animation-delay: 2s; }
+@keyframes dashboard-ambient-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 2px 14px; margin-bottom: 12px; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .topbar-logo {

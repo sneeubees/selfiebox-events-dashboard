@@ -4348,6 +4348,11 @@ function DashboardApp() {
 
   return (
       <div className="app-shell">
+        <div className="dashboard-ambient" aria-hidden="true">
+          <span className="dashboard-ambient-glow dashboard-ambient-glow--tr" />
+          <span className="dashboard-ambient-glow dashboard-ambient-glow--bl" />
+          <span className="dashboard-ambient-glow dashboard-ambient-glow--l" />
+        </div>
         <header className="topbar compact">
           <div className="topbar-brand">
             <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /></span>
