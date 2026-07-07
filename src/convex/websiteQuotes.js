@@ -189,40 +189,42 @@ const REGION_TO_BRANCH = {
   "Western Cape": "CT",
 };
 
-// Booth choice -> dashboard product (names must match live labelOptions exactly).
+// Booth choice -> dashboard product. The board's Products column stores the
+// ABBREVIATED code (e.g. "RETRO", not "Retro Pod") — that's the value the product
+// selector toggles on/off — so we map straight to the abbreviation. Keys = the exact
+// value the website form submits (photoBoothChoice); values = the live product
+// abbreviation (column 3 of Johan's PRODUCTS MAP.xlsx). Must match live exactly.
 // Used for Photo Booth, AI Experience (booth chosen further down) and Hashtag (InstaBox/SideKick only).
-// Keys = the exact value the website form submits (photoBoothChoice); values =
-// the live product name (from Johan's PRODUCTS MAP.xlsx). Must match live exactly.
 const PHOTO_BOOTH_TO_PRODUCT = {
   "Any, you can decide": "",       // "Select" / leave blank
-  Nano: "Nano",
-  HaloBox: "HB White",
-  SelfieBox: "SelfieBox",
-  Vintage: "Vintage",
-  Mirror: "Mirror Booth",
-  "Retro Pod": "Retro Pod",
-  Cruise: "Cruise",
-  Tuxedo: "Tuxedo",
-  Shift: "Shift",
-  InstaBox: "InstaBox",
-  SideKick: "Side Kick",
+  Nano: "NANO",
+  HaloBox: "HBWHITE",
+  SelfieBox: "SELFI",
+  Vintage: "VINTA",
+  Mirror: "MIRRO",
+  "Retro Pod": "RETRO",
+  Cruise: "CRUIS",
+  Tuxedo: "TUXED",
+  Shift: "SHIFT",
+  InstaBox: "INSTABO",
+  SideKick: "SIDEK",
 };
 
 const SPIN_TO_PRODUCT = {
-  "Infinity LED 360°": "ILED 360",
-  "Orbit 360° Spin": "360° Orbit",
+  "Infinity LED 360°": "ILED3",
+  "Orbit 360° Spin": "360 ORB",
 };
 
 // Experiences that resolve straight to a product from primarySelection (no booth
-// sub-choice). Keys = the form's primarySelection value; values = live product name.
-// "Other" is intentionally absent -> leaves the product blank.
+// sub-choice). Keys = the form's primarySelection value; values = live product
+// abbreviation. "Other" is intentionally absent -> leaves the product blank.
 const PRIMARY_TO_PRODUCT = {
-  "Sketch Bot (NEW!)": "AI Selfie Sketch",
-  Mosaic: "Mosaic",
-  Karaoke: "Karaoke",
-  "Video (Slow-Mo / Messages)": "Video Booth",
-  "Magazine Booth": "Magazine Booth",
-  "Audio Guest Book": "Audio GB",
+  "Sketch Bot (NEW!)": "AI SKET",
+  Mosaic: "MOSAIC",
+  Karaoke: "KARA",
+  "Video (Slow-Mo / Messages)": "VIDEO",
+  "Magazine Booth": "MAGAZ",
+  "Audio Guest Book": "AUDIOGB",
 };
 
 function normalizeDashboardCustomerType(value) {
@@ -287,9 +289,12 @@ async function resolveProducts(ctx, formData) {
     .withIndex("by_column", (q) => q.eq("columnKey", "products"))
     .collect();
   const activeProducts = activeProductOptions.filter((option) => option.isActive !== false);
-  const activeProductNames = new Set(
+  // Validate against the ABBREVIATION (what the board stores in event.products),
+  // mirroring resolveBranchAbbreviation. A mapped code that isn't an active product
+  // abbreviation is dropped rather than written as an unselectable raw string.
+  const activeProductCodes = new Set(
     activeProducts
-      .map((option) => normalizeString(option.name))
+      .map((option) => normalizeString(option.abbreviation || option.optionKey || option.name))
       .filter(Boolean)
   );
 
@@ -310,7 +315,7 @@ async function resolveProducts(ctx, formData) {
 
   return desiredProducts.filter((product) => {
     const normalizedProduct = normalizeString(product);
-    return normalizedProduct && activeProductNames.has(normalizedProduct);
+    return normalizedProduct && activeProductCodes.has(normalizedProduct);
   });
 }
 
