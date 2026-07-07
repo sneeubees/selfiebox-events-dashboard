@@ -248,6 +248,30 @@ export const listOverrides = query({
   },
 });
 
+// All commission overrides for a whole year (every month + attendant), for the
+// Attendants report. The by_month_attendant index leads with year, so a year-only
+// equality is a valid prefix scan.
+export const listYearOverrides = query({
+  args: { year: v.number() },
+  handler: async (ctx, args) => {
+    await requireCommissionUser(ctx);
+    const rows = await ctx.db
+      .query("commissionOverrides")
+      .withIndex("by_month_attendant", (q) => q.eq("year", args.year))
+      .collect();
+    return rows.map((row) => ({
+      attendant: row.attendant,
+      month: row.month,
+      eventId: row.eventId,
+      hoursPayable: row.hoursPayable || "",
+      amount: row.amount || "",
+      car: row.car || "",
+      km: row.km || "",
+      note: row.note || "",
+    }));
+  },
+});
+
 export const listMonthOverrides = query({
   args: {
     month: v.string(),

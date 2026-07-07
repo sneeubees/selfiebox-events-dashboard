@@ -4581,7 +4581,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V1.3.002</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles }} /> : null}
+            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles, attendantRecordMap, attendantStyles }} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -6441,7 +6441,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
-        {tab === 'rep-attendants' ? <ComingSoonView title="Attendant Reporting" blurb="Per-attendant activity, hours and commission summaries — a clear view of who worked what across the year." /> : null}
+        {tab === 'rep-attendants' ? <AttendantsReportView reports={reports} /> : null}
         {tab === 'server' ? <ComingSoonView title="Server Health" blurb="Live status of the website, backend and databases — uptime, response times and alerts, all in one place." /> : null}
       </main>
     </div>
@@ -7308,6 +7308,211 @@ function ClientsReportView({ reports }) {
       </div>
 
       <div className="webstats-foot">{clients.length.toLocaleString()} clients · {range.label} · {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
+    </div>
+  );
+}
+
+function reportTopKey(obj) { let best = null, n = -1; for (const k in obj) { if (obj[k] > n) { n = obj[k]; best = k; } } return best; }
+function reportComputeCommission(event, attendant, overrideMap, rates, attendantRecordMap) {
+  const month = getEventMonth(event);
+  const ov = overrideMap.get(`${month}|${attendant}|${event.id}`);
+  const has = (v) => v !== '' && v != null;
+  const isFT = attendantRecordMap[attendant]?.isFullTimeEmployee;
+  const autoHours = getAutomaticCommissionHours(event, isFT);
+  const hoursPayable = ov && has(ov.hoursPayable) ? Number(ov.hoursPayable) : autoHours;
+  const amount = ov && has(ov.amount) ? Number(ov.amount) : calculateCommissionAmount(hoursPayable, rates);
+  const car = ov && has(ov.car) ? Number(ov.car) : 0;
+  const km = ov && has(ov.km) ? Number(ov.km) : 0;
+  const travel = calculateCommissionTravel(km, rates);
+  const hasOverride = Boolean(ov && (has(ov.amount) || has(ov.hoursPayable) || has(ov.km) || has(ov.car)));
+  return { hoursPayable: Number(hoursPayable) || 0, amount: Number(amount) || 0, car, km, travel, grand: (Number(amount) || 0) + car + travel, hasOverride };
+}
+function reportAggregateAttendants(events, overrideMap, rates, attendantRecordMap) {
+  const map = new Map();
+  events.forEach((e) => {
+    (e.attendants || []).forEach((att) => {
+      let a = map.get(att);
+      if (!a) { a = { name: att, functions: 0, commission: 0, km: 0, hours: 0, covered: 0, months: {}, regions: {}, units: {}, firstDate: '', lastDate: '', estimated: false }; map.set(att, a); }
+      const c = reportComputeCommission(e, att, overrideMap, rates, attendantRecordMap);
+      a.functions += 1; a.commission += c.grand; a.km += c.km; a.hours += c.hoursPayable;
+      if (c.hasOverride) a.covered += 1; else a.estimated = true;
+      const m = getEventMonth(e); a.months[m] = (a.months[m] || 0) + 1;
+      (e.branch || []).forEach((b) => { a.regions[b] = (a.regions[b] || 0) + 1; });
+      (e.products || []).forEach((p) => { a.units[p] = (a.units[p] || 0) + 1; });
+      if (e.date) { if (!a.firstDate || e.date < a.firstDate) a.firstDate = e.date; if (e.date > a.lastDate) a.lastDate = e.date; }
+    });
+  });
+  return Array.from(map.values()).map((a) => ({ ...a, avgKm: a.functions ? a.km / a.functions : 0, avgR: a.functions ? a.commission / a.functions : 0, busiestMonth: reportTopKey(a.months), topRegion: reportTopKey(a.regions), topUnit: reportTopKey(a.units) }));
+}
+
+// Attendant activity: functions worked, commission earned, distance travelled.
+function AttendantsReportView({ reports }) {
+  const { year, canAccess, role, isAdmin, branchOptions, productFullNames, branchStyles, attendantStyles, attendantRecordMap } = reports;
+  const canSee = isAdmin || role === 'manager';
+  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const ratesRecord = useQuery(api.commissions.getRates, (canAccess && canSee) ? {} : 'skip');
+  const curOverrides = useQuery(api.commissions.listYearOverrides, (canAccess && canSee) ? { year } : 'skip');
+  const prevOverrides = useQuery(api.commissions.listYearOverrides, (canAccess && canSee) ? { year: year - 1 } : 'skip');
+
+  const [regionSel, setRegionSel] = useState([]);
+  const [rangeKey, setRangeKey] = useState('all');
+  const [custom, setCustom] = useState({ start: '', end: '' });
+  const [subview, setSubview] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState({ key: 'functions', dir: 'desc' });
+
+  const rates = useMemo(() => normalizeCommissionRates(ratesRecord), [ratesRecord]);
+  const regionOptions = useMemo(() => (branchOptions || []).map((o) => ({ value: o.abbreviation, label: o.fullName || o.abbreviation, color: o.color })), [branchOptions]);
+  const range = useMemo(() => (rangeKey === 'custom' ? { start: custom.start || `${year}-01-01`, end: custom.end || `${year}-12-31`, label: 'custom range' } : reportRangeFor(rangeKey, year)), [rangeKey, custom, year]);
+  const prevRange = useMemo(() => reportShiftYear(range), [range]);
+  const inRegion = useCallback((e) => !regionSel.length || (e.branch || []).some((b) => regionSel.includes(b)), [regionSel]);
+  const inWin = (e, win) => e.date && e.date >= win.start && e.date <= win.end;
+
+  const curOverrideMap = useMemo(() => { const m = new Map(); (curOverrides || []).forEach((o) => m.set(`${o.month}|${o.attendant}|${o.eventId}`, o)); return m; }, [curOverrides]);
+  const prevOverrideMap = useMemo(() => { const m = new Map(); (prevOverrides || []).forEach((o) => m.set(`${o.month}|${o.attendant}|${o.eventId}`, o)); return m; }, [prevOverrides]);
+
+  const curF = useMemo(() => (curEvents || []).filter((e) => inRegion(e) && inWin(e, range)), [curEvents, inRegion, range]);
+  const prevF = useMemo(() => (prevEvents || []).filter((e) => inRegion(e) && inWin(e, prevRange)), [prevEvents, inRegion, prevRange]);
+
+  const att = useMemo(() => reportAggregateAttendants(curF, curOverrideMap, rates, attendantRecordMap), [curF, curOverrideMap, rates, attendantRecordMap]);
+  const prevAtt = useMemo(() => reportAggregateAttendants(prevF, prevOverrideMap, rates, attendantRecordMap), [prevF, prevOverrideMap, rates, attendantRecordMap]);
+
+  const team = useMemo(() => {
+    const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+    const build = (arr) => ({ functions: sum(arr, (a) => a.functions), attendants: arr.length, commission: sum(arr, (a) => a.commission), km: sum(arr, (a) => a.km), hours: sum(arr, (a) => a.hours), covered: sum(arr, (a) => a.covered) });
+    return { cur: build(att), prev: build(prevAtt) };
+  }, [att, prevAtt]);
+
+  const byFunctions = useMemo(() => [...att].sort((a, b) => b.functions - a.functions || b.commission - a.commission), [att]);
+  const byCommission = useMemo(() => [...att].sort((a, b) => b.commission - a.commission), [att]);
+  const byDistance = useMemo(() => [...att].sort((a, b) => b.km - a.km), [att]);
+  const maxFn = Math.max(1, ...att.map((a) => a.functions));
+  const maxComm = Math.max(1, ...att.map((a) => a.commission));
+  const maxKm = Math.max(1, ...att.map((a) => a.km));
+
+  const monthly = useMemo(() => {
+    const bucket = (arr) => { const out = Array(12).fill(0); arr.forEach((e) => { if (e.date) { const m = new Date(e.date).getMonth(); if (m >= 0 && m < 12) out[m] += (e.attendants || []).length; } }); return out; };
+    const cur = bucket((curEvents || []).filter(inRegion)); const prev = bucket((prevEvents || []).filter(inRegion));
+    return { cur, prev, max: Math.max(1, ...cur, ...prev) };
+  }, [curEvents, prevEvents, inRegion]);
+
+  const week = useMemo(() => {
+    const w = reportWeekWindows();
+    const base = (curEvents || []).filter(inRegion);
+    const tally = (win) => base.filter((e) => inWin(e, win)).reduce((s, e) => s + (e.attendants || []).length, 0);
+    return { thisWeek: tally(w.thisWeek), lastWeek: tally(w.lastWeek), windows: w };
+  }, [curEvents, inRegion]);
+
+  const loading = curEvents === undefined || prevEvents === undefined || (canSee && (curOverrides === undefined || ratesRecord === undefined));
+  const chipStyle = (name) => ({ background: (attendantStyles[name] || {}).background || 'var(--panel-alt)', color: (attendantStyles[name] || {}).color || 'var(--text)' });
+  const coverage = team.cur.functions ? Math.round((team.cur.covered / team.cur.functions) * 100) : 0;
+
+  const head = (
+    <header className="statspage-viewhead report-head">
+      <div><h2>Attendants</h2><p>Functions worked, commission earned and distance travelled &mdash; {year}.</p></div>
+    </header>
+  );
+  if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading attendant reports&hellip;</div></div>;
+
+  const attRow = (a, i) => (
+    <div className="report-att-tr" key={a.name}>
+      <span className="report-att-rank">{i + 1}</span>
+      <span className="report-att-name"><span className="report-att-chip" style={chipStyle(a.name)}>{a.name}</span>{attendantRecordMap[a.name]?.isFullTimeEmployee ? <span className="report-ft-tag" title="Full-time employee">FT</span> : null}</span>
+      <span className="report-att-num">{a.functions}</span>
+      {canSee ? <span className="report-att-num" title={a.estimated ? 'Includes estimated (rate-based) commission' : 'All confirmed on commission sheets'}>{a.estimated ? '~' : ''}{reportFmtRand(a.commission)}</span> : null}
+      {canSee ? <span className="report-att-num">{Math.round(a.km).toLocaleString()} km</span> : null}
+      {canSee ? <span className="report-att-num">{a.functions ? a.avgKm.toFixed(0) : '—'}</span> : null}
+      <span className="report-att-num">{a.hours.toFixed(0)}</span>
+      <span className="report-att-sub">{a.busiestMonth || '—'}</span>
+      <span className="report-att-sub">{a.topRegion ? <span className="report-branch-tag" style={{ background: (branchStyles[a.topRegion] || {}).background, color: (branchStyles[a.topRegion] || {}).color }}>{a.topRegion}</span> : '—'}</span>
+      <span className="report-att-sub" title={a.topUnit ? (productFullNames[a.topUnit] || a.topUnit) : ''}>{a.topUnit ? (productFullNames[a.topUnit] || a.topUnit) : '—'}</span>
+    </div>
+  );
+  const tableHead = (
+    <div className={`report-att-tr report-att-head${canSee ? '' : ' is-basic'}`}>
+      <span className="report-att-rank">#</span>
+      <button type="button" className={`report-th${sort.key === 'name' ? ' is-sorted' : ''}`} onClick={() => setSort((s) => ({ key: 'name', dir: s.key === 'name' && s.dir === 'asc' ? 'desc' : 'asc' }))}>Attendant</button>
+      <button type="button" className={`report-th${sort.key === 'functions' ? ' is-sorted' : ''}`} onClick={() => setSort((s) => ({ key: 'functions', dir: s.key === 'functions' && s.dir === 'desc' ? 'asc' : 'desc' }))}>Functions</button>
+      {canSee ? <button type="button" className={`report-th${sort.key === 'commission' ? ' is-sorted' : ''}`} onClick={() => setSort((s) => ({ key: 'commission', dir: s.key === 'commission' && s.dir === 'desc' ? 'asc' : 'desc' }))}>Commission</button> : null}
+      {canSee ? <button type="button" className={`report-th${sort.key === 'km' ? ' is-sorted' : ''}`} onClick={() => setSort((s) => ({ key: 'km', dir: s.key === 'km' && s.dir === 'desc' ? 'asc' : 'desc' }))}>Distance</button> : null}
+      {canSee ? <span className="report-th">Avg km</span> : null}
+      <button type="button" className={`report-th${sort.key === 'hours' ? ' is-sorted' : ''}`} onClick={() => setSort((s) => ({ key: 'hours', dir: s.key === 'hours' && s.dir === 'desc' ? 'asc' : 'desc' }))}>Hours</button>
+      <span className="report-th">Busiest</span>
+      <span className="report-th">Region</span>
+      <span className="report-th">Top unit</span>
+    </div>
+  );
+
+  if (subview) {
+    let rows = [...att];
+    if (search.trim()) { const q = search.trim().toLowerCase(); rows = rows.filter((a) => a.name.toLowerCase().includes(q)); }
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    rows = [...rows].sort((a, b) => sort.key === 'name' ? dir * a.name.localeCompare(b.name) : dir * ((a[sort.key] || 0) - (b[sort.key] || 0)));
+    return (
+      <div className={`statspage-view statspage-view-wide report-view report-att${canSee ? '' : ' is-basic'}`}>
+        <header className="statspage-viewhead report-head">
+          <div><button type="button" className="report-back" onClick={() => { setSubview(false); setSearch(''); }}>&larr; Back to Attendants</button><h2>All attendants</h2><p>{rows.length} attendants · {range.label}</p></div>
+          <input className="report-search" type="search" placeholder="Search attendants…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </header>
+        <div className="report-att-table">{tableHead}{rows.map(attRow)}{!rows.length ? <div className="webstats-muted report-empty-row">No attendants match.</div> : null}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`statspage-view statspage-view-wide report-view report-att${canSee ? '' : ' is-basic'}`}>
+      {head}
+      <ReportFilterBar regionOptions={regionOptions} regionSel={regionSel} setRegionSel={setRegionSel} rangeKey={rangeKey} setRangeKey={setRangeKey} custom={custom} setCustom={setCustom} />
+
+      <div className={`webseo-kpis report-kpis ${canSee ? 'report-kpis-5' : 'report-kpis-3'}`}>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{team.cur.functions.toLocaleString()}</strong><DeltaBadge value={reportPctChange(team.cur.functions, team.prev.functions)} suffix="%" /></div><span>Functions worked</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{team.cur.attendants.toLocaleString()}</strong><DeltaBadge value={reportPctChange(team.cur.attendants, team.prev.attendants)} suffix="%" /></div><span>Active attendants</span></div>
+        {canSee ? <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{reportFmtRand(team.cur.commission)}</strong><DeltaBadge value={reportPctChange(team.cur.commission, team.prev.commission)} suffix="%" /></div><span>Commission earned</span></div> : null}
+        {canSee ? <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{Math.round(team.cur.km).toLocaleString()} km</strong><DeltaBadge value={reportPctChange(team.cur.km, team.prev.km)} suffix="%" /></div><span>Distance travelled</span></div> : null}
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{Math.round(team.cur.hours).toLocaleString()}</strong><DeltaBadge value={reportPctChange(team.cur.hours, team.prev.hours)} suffix="%" /></div><span>Total hours</span></div>
+      </div>
+      {canSee ? <div className="report-caption">Avg {reportFmtRand(team.cur.functions ? team.cur.commission / team.cur.functions : 0)} / function · {coverage}% of functions have commission-sheet figures (the rest use rate estimates, shown with ~).</div> : <div className="report-caption">Commission &amp; distance are shown to admins and managers only.</div>}
+
+      <div className="webstats-section">
+        <h4>Attendant leaderboard <span>{att.length} attendants</span>{att.length > 10 ? <button type="button" className="report-showall" onClick={() => setSubview(true)}>Show all</button> : null}</h4>
+        <div className="report-att-table">{tableHead}{byFunctions.slice(0, 10).map(attRow)}{!att.length ? <div className="webstats-muted report-empty-row">No attendant activity in this range.</div> : null}</div>
+      </div>
+
+      {canSee ? (
+        <div className="webstats-cols report-att-charts">
+          <div className="webstats-section"><h4>Top by functions</h4>{byFunctions.slice(0, 8).map((a) => <div className="webstats-row" key={a.name}><div className="webstats-row-head"><span className="webstats-row-label">{a.name}</span><span className="webstats-row-val">{a.functions}</span></div><div className="webstats-track"><span style={{ width: `${(a.functions / maxFn) * 100}%` }} /></div></div>)}</div>
+          <div className="webstats-section"><h4>Top by commission</h4>{byCommission.slice(0, 8).map((a) => <div className="webstats-row" key={a.name}><div className="webstats-row-head"><span className="webstats-row-label">{a.name}</span><span className="webstats-row-val">{reportFmtRand(a.commission)}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(a.commission / maxComm) * 100}%` }} /></div></div>)}</div>
+          <div className="webstats-section"><h4>Top by distance</h4>{byDistance.slice(0, 8).map((a) => <div className="webstats-row" key={a.name}><div className="webstats-row-head"><span className="webstats-row-label">{a.name}</span><span className="webstats-row-val">{Math.round(a.km).toLocaleString()} km</span></div><div className="webstats-track"><span className="is-country" style={{ width: `${(a.km / maxKm) * 100}%` }} /></div></div>)}</div>
+        </div>
+      ) : (
+        <div className="webstats-section"><h4>Top by functions</h4>{byFunctions.slice(0, 10).map((a) => <div className="webstats-row" key={a.name}><div className="webstats-row-head"><span className="webstats-row-label">{a.name}</span><span className="webstats-row-val">{a.functions}</span></div><div className="webstats-track"><span style={{ width: `${(a.functions / maxFn) * 100}%` }} /></div></div>)}</div>
+      )}
+
+      <div className="webstats-section">
+        <h4>Functions by month <span>{year} vs {year - 1}</span></h4>
+        <div className="report-trend">
+          {REPORT_MONTHS.map((m, i) => (
+            <div className="report-trend-col" key={m} title={`${m}: ${monthly.cur[i]} (${year}) · ${monthly.prev[i]} (${year - 1})`}>
+              <div className="report-trend-bars"><span className="report-trend-bar is-prev" style={{ height: `${(monthly.prev[i] / monthly.max) * 100}%` }} /><span className="report-trend-bar is-cur" style={{ height: `${(monthly.cur[i] / monthly.max) * 100}%` }} /></div>
+              <span className="report-trend-lbl">{m}</span>
+            </div>
+          ))}
+        </div>
+        <div className="report-legend"><span className="report-legend-item"><i className="is-cur" />{year}</span><span className="report-legend-item"><i className="is-prev" />{year - 1}</span><span className="report-legend-item">This week <strong>{week.thisWeek}</strong> vs last <strong>{week.lastWeek}</strong> functions <DeltaBadge value={reportPctChange(week.thisWeek, week.lastWeek)} suffix="%" /></span></div>
+      </div>
+
+      <div className="webstats-section report-note-section">
+        <h4>How to read these numbers</h4>
+        <ul className="report-notes">
+          <li><strong>Distance &amp; commission</strong> are only exact where a manager filled that month&rsquo;s commission sheet. Uncovered functions count <strong>0&nbsp;km</strong> and estimate commission from the hours&nbsp;×&nbsp;rate table — those totals show a <strong>~</strong>. This range: {coverage}% covered.</li>
+          <li><strong>FT</strong> = full-time employee; their commission may not be paid out the same way, so read those figures with care.</li>
+          <li>One event with two attendants counts as a function for <em>each</em> — team functions can exceed event count.</li>
+          <li>Drafts (no date) are excluded; rates are today&rsquo;s configured rates applied to all periods.</li>
+        </ul>
+      </div>
+
+      <div className="webstats-foot">{att.length.toLocaleString()} attendants · {team.cur.functions.toLocaleString()} functions · {range.label} · {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
     </div>
   );
 }
