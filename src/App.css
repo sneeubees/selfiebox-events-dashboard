@@ -348,7 +348,12 @@ button { cursor: pointer; }
 .month-header-main span { font-size: 0.68rem; line-height: 1; letter-spacing: 0.01em; }
 .month-header strong { font-size: 1rem; }
 .month-header-actions { position: sticky; right: 5px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; margin-left: 16px; padding: 2px 5px 2px 18px; background: transparent; }
-.month-board-header { position: sticky; top: 46px; z-index: 18; }
+/* No top border on the first table row (the column-header): it sits directly
+   under the frozen month header, so its top border is what peeks past the
+   header at the corners/right. The month header's own bottom accent line is the
+   visual separator instead. */
+.month-board-header { position: sticky; top: 46px; z-index: 18; border-top: 0; }
+.month-board-header .cell { border-top: 0; }
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 2px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 /* Commission (green) + Logistics (orange) are the two most-used month tools -
