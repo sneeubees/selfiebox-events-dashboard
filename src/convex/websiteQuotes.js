@@ -474,7 +474,7 @@ export const submitWebsiteQuote = mutation({
       files: [],
       activity: [
         createActivityEntry(
-          "Website quote submitted on staging.",
+          "Website quote submitted.",
           formData.contactPerson || "Website Quote",
           now
         ),
