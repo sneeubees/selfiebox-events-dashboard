@@ -4581,7 +4581,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V1.3.002</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} /> : null}
+            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles }} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -6384,7 +6384,7 @@ function seoRange(key) {
 }
 
 // Full-screen Information & Reporting area with its own grouped left-nav.
-function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover }) {
+function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, reports }) {
   const [tab, setTab] = useState(initialTab || 'turnover');
   const [openGroups, setOpenGroups] = useState({ web: true, reporting: true });
   const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
@@ -6439,7 +6439,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover })
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ads' ? <ComingSoonView title="Google Ads" blurb="Ad spend, clicks, conversions, cost-per-lead and audience demographics — pulled straight from your Google Ads account into this same friendly view." /> : null}
         {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
-        {tab === 'rep-general' ? <ComingSoonView title="General Reporting" blurb="High-level business reporting across events, revenue and performance — a single overview to share with the team." /> : null}
+        {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ComingSoonView title="Client Reporting" blurb="Per-client history, spend and booking patterns — see who your best clients are and who's due a follow-up." /> : null}
         {tab === 'rep-attendants' ? <ComingSoonView title="Attendant Reporting" blurb="Per-attendant activity, hours and commission summaries — a clear view of who worked what across the year." /> : null}
         {tab === 'server' ? <ComingSoonView title="Server Health" blurb="Live status of the website, backend and databases — uptime, response times and alerts, all in one place." /> : null}
@@ -6719,6 +6719,370 @@ function SeoStatsView({ isAdmin, connectUrl, openConnect }) {
   }
 
   return <div className="statspage-view">{head}{inner}</div>;
+}
+
+/* ============================ REPORTING ============================ */
+// Shared helpers + primitives for the Information & Reporting pages
+// (General now; Clients / Attendants reuse these next).
+const REPORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const REPORT_STATUS_ORDER = ['Web Request', 'Quote Sent', 'In Progress', 'Event Completed', 'Multi Day', 'Postponed', 'Refunded', 'No response', 'Cancelled', 'Rejected'];
+const REPORT_FEATURES = [
+  { key: 'gsAi', label: 'G / AI', get: (e) => String(e.gsAi || '').trim() !== '' },
+  { key: 'digitalOnly', label: 'Digital Only', get: (e) => e.digitalOnly === true },
+  { key: 'vinyl', label: 'Vinyl', get: (e) => String(e.vinyl || '').trim() !== '' },
+  { key: 'imagesSent', label: 'Images sent', get: (e) => String(e.imagesSent || '').trim() !== '' },
+  { key: 'snappic', label: 'Snappic', get: (e) => String(e.snappic || '').trim() !== '' },
+  { key: 'packageOnly', label: 'Package only', get: (e) => String(e.packageOnly || '').trim() !== '' },
+];
+const REPORT_DATE_PRESETS = [['all', 'Full year'], ['q1', 'Q1'], ['q2', 'Q2'], ['q3', 'Q3'], ['q4', 'Q4'], ['custom', 'Custom']];
+
+function reportParseMoney(raw) {
+  if (raw == null || Array.isArray(raw)) return 0;
+  const n = parseFloat(String(raw).replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+function reportPctChange(cur, prev) {
+  if (!prev) return null;
+  return ((cur - prev) / prev) * 100;
+}
+function reportResolveMoneyKey(customColumns) {
+  const cols = customColumns || [];
+  const match = cols.find((c) => { const l = (c.label || '').toLowerCase(); return c.type === 'number' && l.includes('excl') && l.includes('jc'); })
+    || cols.find((c) => { const l = (c.label || '').toLowerCase(); return l.includes('excl') && l.includes('jc'); });
+  return match ? match.key : null;
+}
+function reportFmtRand(v) { return `R${Math.round(v || 0).toLocaleString('en-ZA')}`; }
+function reportRangeFor(key, year) {
+  if (key === 'q1') return { start: `${year}-01-01`, end: `${year}-03-31`, label: `Q1 ${year}` };
+  if (key === 'q2') return { start: `${year}-04-01`, end: `${year}-06-30`, label: `Q2 ${year}` };
+  if (key === 'q3') return { start: `${year}-07-01`, end: `${year}-09-30`, label: `Q3 ${year}` };
+  if (key === 'q4') return { start: `${year}-10-01`, end: `${year}-12-31`, label: `Q4 ${year}` };
+  return { start: `${year}-01-01`, end: `${year}-12-31`, label: `all of ${year}` };
+}
+function reportShiftYear(range) {
+  const shift = (iso) => { const parts = String(iso).split('-'); return `${Number(parts[0]) - 1}-${parts[1]}-${parts[2]}`; };
+  return { start: shift(range.start), end: shift(range.end), label: range.label };
+}
+function reportWeekWindows() {
+  const today = new Date();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const monday = new Date(today); monday.setDate(monday.getDate() - ((today.getDay() + 6) % 7));
+  const lastMonday = new Date(monday); lastMonday.setDate(lastMonday.getDate() - 7);
+  const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+  const lastSunday = new Date(lastMonday); lastSunday.setDate(lastSunday.getDate() + 6);
+  return { thisWeek: { start: iso(monday), end: iso(sunday) }, lastWeek: { start: iso(lastMonday), end: iso(lastSunday) } };
+}
+
+// Region (branch) multi-select dropdown reused across every report.
+function ReportMultiSelect({ options, value, onChange, allLabel = 'All regions' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const toggle = (v) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  const summary = !value.length ? allLabel : value.length === 1 ? (options.find((o) => o.value === value[0])?.label || value[0]) : `${value.length} regions`;
+  return (
+    <div className={`report-multiselect${open ? ' is-open' : ''}`} ref={ref}>
+      <button type="button" className="report-ms-trigger" onClick={() => setOpen((o) => !o)}>
+        <span>{summary}</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open ? (
+        <div className="report-ms-menu">
+          <button type="button" className="report-ms-all" onClick={() => onChange([])}>All regions</button>
+          {options.map((o) => (
+            <label className="report-ms-option filter-option" key={o.value}>
+              <input type="checkbox" checked={value.includes(o.value)} onChange={() => toggle(o.value)} />
+              {o.color ? <span className="report-ms-swatch" style={{ background: o.color }} /> : null}
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Inline SVG donut: segments = [{label,value,color}].
+function ReportDonut({ segments, centerValue, centerLabel }) {
+  const total = segments.reduce((s, x) => s + (x.value || 0), 0);
+  const R = 54, C = 2 * Math.PI * R;
+  let offset = 0;
+  return (
+    <div className="report-donut">
+      <svg viewBox="0 0 140 140" aria-hidden="true">
+        <circle cx="70" cy="70" r={R} fill="none" stroke="var(--panel-alt)" strokeWidth="15" />
+        {total > 0 ? segments.map((seg, i) => {
+          const dash = (seg.value / total) * C;
+          const node = <circle key={i} cx="70" cy="70" r={R} fill="none" stroke={seg.color} strokeWidth="15" strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-offset} transform="rotate(-90 70 70)" strokeLinecap="butt" />;
+          offset += dash;
+          return node;
+        }) : null}
+        <text x="70" y="68" textAnchor="middle" className="report-donut-num">{centerValue}</text>
+        <text x="70" y="86" textAnchor="middle" className="report-donut-lbl">{centerLabel}</text>
+      </svg>
+    </div>
+  );
+}
+
+// Shared filter bar (region + date range + custom dates). Returns nothing itself;
+// each report composes it with its own extra controls.
+function ReportFilterBar({ regionOptions, regionSel, setRegionSel, rangeKey, setRangeKey, custom, setCustom, children }) {
+  return (
+    <div className="report-filterbar">
+      <ReportMultiSelect options={regionOptions} value={regionSel} onChange={setRegionSel} />
+      <div className="webstats-tabs report-range-tabs">
+        {REPORT_DATE_PRESETS.map(([k, l]) => (
+          <button key={k} type="button" className={rangeKey === k ? 'is-active' : ''} onClick={() => setRangeKey(k)}>{l}</button>
+        ))}
+      </div>
+      {rangeKey === 'custom' ? (
+        <div className="report-custom-dates">
+          <input type="date" value={custom.start} onChange={(e) => setCustom((c) => ({ ...c, start: e.target.value }))} />
+          <span>to</span>
+          <input type="date" value={custom.end} onChange={(e) => setCustom((c) => ({ ...c, end: e.target.value }))} />
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+// General business overview: KPIs (YoY), week-over-week, unit + feature usage, trends.
+function GeneralReportView({ reports }) {
+  const { year, canAccess, branchOptions, productFullNames, productStyles, statusStyles, customColumns } = reports;
+  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const classifications = useQuery(api.bookings.listClassifications, canAccess ? {} : 'skip');
+
+  const [regionSel, setRegionSel] = useState([]);
+  const [rangeKey, setRangeKey] = useState('all');
+  const [custom, setCustom] = useState({ start: '', end: '' });
+  const [topN, setTopN] = useState(8);
+
+  const moneyKey = useMemo(() => reportResolveMoneyKey(customColumns), [customColumns]);
+  const regionOptions = useMemo(() => (branchOptions || []).map((o) => ({ value: o.abbreviation, label: o.fullName || o.abbreviation, color: o.color })), [branchOptions]);
+  const range = useMemo(() => (rangeKey === 'custom'
+    ? { start: custom.start || `${year}-01-01`, end: custom.end || `${year}-12-31`, label: 'custom range' }
+    : reportRangeFor(rangeKey, year)), [rangeKey, custom, year]);
+  const prevRange = useMemo(() => reportShiftYear(range), [range]);
+
+  const inRegion = useCallback((e) => !regionSel.length || (e.branch || []).some((b) => regionSel.includes(b)), [regionSel]);
+  const money = useCallback((e) => (moneyKey ? reportParseMoney((e.customFields || {})[moneyKey]) : 0), [moneyKey]);
+  const inWin = (e, win) => e.date && e.date >= win.start && e.date <= win.end;
+
+  const curF = useMemo(() => (curEvents || []).filter((e) => inRegion(e) && inWin(e, range)), [curEvents, inRegion, range]);
+  const prevF = useMemo(() => (prevEvents || []).filter((e) => inRegion(e) && inWin(e, prevRange)), [prevEvents, inRegion, prevRange]);
+
+  const loading = curEvents === undefined || prevEvents === undefined;
+
+  const kpi = useMemo(() => {
+    const isReal = (e) => !['Cancelled', 'Rejected', 'No response'].includes(e.status);
+    const build = (arr) => ({
+      quotes: arr.filter((e) => e.status === 'Quote Sent').length,
+      inProgress: arr.filter((e) => e.status === 'In Progress').length,
+      completed: arr.filter((e) => e.status === 'Event Completed').length,
+      total: arr.filter(isReal).length,
+      revenue: arr.filter((e) => e.status === 'Event Completed' || e.status === 'In Progress').reduce((s, e) => s + money(e), 0),
+    });
+    const cur = build(curF), prev = build(prevF);
+    const conv = (b) => (b.quotes ? (b.completed / b.quotes) * 100 : 0);
+    return { cur, prev, convCur: conv(cur), convPrev: conv(prev) };
+  }, [curF, prevF, money]);
+
+  const week = useMemo(() => {
+    const w = reportWeekWindows();
+    const base = (curEvents || []).filter(inRegion);
+    const tally = (win) => ({
+      created: base.filter((e) => inWin(e, win)).length,
+      completed: base.filter((e) => e.status === 'Event Completed' && inWin(e, win)).length,
+      quotes: base.filter((e) => e.status === 'Quote Sent' && inWin(e, win)).length,
+    });
+    return { thisWeek: tally(w.thisWeek), lastWeek: tally(w.lastWeek), windows: w };
+  }, [curEvents, inRegion]);
+
+  const trend = useMemo(() => {
+    const bucket = (arr) => { const out = Array(12).fill(0); arr.forEach((e) => { if (e.date) { const m = new Date(e.date).getMonth(); if (m >= 0 && m < 12) out[m] += 1; } }); return out; };
+    const cur = bucket((curEvents || []).filter(inRegion));
+    const prev = bucket((prevEvents || []).filter(inRegion));
+    return { cur, prev, max: Math.max(1, ...cur, ...prev) };
+  }, [curEvents, prevEvents, inRegion]);
+
+  const units = useMemo(() => {
+    const events = new Map(); const deployed = new Map();
+    curF.forEach((e) => {
+      (e.products || []).forEach((abbr) => {
+        events.set(abbr, (events.get(abbr) || 0) + 1);
+        const qty = Number((e.productQuantities || {})[abbr]) || 1;
+        deployed.set(abbr, (deployed.get(abbr) || 0) + qty);
+      });
+    });
+    const rows = Array.from(events.keys()).map((abbr) => ({ abbr, label: productFullNames[abbr] || abbr, events: events.get(abbr) || 0, deployed: deployed.get(abbr) || 0, color: (productStyles[abbr] || {}).background }));
+    rows.sort((a, b) => b.events - a.events || b.deployed - a.deployed);
+    return { rows, maxEvents: Math.max(1, ...rows.map((r) => r.events)), maxDeployed: Math.max(1, ...rows.map((r) => r.deployed)) };
+  }, [curF, productFullNames, productStyles]);
+
+  const features = useMemo(() => {
+    const total = curF.length || 1;
+    const gsAiUsed = curF.filter((e) => String(e.gsAi || '').trim() !== '').length;
+    return {
+      total: curF.length,
+      gsAiUsed,
+      rows: REPORT_FEATURES.map((f) => { const count = curF.filter(f.get).length; return { key: f.key, label: f.label, count, pct: Math.round((count / total) * 100) }; }).sort((a, b) => b.count - a.count),
+    };
+  }, [curF]);
+
+  const statusDist = useMemo(() => {
+    const counts = {}; curF.forEach((e) => { counts[e.status] = (counts[e.status] || 0) + 1; });
+    const rows = REPORT_STATUS_ORDER.filter((s) => counts[s]).map((s) => ({ status: s, count: counts[s], color: (statusStyles[s] || {}).background || '#94a3b8' }));
+    const total = curF.length || 1;
+    return { rows: rows.map((r) => ({ ...r, pct: Math.round((r.count / total) * 100) })), total: curF.length };
+  }, [curF, statusStyles]);
+
+  const corp = useMemo(() => {
+    const cls = new Map();
+    (classifications || []).forEach((r) => { const s = (r.customerType || '').toLowerCase(); cls.set(r.eventKey, s.includes('corporate') ? 'Corporate' : s.includes('private') ? 'Private' : 'Unclassified'); });
+    const out = { Corporate: 0, Private: 0, Unclassified: 0 };
+    curF.forEach((e) => { out[cls.get(e.id) || 'Unclassified'] += 1; });
+    return out;
+  }, [curF, classifications]);
+
+  const head = (
+    <header className="statspage-viewhead report-head">
+      <div><h2>General</h2><p>Business overview across events, revenue and features &mdash; {year}.</p></div>
+    </header>
+  );
+
+  if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading your reports&hellip;</div></div>;
+
+  const kc = kpi.cur, kp = kpi.prev;
+  const wt = week.thisWeek, wl = week.lastWeek;
+
+  return (
+    <div className="statspage-view statspage-view-wide report-view">
+      {head}
+      <ReportFilterBar regionOptions={regionOptions} regionSel={regionSel} setRegionSel={setRegionSel} rangeKey={rangeKey} setRangeKey={setRangeKey} custom={custom} setCustom={setCustom}>
+        <label className="report-slider">
+          <span>Top {topN}</span>
+          <input type="range" min="5" max="20" value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
+        </label>
+      </ReportFilterBar>
+
+      <div className="webseo-kpis report-kpis">
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kc.quotes.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.quotes, kp.quotes)} suffix="%" /></div><span>Quotes sent</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kc.inProgress.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.inProgress, kp.inProgress)} suffix="%" /></div><span>In progress</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kc.completed.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.completed, kp.completed)} suffix="%" /></div><span>Completed</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kc.total.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.total, kp.total)} suffix="%" /></div><span>Total events</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong title={reportFmtRand(kc.revenue)}>{reportFmtRand(kc.revenue)}</strong><DeltaBadge value={reportPctChange(kc.revenue, kp.revenue)} suffix="%" /></div><span>Revenue (Excl JC)</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kpi.convCur.toFixed(0)}%</strong><DeltaBadge value={kpi.convCur - kpi.convPrev} digits={1} suffix="pp" /></div><span>Quote &rarr; done</span></div>
+      </div>
+      <div className="report-caption">vs the same period last year ({prevRange.start.slice(0, 4)}) &middot; {range.label}{regionSel.length ? ` · ${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : ' · all regions'}</div>
+
+      <div className="webstats-section report-week">
+        <h4>This week vs last week <span>{week.windows.thisWeek.start} &ndash; {week.windows.thisWeek.end}</span></h4>
+        <div className="webstats-conv">
+          <div className="webstats-conv-item"><strong>{wt.created}</strong><DeltaBadge value={reportPctChange(wt.created, wl.created)} suffix="%" /><span>Events dated</span></div>
+          <div className="webstats-conv-item"><strong>{wt.completed}</strong><DeltaBadge value={reportPctChange(wt.completed, wl.completed)} suffix="%" /><span>Completed</span></div>
+          <div className="webstats-conv-item"><strong>{wt.quotes}</strong><DeltaBadge value={reportPctChange(wt.quotes, wl.quotes)} suffix="%" /><span>Quotes sent</span></div>
+        </div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Events over time <span>{year} vs {year - 1} &middot; full year, all regions{regionSel.length ? ' (filtered)' : ''}</span></h4>
+        <div className="report-trend">
+          {REPORT_MONTHS.map((m, i) => (
+            <div className="report-trend-col" key={m} title={`${m}: ${trend.cur[i]} (${year}) · ${trend.prev[i]} (${year - 1})`}>
+              <div className="report-trend-bars">
+                <span className="report-trend-bar is-prev" style={{ height: `${(trend.prev[i] / trend.max) * 100}%` }} />
+                <span className="report-trend-bar is-cur" style={{ height: `${(trend.cur[i] / trend.max) * 100}%` }} />
+              </div>
+              <span className="report-trend-lbl">{m}</span>
+            </div>
+          ))}
+        </div>
+        <div className="report-legend"><span className="report-legend-item"><i className="is-cur" />{year}</span><span className="report-legend-item"><i className="is-prev" />{year - 1}</span></div>
+      </div>
+
+      <div className="webstats-cols">
+        <div className="webstats-section">
+          <h4>Units used <span>by bookings</span></h4>
+          {units.rows.length ? units.rows.slice(0, topN).map((r) => (
+            <div className="webstats-row" key={r.abbr}>
+              <div className="webstats-row-head"><span className="webstats-row-label" title={r.label}>{r.label}</span><span className="webstats-row-val">{r.events}</span></div>
+              <div className="webstats-track"><span style={{ width: `${(r.events / units.maxEvents) * 100}%`, background: r.color ? `linear-gradient(90deg, ${r.color}, ${r.color})` : undefined }} /></div>
+            </div>
+          )) : <div className="webstats-muted">No unit bookings in this range.</div>}
+        </div>
+        <div className="webstats-section">
+          <h4>Bookings per unit <span>events &middot; units deployed</span></h4>
+          {units.rows.length ? units.rows.slice(0, topN).map((r) => (
+            <div className="webstats-row" key={r.abbr}>
+              <div className="webstats-row-head"><span className="webstats-row-label" title={r.label}>{r.label}</span><span className="webstats-row-val">{r.events} &middot; {r.deployed} units</span></div>
+              <div className="webstats-track"><span className="is-src" style={{ width: `${(r.deployed / units.maxDeployed) * 100}%` }} /></div>
+            </div>
+          )) : <div className="webstats-muted">No unit bookings in this range.</div>}
+        </div>
+      </div>
+
+      <div className="webstats-cols">
+        <div className="webstats-section">
+          <h4>Feature usage <span>share of {features.total} events</span></h4>
+          {features.rows.map((r) => (
+            <div className="webstats-row" key={r.key}>
+              <div className="webstats-row-head"><span className="webstats-row-label">{r.label}</span><span className="webstats-row-val">{r.count} ({r.pct}%)</span></div>
+              <div className="webstats-track"><span style={{ width: `${r.pct}%` }} /></div>
+            </div>
+          ))}
+        </div>
+        <div className="webstats-section report-donut-section">
+          <h4>G / AI adoption <span>of {features.total} events</span></h4>
+          <ReportDonut segments={[{ label: 'Used G/AI', value: features.gsAiUsed, color: '#2f73e6' }, { label: 'Did not', value: Math.max(0, features.total - features.gsAiUsed), color: 'var(--line)' }]} centerValue={`${features.total ? Math.round((features.gsAiUsed / features.total) * 100) : 0}%`} centerLabel="used G/AI" />
+          <div className="report-legend"><span className="report-legend-item"><i style={{ background: '#2f73e6' }} />Used ({features.gsAiUsed})</span><span className="report-legend-item"><i style={{ background: 'var(--line)' }} />Not ({Math.max(0, features.total - features.gsAiUsed)})</span></div>
+        </div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Status distribution <span>{statusDist.total} events</span></h4>
+        {statusDist.rows.length ? (
+          <>
+            <div className="report-stack">
+              {statusDist.rows.map((r) => <span key={r.status} className="report-stack-seg" style={{ width: `${r.pct}%`, background: r.color }} title={`${r.status}: ${r.count} (${r.pct}%)`} />)}
+            </div>
+            <div className="report-stack-legend">
+              {statusDist.rows.map((r) => <span className="report-stack-legend-item" key={r.status}><i style={{ background: r.color }} />{r.status} <em>{r.count} ({r.pct}%)</em></span>)}
+            </div>
+          </>
+        ) : <div className="webstats-muted">No events in this range.</div>}
+      </div>
+
+      <div className="webstats-cols">
+        <div className="webstats-section report-donut-section">
+          <h4>Corporate vs Private <span>from booking forms</span></h4>
+          <ReportDonut segments={[{ label: 'Corporate', value: corp.Corporate, color: '#2f73e6' }, { label: 'Private', value: corp.Private, color: '#22c55e' }, { label: 'Unclassified', value: corp.Unclassified, color: 'var(--line)' }]} centerValue={(corp.Corporate + corp.Private).toLocaleString()} centerLabel="classified" />
+          <div className="report-legend">
+            <span className="report-legend-item"><i style={{ background: '#2f73e6' }} />Corporate ({corp.Corporate})</span>
+            <span className="report-legend-item"><i style={{ background: '#22c55e' }} />Private ({corp.Private})</span>
+            <span className="report-legend-item"><i style={{ background: 'var(--line)' }} />Unclassified ({corp.Unclassified})</span>
+          </div>
+        </div>
+        <div className="webstats-section report-note-section">
+          <h4>Notes</h4>
+          <ul className="report-notes">
+            <li>Drafts (no date) are excluded from every dated metric.</li>
+            <li>Revenue sums the <strong>Excl JC</strong> column on completed + in-progress events{moneyKey ? '' : ' — no “Excl JC” column found yet, so this reads R0'}.</li>
+            <li>Corporate / Private comes from booking forms; events with no booking are Unclassified.</li>
+            <li>KPI deltas compare the same window one year earlier.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="webstats-foot">{curF.length.toLocaleString()} events &middot; {range.label} &middot; {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
+    </div>
+  );
 }
 
 function ComingSoonView({ title, blurb }) {

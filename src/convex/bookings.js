@@ -560,6 +560,21 @@ export const getForEvent = query({
   },
 });
 
+// Lightweight Corporate/Private classification for reporting: one row per booking
+// with just its eventKey + customerType (from the booking form). Reports join this
+// to events by eventKey; events with no booking are treated as "Unclassified".
+export const listClassifications = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireCurrentUser(ctx);
+    const rows = await ctx.db.query("eventBookings").collect();
+    return rows.map((row) => ({
+      eventKey: row.eventKey,
+      customerType: row.formData?.customerType || "",
+    }));
+  },
+});
+
 export const generateForEvent = mutation({
   args: { eventKey: v.string() },
   handler: async (ctx, args) => {
