@@ -51,33 +51,54 @@ button { cursor: pointer; }
 /* Centre the dashboard title in the top bar (logo left, actions right). */
 .topbar-title-wrap { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-/* Copied verbatim from the website Logo.astro (Selfie + Box + ✦ spark). */
+/* Copied verbatim from the LIVE selfiebox.co.za logo (Selfie + Box + ® + x-stripes webp). */
 .topbar-logo {
   position: relative;
-  display: inline-flex;
-  align-items: flex-start;
-  flex: 0 0 auto;
   font-family: 'Fredoka', system-ui, sans-serif;
   font-weight: 600;
   font-size: 1.7rem;
   line-height: 1;
   letter-spacing: -0.5px;
+  display: inline-flex;
+  align-items: flex-start;
+  flex: 0 0 auto;
 }
-.topbar-logo-selfie { color: #1a2540; }
+.topbar-logo-selfie { color: #fff; }
 .topbar-logo-box {
   background: linear-gradient(96deg, #2f73e6, #34c2f4 55%, #7fe3ff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  font-size: 1.055em;
+  line-height: 0.94;
+}
+.topbar-logo-reg {
+  position: absolute;
+  right: 0.26em;
+  bottom: -0.26em;
+  color: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 700;
+  font-size: 0.36em;
+  line-height: 1;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.45);
+  pointer-events: none;
 }
 .topbar-logo-spark {
-  font-size: 0.5em;
+  width: 0.46em;
+  height: 0.46em;
   color: #54d4ff;
-  margin-left: 2px;
-  margin-top: -0.1em;
-  text-shadow: 0 0 10px rgba(84, 212, 255, 0.9);
+  margin-left: -3px;
+  margin-top: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 7px rgba(84, 212, 255, 0.85));
 }
-:root[data-theme="dark"] .topbar-logo-selfie { color: #ffffff; }
+.topbar-logo-spark img { width: 100%; height: 100%; display: block; object-fit: contain; }
+/* Light mode: the dashboard topbar is light, so darken the white text like the rest of the UI. */
+:root:not([data-theme="dark"]) .topbar-logo-selfie { color: #1a2540; }
+:root:not([data-theme="dark"]) .topbar-logo-reg { color: #1a2540; text-shadow: none; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.54rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b5bcc8; }
 .topbar-kicker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .topbar-kicker-row .topbar-kicker { margin-bottom: 0; }
