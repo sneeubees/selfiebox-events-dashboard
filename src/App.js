@@ -4415,8 +4415,8 @@ function DashboardApp() {
         </div>
         <header className="topbar compact">
           <div className="topbar-brand">
-            <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /></span>
-            <div>
+            <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /><span className="topbar-logo-r" aria-hidden="true">®</span></span>
+            <div className="topbar-title-wrap">
               <h1>Events Dashboard <span className="title-year">
                 <button className="title-year-button" type="button" aria-haspopup="menu" aria-expanded={yearMenuOpen} onMouseDown={(event) => event.stopPropagation()} onClick={() => setYearMenuOpen((open) => !open)}>{selectedWorkspaceYear}<svg className="title-year-caret" width="15" height="15" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                 {yearMenuOpen ? (
@@ -4497,8 +4497,7 @@ function DashboardApp() {
                       }}
                       title="Right-click to delete"
                     >
-                      <button className="saved-filter-chip-button" type="button" onClick={() => applySavedFilterView(view)}>{view.name}</button>
-                      <button className="saved-filter-chip-close" type="button" aria-label="Clear filters" onClick={clearFilters}>x</button>
+                      <button className="saved-filter-chip-button" type="button" onClick={() => (activeSavedFilterViewId === view.id ? clearFilters() : applySavedFilterView(view))}>{view.name}</button>
                     </div>
                   ))}
                 </div>

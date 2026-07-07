@@ -47,7 +47,9 @@ button { cursor: pointer; }
 .dashboard-ambient-glow--bl { bottom: -240px; left: -180px; width: 700px; height: 700px; background: radial-gradient(closest-side, rgba(64, 190, 245, 0.34), rgba(40, 160, 235, 0.16) 58%, transparent 74%); animation-delay: 3s; }
 .dashboard-ambient-glow--l { top: 44%; left: -340px; width: 540px; height: 540px; background: radial-gradient(closest-side, rgba(52, 182, 240, 0.4), transparent 70%); animation-delay: 2s; }
 @keyframes dashboard-ambient-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
-.topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 2px 14px; margin-bottom: 12px; }
+.topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 2px 14px; margin-bottom: 12px; }
+/* Centre the dashboard title in the top bar (logo left, actions right). */
+.topbar-title-wrap { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .topbar-logo {
   position: relative;
@@ -69,17 +71,28 @@ button { cursor: pointer; }
   background-clip: text;
   color: transparent;
 }
+/* Three cyan stripes (short -> long, leaning right) matching the website wordmark. */
 .topbar-logo-spark {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 17px;
+  height: 17px;
   margin-left: 1px;
-  margin-top: -2px;
-  vertical-align: top;
+  margin-top: -3px;
+  align-self: flex-start;
   background-repeat: no-repeat;
   background-size: contain;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z' fill='%2354d4ff'/%3E%3C/svg%3E");
-  filter: drop-shadow(0 0 4px rgba(84, 212, 255, 0.6));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg stroke='%2334c2f4' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='5' y1='13' x2='7.5' y2='8'/%3E%3Cline x1='10.5' y1='12.5' x2='13.5' y2='5.5'/%3E%3Cline x1='16' y1='13' x2='20.5' y2='2'/%3E%3C/g%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 4px rgba(84, 212, 255, 0.5));
+}
+/* Registered mark, small, at the bottom-right of the wordmark. */
+.topbar-logo-r {
+  align-self: flex-end;
+  font-size: 0.34em;
+  font-weight: 700;
+  color: #34c2f4;
+  margin-left: 1px;
+  margin-bottom: 0.12em;
+  line-height: 1;
 }
 :root[data-theme="dark"] .topbar-logo-selfie { color: #ffffff; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.54rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b5bcc8; }
@@ -96,7 +109,7 @@ button { cursor: pointer; }
 }
 .topbar-version-button:hover { color: #274582; }
 .topbar.compact h1, .auth-card h1, .drawer-header h3 { margin: 0; font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
-.topbar.compact h1 { font-size: 1.34rem; color: #2f3440; }
+.topbar.compact h1 { font-size: 1.34rem; font-weight: 600; color: #2f3440; }
 :root[data-theme="dark"] .topbar.compact h1 { color: #ffffff; }
 /* Inline year picker in the dashboard title: click the year to choose. */
 .title-year { position: relative; display: inline-flex; }
@@ -243,10 +256,13 @@ button { cursor: pointer; }
    the toggle is still on when it isn't. */
 .new-requests-button.is-active { background: #a52f2f; border-color: #5b9dff; box-shadow: 0 0 0 2px rgba(91, 157, 255, 0.35); }
 .filter-open-button { position: relative; }
-.filter-open-button.is-active { border-color: #b6dfbf; background: #e4f8e8; color: #3e8350; }
-.filter-open-button.is-active:hover { border-color: #9ad0a7; background: #d4f0db; color: #2f6e40; }
-.filter-clear-mini-button { position: absolute; top: -4px; right: -6px; width: 18px; height: 18px; border: 0; border-radius: 999px; background: #c6ecd0; color: #3e8350; font-size: 0.66rem; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; padding: 0; box-shadow: 0 0 0 2px var(--panel); }
-.filter-clear-mini-button:hover { background: #b3e3bf; color: #2f6e40; }
+/* Filter button turns solid green while any filter is applied. */
+.filter-open-button.is-active { border-color: #2f8f49; background: #2f8f49; color: #fff; }
+.filter-open-button.is-active:hover { border-color: #277a3d; background: #277a3d; color: #fff; }
+:root[data-theme="dark"] .filter-open-button.is-active { border-color: #34a457; background: #34a457; color: #fff; }
+:root[data-theme="dark"] .filter-open-button.is-active:hover { border-color: #2c8f4b; background: #2c8f4b; color: #fff; }
+.filter-clear-mini-button { position: absolute; top: -4px; right: -6px; width: 18px; height: 18px; border: 0; border-radius: 999px; background: #fff; color: #2f7d45; font-size: 0.66rem; font-weight: 700; line-height: 1; display: inline-grid; place-items: center; padding: 0; box-shadow: 0 0 0 2px var(--panel); }
+.filter-clear-mini-button:hover { background: #eafaef; color: #256b3a; }
 .filter-save-button { min-width: 134px; border-color: #b6dfbf; background: #e4f8e8; color: #3e8350; }
 .filter-save-button:hover { border-color: #9ad0a7; background: #d4f0db; color: #2f6e40; }
 .saved-filter-chip-stack { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 0; max-width: 100%; height: 34px; margin-left: 4px; flex: 1; }
@@ -255,7 +271,7 @@ button { cursor: pointer; }
 .saved-filter-chip-row::-webkit-scrollbar { display: none; }
 /* Saved-filter chips are neutral BLUE by default (like the other toolbar icons)
    and turn GREEN once applied (.is-active). */
-.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 124px; border: 1px solid #c7d5f2; border-radius: 999px; background: #eef2ff; padding: 0 20px 0 0; flex: 0 0 auto; min-height: 18px; }
+.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 124px; border: 1px solid #c7d5f2; border-radius: 7px; background: #eef2ff; padding: 0; flex: 0 0 auto; min-height: 18px; }
 .saved-filter-chip.is-active { border-color: #b6dfbf; background: #e4f8e8; }
 .saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #2f5cae; font-size: 0.64rem; padding: 3px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
 .saved-filter-chip.is-active .saved-filter-chip-button { color: #3e8350; }
