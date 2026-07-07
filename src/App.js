@@ -185,6 +185,52 @@ const monthAccentClass = {
 
 const CHANGELOG_VERSIONS = [
   {
+    version: 'V2.0',
+    sections: [
+      {
+        title: 'Information & Reporting (new)',
+        items: [
+          'Added a full-screen Information & Reporting area, opened from the new info icon in the top bar, with its own side menu.',
+          'Turnover Figures were moved directly into this page (no more popup).',
+          'New General report — a business overview with quotes, in-progress and completed counts (year-on-year), this-week-vs-last-week, unit and feature usage, revenue and a status pipeline.',
+          'New Clients report — top clients by bookings and by spend, each client’s preferred units, and a corporate “not booked recently” follow-up list, all with show-all pages.',
+          'New Attendants report — a leaderboard of functions worked, commission earned and distance travelled, with honest coverage notes.',
+          'Website Stats (Google Analytics) and SEO Stats (Search Console) pages, plus a real Quote Requests counter shown alongside the GA4 Leads figure.',
+          'Every report has Region and date-range filters. This area is admin-only.',
+        ],
+      },
+      {
+        title: 'Server Health & Backups (new)',
+        items: [
+          'Added a live Server Health page — server CPU, memory and disk, plus per-app and container status, uptime and restart history.',
+          'Automated daily off-site backups (live + staging data, the photobooth database and event photos) now run to Dropbox, with the last-backup status shown on the health page.',
+        ],
+      },
+      {
+        title: 'Board & Website Quotes',
+        items: [
+          'Added a “Digital Only” column that highlights the product cells on that row when ticked.',
+          'Website quote submissions now map booths and experiences to the exact dashboard products, flag G/AI when an AI experience is chosen, and tick Digital Only for digital-only output automatically.',
+          'The row Copy/Clone button and other small board touches were refined.',
+        ],
+      },
+      {
+        title: 'Look & Feel',
+        items: [
+          'Dark-mode polish across modals, tables, month headers and inputs, with a brand ambient background.',
+          'Rebuilt the top-bar logo to match the website, centred the title, added a ring around the profile picture, and refined the header icons and buttons.',
+        ],
+      },
+      {
+        title: 'Infrastructure & Reliability',
+        items: [
+          'The server was upgraded to 4 vCPU / 8 GB memory / 200 GB storage, resolving the memory-pressure restarts.',
+          'Google Analytics lead tracking (generate_lead) was wired up so website conversions flow through to analytics and Google Ads.',
+        ],
+      },
+    ],
+  },
+  {
     version: 'V1.3.002',
     sections: [
       {
@@ -4580,7 +4626,7 @@ function DashboardApp() {
         </div>
       </section>
 
-      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V1.3.002</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
+      <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V2.0</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
             {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles, attendantRecordMap, attendantStyles }} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
