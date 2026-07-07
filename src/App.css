@@ -432,8 +432,7 @@ button { cursor: pointer; }
 .board-entry.is-new-request:hover .cell { background: #cbdcfc; }
 /* Digital Only tick + the standout highlight on its two cells. */
 .digital-only-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.digital-only-cell input[type="checkbox"] { width: 17px; height: 17px; margin: 0; cursor: pointer; accent-color: #2f73e6; }
-.digital-only-cell input:disabled { cursor: not-allowed; }
+.digital-only-cell input:disabled { cursor: not-allowed; opacity: 0.55; }
 .board-entry.is-digital-only .cell-products,
 .board-entry.is-digital-only .cell-digitalOnly { background: #ffe6a0; box-shadow: inset 0 0 0 1px rgba(214,173,74,0.55); }
 .board-entry.is-digital-only:hover .cell-products,
@@ -920,19 +919,26 @@ textarea { resize: vertical; min-height: 110px; }
 .filter-option span { display: inline-block; max-width: 19ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Custom-styled filter checkboxes (theme-aware) - replaces the plain native box
    with a rounded box + brand-blue tick when checked. */
-.filter-option input[type="checkbox"] {
+.filter-option input[type="checkbox"],
+.digital-only-cell input[type="checkbox"] {
   appearance: none; -webkit-appearance: none; transform: none;
   width: 15px; height: 15px; margin: 0; flex: 0 0 auto;
   border: 1.5px solid var(--line); border-radius: 4px; background: var(--panel-alt);
   display: inline-grid; place-content: center; cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
-.filter-option input[type="checkbox"]:hover { border-color: var(--blue); }
-.filter-option input[type="checkbox"]:checked { background: var(--blue); border-color: var(--blue); }
-.filter-option input[type="checkbox"]:checked::after {
+.filter-option input[type="checkbox"]:hover,
+.digital-only-cell input[type="checkbox"]:hover { border-color: var(--blue); }
+.filter-option input[type="checkbox"]:checked,
+.digital-only-cell input[type="checkbox"]:checked { background: var(--blue); border-color: var(--blue); }
+.filter-option input[type="checkbox"]:checked::after,
+.digital-only-cell input[type="checkbox"]:checked::after {
   content: ''; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0;
   transform: rotate(45deg) translateY(-1px);
 }
+/* Slightly larger tick box for the board cell (more room than the filter list). */
+.digital-only-cell input[type="checkbox"] { width: 17px; height: 17px; border-radius: 5px; }
+.digital-only-cell input[type="checkbox"]:checked::after { width: 4px; height: 9px; }
 .changelog-modal { display: grid; gap: 12px; max-height: min(72vh, 700px); overflow: auto; padding-right: 4px; }
 .changelog-version { display: grid; gap: 10px; padding-top: 4px; }
 .changelog-version + .changelog-version { padding-top: 14px; border-top: 1px solid var(--line); }
