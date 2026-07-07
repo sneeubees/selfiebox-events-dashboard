@@ -1570,11 +1570,11 @@ textarea { resize: vertical; min-height: 110px; }
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.28);
 }
 :root[data-theme="dark"] .row-copy {
-  background: #163a26;
-  color: #4ade80;
+  background: #16294a;
+  color: #7ab3ff;
 }
 :root[data-theme="dark"] .row-copy:hover {
-  background: #1c4a30;
+  background: #1e3a63;
 }
 /* Saved-filter chip: this pill has a deliberate two-state colour language in
    light mode (warm gold = inactive, green = active) that got flattened into
