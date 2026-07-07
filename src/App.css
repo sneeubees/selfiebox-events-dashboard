@@ -98,6 +98,22 @@ button { cursor: pointer; }
 .topbar.compact h1, .auth-card h1, .drawer-header h3 { margin: 0; font-family: 'Montserrat', 'Roboto', 'Segoe UI', Arial, sans-serif; font-weight: 700; }
 .topbar.compact h1 { font-size: 1.34rem; color: #2f3440; }
 :root[data-theme="dark"] .topbar.compact h1 { color: #ffffff; }
+/* Inline year picker in the dashboard title: click the year to choose. */
+.title-year { position: relative; display: inline-flex; }
+.title-year-button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.title-year-caret { color: var(--blue); flex: 0 0 auto; transition: transform 140ms ease; }
+.title-year.is-open .title-year-caret, .title-year-button[aria-expanded="true"] .title-year-caret { transform: rotate(180deg); }
+.title-year-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 9999; display: grid; gap: 2px; min-width: 120px; padding: 6px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2); }
+.title-year-option { border: 0; background: transparent; text-align: left; color: var(--text); padding: 8px 11px; border-radius: 8px; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
+.title-year-option:hover { background: var(--panel-alt); }
+.title-year-option.is-selected { background: var(--blue); color: #fff; }
+.title-year-add { color: var(--blue); font-weight: 700; }
+.title-year-option.is-selected.title-year-add { color: #fff; }
+:root[data-theme="dark"] .title-year-menu { background: #16264a; border-color: #34507e; }
+:root[data-theme="dark"] .title-year-option:hover { background: #22345c; }
+/* Count badge on the New button. */
+.new-requests-button { display: inline-flex; align-items: center; gap: 7px; }
+.new-requests-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.28); color: #fff; font-size: 0.68rem; font-weight: 800; line-height: 1; }
 .footer-version-button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0; }
 .footer-version-button:hover { color: var(--blue); }
 .topbar-actions, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
@@ -234,15 +250,18 @@ button { cursor: pointer; }
 .filter-save-button { min-width: 134px; border-color: #b6dfbf; background: #e4f8e8; color: #3e8350; }
 .filter-save-button:hover { border-color: #9ad0a7; background: #d4f0db; color: #2f6e40; }
 .saved-filter-chip-stack { display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 0; max-width: 100%; height: 34px; margin-left: 4px; flex: 1; }
-.saved-filter-chip-label { font-size: 0.48rem; line-height: 1; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5f8e69; padding-left: 4px; white-space: nowrap; }
+.saved-filter-chip-label { font-size: 0.48rem; line-height: 1; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7fb0; padding-left: 4px; white-space: nowrap; }
 .saved-filter-chip-row { display: flex; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; scrollbar-width: none; padding: 2px 2px 2px 3px; }
 .saved-filter-chip-row::-webkit-scrollbar { display: none; }
-.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 124px; border: 1px solid #f0c795; border-radius: 999px; background: #ffe7c7; padding: 0 20px 0 0; flex: 0 0 auto; min-height: 18px; }
+/* Saved-filter chips are neutral BLUE by default (like the other toolbar icons)
+   and turn GREEN once applied (.is-active). */
+.saved-filter-chip { position: relative; display: inline-flex; align-items: center; max-width: 124px; border: 1px solid #c7d5f2; border-radius: 999px; background: #eef2ff; padding: 0 20px 0 0; flex: 0 0 auto; min-height: 18px; }
 .saved-filter-chip.is-active { border-color: #b6dfbf; background: #e4f8e8; }
-.saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #8b5a18; font-size: 0.64rem; padding: 3px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
+.saved-filter-chip-button { max-width: 100%; border: 0; background: transparent; color: #2f5cae; font-size: 0.64rem; padding: 3px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; }
 .saved-filter-chip.is-active .saved-filter-chip-button { color: #3e8350; }
-.saved-filter-chip-button:hover { color: #70450e; }
-.saved-filter-chip-close { position: absolute; top: 1px; right: 3px; width: 13px; height: 13px; border: 0; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.56rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; cursor: pointer; }
+.saved-filter-chip-button:hover { color: #1f4488; }
+.saved-filter-chip-close { position: absolute; top: 1px; right: 3px; width: 13px; height: 13px; border: 0; border-radius: 999px; background: #dbe6ff; color: #2f5cae; font-size: 0.56rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; cursor: pointer; }
+.saved-filter-chip.is-active .saved-filter-chip-close { background: #cbeecb; color: #3e8350; }
 .saved-filter-chip.is-active .saved-filter-chip-close { background: #c6ecd0; color: #3e8350; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
 /* --visible-board-width is (re)set imperatively to board-surface.clientWidth
@@ -283,7 +302,10 @@ button { cursor: pointer; }
 .admin-menu { position: fixed; z-index: 9999; display: grid; gap: 6px; min-width: 170px; padding: 8px; border-radius: 10px; background: #fff; border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18); }
 .admin-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 6px 8px; border-radius: 8px; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
-.month-section { margin: 0 0 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
+/* box-shadow (not outline) for the 1px card line so it FOLLOWS the border-radius
+   and is occludable; square top corners since the frozen header pill supplies the
+   card's visual top (a rounded section top would peek past the header's corners). */
+.month-section { margin: 0 0 10px; border: 0; box-shadow: 0 0 0 1px var(--line); border-radius: 0 0 12px 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
 /* Frozen full-viewport-width month header: sticky in BOTH axes (top + left) and
    capped to the scrollport's visible width so its rounded corners + the 10px
@@ -304,6 +326,7 @@ button { cursor: pointer; }
    expanded bottom) instead of running past them as a square element shadow. */
 .month-header::before { content: ''; position: absolute; inset: 0; background: var(--header-bg); border-radius: var(--header-radius, 12px 12px 0 0); box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); z-index: -1; transition: background 140ms ease; }
 .month-section.is-collapsed-month .month-header { --header-radius: 12px; }
+.month-section.is-collapsed-month { border-radius: 12px; }  /* pill: box-shadow follows all corners so nothing peeks past the fully-rounded header */
 .month-section.is-expanded-month .month-header { --header-radius: 12px 12px 0 0; }
 .month-header:hover { --header-bg: #e5eeff; }
 /* TRIAL: tint expanded-month headers with a shade of the month's own accent
@@ -1502,8 +1525,8 @@ textarea { resize: vertical; min-height: 110px; }
    like "the pill is behind a rectangular box"). Both needed their own
    dedicated dark treatment instead of borrowing from unrelated groups. */
 :root[data-theme="dark"] .saved-filter-chip {
-  background: #3c2d15;
-  border-color: #6b5125;
+  background: #1a2740;
+  border-color: #34507e;
 }
 :root[data-theme="dark"] .saved-filter-chip.is-active {
   background: #1d3a28;
@@ -1511,17 +1534,17 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .saved-filter-chip-button {
   background: transparent;
-  color: #f4ddb0;
+  color: #9db8ee;
 }
 :root[data-theme="dark"] .saved-filter-chip-button:hover {
-  color: #ffe9c2;
+  color: #c5d8ff;
 }
 :root[data-theme="dark"] .saved-filter-chip.is-active .saved-filter-chip-button {
   color: #bde5c6;
 }
 :root[data-theme="dark"] .saved-filter-chip-close {
   background: rgba(255, 255, 255, 0.14);
-  color: #f4ddb0;
+  color: #9db8ee;
 }
 :root[data-theme="dark"] .saved-filter-chip-close:hover {
   background: rgba(255, 255, 255, 0.22);

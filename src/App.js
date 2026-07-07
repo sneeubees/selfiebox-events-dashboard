@@ -919,6 +919,7 @@ function DashboardApp() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [yearMenuOpen, setYearMenuOpen] = useState(false);
   const [exportDialog, setExportDialog] = useState({ isOpen: false, title: '', filename: '', scope: 'workspace', sheets: [], selectedKeys: [] });
   const [previewFile, setPreviewFile] = useState(null);
   const [locationPreview, setLocationPreview] = useState(null);
@@ -995,7 +996,14 @@ function DashboardApp() {
     const publish = () => {
       const surface = boardSurfaceRef.current;
       if (!surface) return;
-      const width = Math.max(0, surface.clientWidth); // scrollport width; 10px side gutters live on the frame
+      // Use the padding-box width (getBoundingClientRect includes the reserved
+      // scrollbar-gutter:stable strip), NOT clientWidth (which excludes it).
+      // Scrolling rows clip at the padding box, so the header must span that full
+      // width or a ~gutter-wide strip of the section leaks to its right.
+      const cs = getComputedStyle(surface);
+      const bl = parseFloat(cs.borderLeftWidth) || 0;
+      const br = parseFloat(cs.borderRightWidth) || 0;
+      const width = Math.max(0, surface.getBoundingClientRect().width - bl - br);
       document.documentElement.style.setProperty('--visible-board-width', `${width}px`);
     };
     const attach = () => {
@@ -1143,7 +1151,8 @@ function DashboardApp() {
     return events.filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear));
   }, [events, selectedWorkspaceYear]);
 
-  const hasNewRequests = useMemo(() => yearEvents.some((event) => event.status === 'Web Request'), [yearEvents]);
+  const newRequestCount = useMemo(() => yearEvents.reduce((total, event) => total + (event.status === 'Web Request' ? 1 : 0), 0), [yearEvents]);
+  const hasNewRequests = newRequestCount > 0;
 
   // If the last remaining Web Request row gets its status changed away while
   // "New" mode is active, drop out of it automatically instead of leaving the
@@ -1973,6 +1982,20 @@ function DashboardApp() {
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [profileMenuOpen]);
+
+  useEffect(() => {
+    if (!yearMenuOpen) {
+      return undefined;
+    }
+    const closeMenu = () => setYearMenuOpen(false);
+    const closeOnEscape = (event) => { if (event.key === 'Escape') closeMenu(); };
+    document.addEventListener('mousedown', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [yearMenuOpen]);
 
   const persistLabelOption = (
     columnKey,
@@ -4391,28 +4414,18 @@ function DashboardApp() {
           <div className="topbar-brand">
             <span className="topbar-logo" role="img" aria-label="SelfieBox"><span className="topbar-logo-selfie">Selfie</span><span className="topbar-logo-box">Box</span><span className="topbar-logo-spark" aria-hidden="true" /></span>
             <div>
-              <h1>Events Dashboard {selectedWorkspaceYear}</h1>
+              <h1>Events Dashboard <span className="title-year">
+                <button className="title-year-button" type="button" aria-haspopup="menu" aria-expanded={yearMenuOpen} onMouseDown={(event) => event.stopPropagation()} onClick={() => setYearMenuOpen((open) => !open)}>{selectedWorkspaceYear}<svg className="title-year-caret" width="15" height="15" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                {yearMenuOpen ? (
+                  <div className="title-year-menu" role="menu" onMouseDown={(event) => event.stopPropagation()}>
+                    {workspaceYears.map((year) => <button key={year} type="button" role="menuitem" className={`title-year-option${Number(year) === Number(selectedWorkspaceYear) ? ' is-selected' : ''}`} onClick={() => { setSelectedWorkspaceYear(Number(year)); setYearMenuOpen(false); }}>{year}</button>)}
+                    {['admin', 'manager'].includes(currentUser.role) ? <button type="button" role="menuitem" className="title-year-option title-year-add" onClick={() => { setYearMenuOpen(false); setShowWorkspaceModal(true); }}>+ Add Year</button> : null}
+                  </div>
+                ) : null}
+              </span></h1>
             </div>
           </div>
         <div className="topbar-actions compact-actions">
-          <div className="workspace-select-wrap">
-            <div className="workspace-select-inline">
-              <span className="workspace-prefix">Showing events for:</span>
-            </div>
-            <select
-              value={selectedWorkspaceYear}
-              onChange={(event) => {
-                if (event.target.value === '__add__') {
-                  setShowWorkspaceModal(true);
-                  return;
-                }
-                setSelectedWorkspaceYear(Number(event.target.value));
-              }}
-            >
-              {workspaceYears.map((year) => <option key={year} value={year}>{year}</option>)}
-              {['admin', 'manager'].includes(currentUser.role) ? <option value="__add__">Add Year</option> : null}
-            </select>
-          </div>
           {currentUser.role === 'admin' ? (
             <div className="topbar-admin-actions">
               <button className="turnover-top-icon" type="button" title="Turnover Figures" aria-label="Turnover Figures" onClick={openTurnoverDialog}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg></button>
@@ -4449,6 +4462,7 @@ function DashboardApp() {
                 onClick={() => setNewOnlyMode((current) => !current)}
               >
                 New
+                <span className="new-requests-count">{newRequestCount}</span>
               </button>
             ) : null}
             <div className="filter-button-wrap">
