@@ -426,7 +426,9 @@ export const submitWebsiteQuote = mutation({
       .map((value) => normalizeString(value))
       .filter(Boolean)
       .join(" - ");
-    const gsAi = formData.primarySelection === "AI Experience" ? "Yes" : "";
+    // AI Experience selected (as the primary pick, an extra, or "other") => flag G/AI.
+    const gsAi = [formData.primarySelection, formData.primaryOther, ...(formData.optionalExtras || [])]
+      .some((value) => /AI Experience/i.test(String(value || ""))) ? "Yes" : "";
     const bookingCustomerType = normalizeDashboardCustomerType(formData.functionType);
     const selectionNotes = buildQuoteSelectionNotes(formData);
 
