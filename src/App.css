@@ -205,9 +205,13 @@ button { cursor: pointer; }
 /* Only rendered while at least one Web Request row exists in the current
    year - toggles a "new items only" view (search-like: expands every month
    that has a match, restores prior collapse state when turned off). */
-.new-requests-button { border: 0; border-radius: 8px; padding: 8px 16px; font-weight: 700; font-size: 0.86rem; background: #d64545; color: #fff; box-shadow: 0 8px 18px rgba(214, 69, 69, 0.28); }
+.new-requests-button { border: 2px solid transparent; border-radius: 8px; padding: 7px 15px; font-weight: 700; font-size: 0.86rem; background: #d64545; color: #fff; box-shadow: 0 8px 18px rgba(214, 69, 69, 0.28); box-sizing: border-box; }
 .new-requests-button:hover { background: #c23a3a; }
-.new-requests-button.is-active { background: #a52f2f; box-shadow: inset 0 0 0 2px #ffb3b3; }
+.new-requests-button:focus-visible { outline: none; }
+/* Deliberate, always-visible "on" state - not reliant on the browser's default
+   focus ring, which fades/relocates as you click elsewhere and can look like
+   the toggle is still on when it isn't. */
+.new-requests-button.is-active { background: #a52f2f; border-color: #5b9dff; box-shadow: 0 0 0 2px rgba(91, 157, 255, 0.35); }
 .filter-open-button { position: relative; }
 .filter-open-button.is-active { border-color: #b6dfbf; background: #e4f8e8; color: #3e8350; }
 .filter-open-button.is-active:hover { border-color: #9ad0a7; background: #d4f0db; color: #2f6e40; }
