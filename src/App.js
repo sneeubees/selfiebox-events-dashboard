@@ -6527,6 +6527,16 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('last7');
   const [saOnly, setSaOnly] = useState(false);
+  // Durable count of quotes actually submitted FROM the website (bumped at submit
+  // time in websiteStats, before the event's status is ever changed).
+  const websiteQuoteStats = useQuery(api.websiteStats.getWebsiteStats, {});
+  const quoteRequests = useMemo(() => {
+    const days = websiteQuoteStats?.days || [];
+    const zaDay = (n) => new Date(Date.now() - n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' });
+    const today = zaDay(0);
+    const start = period === 'today' ? today : period === 'last30' ? zaDay(29) : period === 'launch' ? SITE_LAUNCH_DATE : zaDay(6);
+    return days.filter((d) => d.date >= start && d.date <= today).reduce((sum, d) => sum + (d.quotes || 0), 0);
+  }, [websiteQuoteStats, period]);
 
   const load = useCallback(async (p, sa, force) => {
     const meta = STATS_PERIODS.find((x) => x[0] === p) || STATS_PERIODS[1];
@@ -6592,10 +6602,17 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
   } else if (data && data.error) {
     inner = <div className="webstats-empty"><p>Couldn&apos;t load stats.</p><p className="webstats-muted">{data.detail}</p><button className="ghost-button" type="button" onClick={() => void load(period, saOnly, true)}>Retry</button></div>;
   } else if (data && cur) {
-    const kpis = [['Visits', cur.sessions], ['Visitors', cur.users], ['Page views', cur.pageviews], ['Avg. time', fmtDur(cur.avgEngagementSec)], ['Leads', cur.conversions]];
+    const kpis = [
+      ['Visits', cur.sessions],
+      ['Visitors', cur.users],
+      ['Page views', cur.pageviews],
+      ['Avg. time', fmtDur(cur.avgEngagementSec)],
+      ['Leads', cur.conversions, 'GA4-tracked lead events (quote_submit / contact_submit / generate_lead). Relies on browser tracking, so it under-counts vs real submissions.'],
+      ['Quote Requests', quoteRequests, 'Actual quote forms submitted from the website — counted at submit time in your backend, before any status change. This is the true number.'],
+    ];
     inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
       <div className="webstats-kpis">
-        {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
+        {kpis.map(([label, val, tip]) => <div className={`webstats-kpi${label === 'Quote Requests' ? ' is-highlight' : ''}`} key={label} title={tip || ''}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
       </div>
       <div className="webstats-section">
         <h4>{data.trendMode === 'hourly' ? 'Visits by hour' : 'Daily visits'} <span>{periodLabel}</span></h4>

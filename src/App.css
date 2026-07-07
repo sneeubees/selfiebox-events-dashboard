@@ -1918,7 +1918,9 @@ textarea { resize: vertical; min-height: 110px; }
 .webstats-tabs { display: inline-flex; gap: 3px; background: var(--panel-alt); border: 1px solid var(--line); border-radius: 999px; padding: 3px; margin-bottom: 16px; }
 .webstats-tabs button { border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: 0.76rem; padding: 6px 15px; border-radius: 999px; }
 .webstats-tabs button.is-active { background: var(--blue); color: #fff; }
-.webstats-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+.webstats-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+.webstats-kpi.is-highlight { border-color: rgba(34,197,94,0.55); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.18); }
+.webstats-kpi.is-highlight .webstats-kpi-val { color: #22c55e; }
 .webstats-kpi { background: var(--panel-alt); border: 1px solid var(--line); border-radius: 12px; padding: 15px 8px; text-align: center; }
 .webstats-kpi-val { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1; }
 .webstats-kpi-label { font-size: 0.71rem; color: var(--muted); margin-top: 6px; }
