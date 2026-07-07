@@ -566,7 +566,8 @@ export const getForEvent = query({
 export const listClassifications = query({
   args: {},
   handler: async (ctx) => {
-    await requireCurrentUser(ctx);
+    const user = await requireCurrentUser(ctx);
+    if (user.role !== "admin") return []; // Info & Reporting is admin-only
     const rows = await ctx.db.query("eventBookings").collect();
     return rows.map((row) => ({
       eventKey: row.eventKey,

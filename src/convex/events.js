@@ -329,11 +329,13 @@ export const listByWorkspaceYear = query({
 export const clientRecency = query({
   args: {},
   handler: async (ctx) => {
+    let user;
     try {
-      await requireCurrentUser(ctx);
+      user = await requireCurrentUser(ctx);
     } catch {
       return [];
     }
+    if (user.role !== "admin") return []; // Info & Reporting is admin-only
     const events = await ctx.db.query("events").collect();
     const bookings = await ctx.db.query("eventBookings").collect();
     const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));

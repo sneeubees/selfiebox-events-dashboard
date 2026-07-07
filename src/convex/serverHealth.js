@@ -14,7 +14,8 @@ async function requireApprovedUser(ctx) {
     const email = String(identity.email || "").trim().toLowerCase();
     if (email) user = (await ctx.db.query("users").collect()).find((c) => c.email === email) || null;
   }
-  if (!user || !user.isApproved || !user.isActive) return null;
+  // Info & Reporting (incl. Server Health) is admin-only — not even managers.
+  if (!user || !user.isApproved || !user.isActive || user.role !== "admin") return null;
   return user;
 }
 
