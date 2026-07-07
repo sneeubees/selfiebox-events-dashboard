@@ -441,6 +441,8 @@ export const submitWebsiteQuote = mutation({
       time,
       branch: branchAbbreviation ? [branchAbbreviation] : [],
       products,
+      // Photo-booth "Digital" output (no printing) => tick the Digital Only column.
+      digitalOnly: normalizeString(formData.photoOutput) === "Digital",
       status: "Web Request",
       location: formData.address || "",
       locationPlaceId: formData.addressPlaceId || "",
