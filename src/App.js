@@ -6440,7 +6440,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'ads' ? <ComingSoonView title="Google Ads" blurb="Ad spend, clicks, conversions, cost-per-lead and audience demographics — pulled straight from your Google Ads account into this same friendly view." /> : null}
         {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
-        {tab === 'rep-clients' ? <ComingSoonView title="Client Reporting" blurb="Per-client history, spend and booking patterns — see who your best clients are and who's due a follow-up." /> : null}
+        {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
         {tab === 'rep-attendants' ? <ComingSoonView title="Attendant Reporting" blurb="Per-attendant activity, hours and commission summaries — a clear view of who worked what across the year." /> : null}
         {tab === 'server' ? <ComingSoonView title="Server Health" blurb="Live status of the website, backend and databases — uptime, response times and alerts, all in one place." /> : null}
       </main>
@@ -7081,6 +7081,233 @@ function GeneralReportView({ reports }) {
       </div>
 
       <div className="webstats-foot">{curF.length.toLocaleString()} events &middot; {range.label} &middot; {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
+    </div>
+  );
+}
+
+function reportNormName(s) { return (s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+function reportIsoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function reportFmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
+function reportHowLongAgo(d) {
+  if (!d) return 'never booked';
+  const then = new Date(d); const now = new Date();
+  let months = (now.getFullYear() - then.getFullYear()) * 12 + (now.getMonth() - then.getMonth());
+  if (now.getDate() < then.getDate()) months -= 1;
+  if (months < 1) return 'this month';
+  if (months < 12) return `${months} mo ago`;
+  const y = Math.floor(months / 12), m = months % 12;
+  return m ? `${y} yr ${m} mo ago` : `${y} yr ago`;
+}
+function reportResolveClientClass(classes) {
+  const real = (classes || []).filter((c) => c.cl && c.cl !== 'Unclassified').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return real.length ? real[0].cl : 'Unclassified';
+}
+function reportAggregateClients(events, money, classByKey) {
+  const map = new Map();
+  events.forEach((e) => {
+    const name = (e.name || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    let c = map.get(key);
+    if (!c) { c = { key, display: name, bookings: 0, total: 0, units: new Map(), lastDate: '', branches: new Set(), classes: [] }; map.set(key, c); }
+    c.bookings += 1;
+    c.total += money(e);
+    (e.products || []).forEach((abbr) => { const q = Number((e.productQuantities || {})[abbr]) || 1; c.units.set(abbr, (c.units.get(abbr) || 0) + q); });
+    if (e.date && e.date > c.lastDate) { c.lastDate = e.date; c.display = name; }
+    (e.branch || []).forEach((b) => c.branches.add(b));
+    const cl = classByKey.get(e.id);
+    if (cl) c.classes.push({ date: e.date, cl });
+  });
+  return Array.from(map.values()).map((c) => ({
+    ...c,
+    prefUnits: Array.from(c.units.entries()).map(([abbr, count]) => ({ abbr, count })).sort((a, b) => b.count - a.count),
+    cls: reportResolveClientClass(c.classes),
+  }));
+}
+
+// Client leaderboards: top by bookings + by Excl-JC spend, preferred units,
+// and a Corporate-only "not booked recently" follow-up list. Show-all subviews.
+function ClientsReportView({ reports }) {
+  const { year, canAccess, branchOptions, productFullNames, productStyles, branchStyles, customColumns } = reports;
+  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const classifications = useQuery(api.bookings.listClassifications, canAccess ? {} : 'skip');
+  const recency = useQuery(api.events.clientRecency, canAccess ? {} : 'skip');
+
+  const [regionSel, setRegionSel] = useState([]);
+  const [rangeKey, setRangeKey] = useState('all');
+  const [custom, setCustom] = useState({ start: '', end: '' });
+  const [subview, setSubview] = useState(null);
+  const [staleMonths, setStaleMonths] = useState(6);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState({ key: 'bookings', dir: 'desc' });
+
+  const moneyKey = useMemo(() => reportResolveMoneyKey(customColumns), [customColumns]);
+  const regionOptions = useMemo(() => (branchOptions || []).map((o) => ({ value: o.abbreviation, label: o.fullName || o.abbreviation, color: o.color })), [branchOptions]);
+  const range = useMemo(() => (rangeKey === 'custom' ? { start: custom.start || `${year}-01-01`, end: custom.end || `${year}-12-31`, label: 'custom range' } : reportRangeFor(rangeKey, year)), [rangeKey, custom, year]);
+  const prevRange = useMemo(() => reportShiftYear(range), [range]);
+  const inRegion = useCallback((e) => !regionSel.length || (e.branch || []).some((b) => regionSel.includes(b)), [regionSel]);
+  const money = useCallback((e) => (moneyKey ? reportParseMoney((e.customFields || {})[moneyKey]) : 0), [moneyKey]);
+  const inWin = (e, win) => e.date && e.date >= win.start && e.date <= win.end;
+
+  const classByKey = useMemo(() => {
+    const m = new Map();
+    (classifications || []).forEach((r) => { const s = (r.customerType || '').toLowerCase(); m.set(r.eventKey, s.includes('corporate') ? 'Corporate' : s.includes('private') ? 'Private' : 'Unclassified'); });
+    return m;
+  }, [classifications]);
+
+  const curF = useMemo(() => (curEvents || []).filter((e) => inRegion(e) && inWin(e, range)), [curEvents, inRegion, range]);
+  const prevF = useMemo(() => (prevEvents || []).filter((e) => inRegion(e) && inWin(e, prevRange)), [prevEvents, inRegion, prevRange]);
+
+  const clients = useMemo(() => reportAggregateClients(curF, money, classByKey), [curF, money, classByKey]);
+  const byBookings = useMemo(() => [...clients].sort((a, b) => b.bookings - a.bookings || b.total - a.total || a.display.localeCompare(b.display)), [clients]);
+  const byAmount = useMemo(() => [...clients].sort((a, b) => b.total - a.total || b.bookings - a.bookings), [clients]);
+  const maxBookings = Math.max(1, ...byBookings.map((c) => c.bookings));
+  const maxTotal = Math.max(1, ...byAmount.map((c) => c.total));
+
+  const kpi = useMemo(() => {
+    const build = (evts) => { const agg = reportAggregateClients(evts, money, classByKey); const spend = agg.reduce((s, c) => s + c.total, 0); return { clients: agg.length, spend, avg: agg.length ? spend / agg.length : 0 }; };
+    const cur = build(curF), prev = build(prevF);
+    const before = new Set();
+    [...(curEvents || []), ...(prevEvents || [])].forEach((e) => { if (e.date && e.date < range.start) { const n = reportNormName(e.name); if (n) before.add(n); } });
+    const newC = byBookings.filter((c) => !before.has(c.key)).length;
+    return { cur, prev, newC };
+  }, [curF, prevF, curEvents, prevEvents, range, byBookings, money, classByKey]);
+
+  const stale = useMemo(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - staleMonths); const cutoff = reportIsoDate(d);
+    const list = (recency || [])
+      .filter((r) => r.customerType === 'Corporate' && (!regionSel.length || (r.branches || []).some((b) => regionSel.includes(b))) && (!r.lastDate || r.lastDate < cutoff))
+      .sort((a, b) => String(a.lastDate || '').localeCompare(String(b.lastDate || '')));
+    const hidden = (recency || []).filter((r) => r.customerType === 'Unclassified').length;
+    return { list, hidden, cutoff };
+  }, [recency, staleMonths, regionSel]);
+
+  const loading = curEvents === undefined || prevEvents === undefined;
+  const unitTagStyle = (abbr) => ({ background: (productStyles[abbr] || {}).background || 'var(--panel-alt)', color: (productStyles[abbr] || {}).color || 'var(--text)' });
+
+  const head = (
+    <header className="statspage-viewhead report-head">
+      <div><h2>Clients</h2><p>Your best clients, their favourite units, and who&rsquo;s due a follow-up &mdash; {year}.</p></div>
+    </header>
+  );
+  if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading client reports&hellip;</div></div>;
+
+  // ---- Show-all subview ----
+  if (subview) {
+    const isStale = subview === 'stale';
+    const title = subview === 'amount' ? 'All clients by spend' : subview === 'stale' ? 'All corporate clients due a follow-up' : 'All clients by bookings';
+    let rows = isStale ? stale.list.map((r) => ({ key: reportNormName(r.name), display: r.name, bookings: r.totalBookings, total: 0, lastDate: r.lastDate, branches: r.branches, cls: r.customerType, prefUnits: [] })) : [...clients];
+    if (search.trim()) { const q = search.trim().toLowerCase(); rows = rows.filter((c) => c.display.toLowerCase().includes(q)); }
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    rows = [...rows].sort((a, b) => {
+      if (sort.key === 'name') return dir * a.display.localeCompare(b.display);
+      if (sort.key === 'lastDate') return dir * String(a.lastDate || '').localeCompare(String(b.lastDate || ''));
+      return dir * ((a[sort.key] || 0) - (b[sort.key] || 0));
+    });
+    const th = (key, label, cls) => <button type="button" className={`report-th${sort.key === key ? ' is-sorted' : ''} ${cls || ''}`} onClick={() => setSort((s) => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))}>{label}{sort.key === key ? <span aria-hidden="true">{sort.dir === 'desc' ? ' ▾' : ' ▴'}</span> : null}</button>;
+    return (
+      <div className="statspage-view statspage-view-wide report-view">
+        <header className="statspage-viewhead report-head">
+          <div><button type="button" className="report-back" onClick={() => { setSubview(null); setSearch(''); }}>&larr; Back to Clients</button><h2>{title}</h2><p>{rows.length} clients{regionSel.length ? ` · ${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : ''}{isStale ? ` · not booked in ${staleMonths}+ months` : ` · ${range.label}`}</p></div>
+          <input className="report-search" type="search" placeholder="Search clients…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </header>
+        <div className={`report-table${isStale ? ' is-stale' : ''}`}>
+          <div className="report-tr report-thead">
+            {th('name', 'Client', 'report-td-name')}
+            {th('bookings', 'Bookings')}
+            {isStale ? null : th('total', 'Excl JC')}
+            {isStale ? th('lastDate', 'Last booking') : th('lastDate', 'Last')}
+            {isStale ? <span className="report-th">How long</span> : <span className="report-th report-td-units">Preferred units</span>}
+            <span className="report-th report-td-region">Region</span>
+            {isStale ? null : <span className="report-th">Type</span>}
+          </div>
+          {rows.map((c) => (
+            <div className="report-tr" key={c.key}>
+              <span className="report-td report-td-name" title={c.display}>{c.display}</span>
+              <span className="report-td">{c.bookings}</span>
+              {isStale ? null : <span className="report-td">{reportFmtRand(c.total)}</span>}
+              <span className="report-td">{reportFmtDate(c.lastDate)}</span>
+              {isStale ? <span className="report-td">{reportHowLongAgo(c.lastDate)}</span> : (
+                <span className="report-td report-td-units">{c.prefUnits.slice(0, 3).map((u) => <span className="report-unit-tag" key={u.abbr} style={unitTagStyle(u.abbr)}>{productFullNames[u.abbr] || u.abbr}</span>)}</span>
+              )}
+              <span className="report-td report-td-region">{(c.branches instanceof Set ? Array.from(c.branches) : (c.branches || [])).map((b) => <span className="report-branch-tag" key={b} style={{ background: (branchStyles[b] || {}).background, color: (branchStyles[b] || {}).color }}>{b}</span>)}</span>
+              {isStale ? null : <span className={`report-td report-class report-class-${(c.cls || 'Unclassified').toLowerCase()}`}>{c.cls}</span>}
+            </div>
+          ))}
+          {!rows.length ? <div className="webstats-muted report-empty-row">No clients match.</div> : null}
+        </div>
+      </div>
+    );
+  }
+
+  const rankRow = (c, i, kind, max) => {
+    const pref = c.prefUnits[0];
+    return (
+      <div className="report-rank-row" key={c.key}>
+        <span className="report-rank-num">{i + 1}</span>
+        <div className="report-rank-main">
+          <div className="report-rank-head"><span className="report-rank-name" title={c.display}>{c.display}</span><span className="report-rank-val">{kind === 'amount' ? reportFmtRand(c.total) : c.bookings}</span></div>
+          <div className="webstats-track"><span className={kind === 'amount' ? 'is-src' : ''} style={{ width: `${((kind === 'amount' ? c.total : c.bookings) / max) * 100}%` }} /></div>
+          <div className="report-rank-meta">{pref ? <span className="report-unit-tag" style={unitTagStyle(pref.abbr)}>{productFullNames[pref.abbr] || pref.abbr}</span> : null}<span>{kind === 'amount' ? `${c.bookings} bookings` : reportFmtRand(c.total)} · last {reportFmtDate(c.lastDate)}</span></div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="statspage-view statspage-view-wide report-view">
+      {head}
+      <ReportFilterBar regionOptions={regionOptions} regionSel={regionSel} setRegionSel={setRegionSel} rangeKey={rangeKey} setRangeKey={setRangeKey} custom={custom} setCustom={setCustom} />
+
+      <div className="webseo-kpis report-kpis report-kpis-4">
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kpi.cur.clients.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kpi.cur.clients, kpi.prev.clients)} suffix="%" /></div><span>Active clients</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kpi.newC.toLocaleString()}</strong></div><span>New clients</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{reportFmtRand(kpi.cur.spend)}</strong><DeltaBadge value={reportPctChange(kpi.cur.spend, kpi.prev.spend)} suffix="%" /></div><span>Total spend (Excl JC)</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{reportFmtRand(kpi.cur.avg)}</strong><DeltaBadge value={reportPctChange(kpi.cur.avg, kpi.prev.avg)} suffix="%" /></div><span>Avg / client</span></div>
+      </div>
+      <div className="report-caption">{clients.length} clients · {range.label}{regionSel.length ? ` · ${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : ' · all regions'} · deltas vs {prevRange.start.slice(0, 4)}</div>
+
+      <div className="webstats-cols">
+        <div className="webstats-section">
+          <h4>Top clients by bookings <span>{byBookings.length}</span>{byBookings.length > 10 ? <button type="button" className="report-showall" onClick={() => { setSubview('bookings'); setSort({ key: 'bookings', dir: 'desc' }); }}>Show all</button> : null}</h4>
+          {byBookings.length ? byBookings.slice(0, 10).map((c, i) => rankRow(c, i, 'bookings', maxBookings)) : <div className="webstats-muted">No client bookings in this range.</div>}
+        </div>
+        <div className="webstats-section">
+          <h4>Top clients by spend <span>Excl JC</span>{byAmount.length > 10 ? <button type="button" className="report-showall" onClick={() => { setSubview('amount'); setSort({ key: 'total', dir: 'desc' }); }}>Show all</button> : null}</h4>
+          {byAmount.length && maxTotal > 0 ? byAmount.slice(0, 10).map((c, i) => rankRow(c, i, 'amount', maxTotal)) : <div className="webstats-muted">{moneyKey ? 'No spend recorded in this range.' : 'No “Excl JC” column found yet.'}</div>}
+        </div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Preferred units <span>top 10 clients</span></h4>
+        {byBookings.slice(0, 10).map((c) => (
+          <div className="report-pref-row" key={c.key}>
+            <span className="report-pref-name" title={c.display}>{c.display}</span>
+            <span className="report-pref-tags">{c.prefUnits.slice(0, 4).map((u) => <span className="report-unit-tag" key={u.abbr} style={unitTagStyle(u.abbr)}>{productFullNames[u.abbr] || u.abbr} ×{u.count}</span>)}{c.prefUnits.length > 4 ? <span className="report-pref-more">+{c.prefUnits.length - 4}</span> : null}</span>
+          </div>
+        ))}
+        {!byBookings.length ? <div className="webstats-muted">No clients in this range.</div> : null}
+      </div>
+
+      <div className="webstats-section report-stale-section">
+        <h4>Not booked recently <span>corporate only</span>{stale.list.length > 10 ? <button type="button" className="report-showall" onClick={() => { setSubview('stale'); setSort({ key: 'lastDate', dir: 'asc' }); }}>Show all</button> : null}</h4>
+        <div className="report-stale-controls">
+          <div className="webstats-tabs">
+            {[3, 6, 12].map((m) => <button key={m} type="button" className={staleMonths === m ? 'is-active' : ''} onClick={() => setStaleMonths(m)}>{m} months</button>)}
+          </div>
+          <span className="report-stale-hint">Measured from each client&rsquo;s most recent event (ignores the date range above).</span>
+        </div>
+        {stale.list.length ? stale.list.slice(0, 10).map((r) => (
+          <div className="webstats-row report-stale-row" key={reportNormName(r.name)}>
+            <div className="webstats-row-head"><span className="webstats-row-label" title={r.name}>{r.name}</span><span className="webstats-row-val">{reportHowLongAgo(r.lastDate)}</span></div>
+            <div className="report-stale-meta">last event {reportFmtDate(r.lastDate)} · {r.totalBookings} booking{r.totalBookings === 1 ? '' : 's'}{(r.branches || []).length ? ' · ' : ''}{(r.branches || []).map((b) => <span className="report-branch-tag" key={b} style={{ background: (branchStyles[b] || {}).background, color: (branchStyles[b] || {}).color }}>{b}</span>)}</div>
+          </div>
+        )) : <div className="webstats-empty">No corporate clients are overdue for a follow-up 🎉</div>}
+        {stale.hidden ? <div className="report-caption">+{stale.hidden} unclassified clients hidden — no booking form on file to confirm they&rsquo;re corporate.</div> : null}
+      </div>
+
+      <div className="webstats-foot">{clients.length.toLocaleString()} clients · {range.label} · {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
     </div>
   );
 }

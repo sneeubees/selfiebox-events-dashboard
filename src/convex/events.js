@@ -323,6 +323,47 @@ export const listByWorkspaceYear = query({
   },
 });
 
+// All-time recency per client (by name), joined with booking Corporate/Private
+// class + branches. Powers the Clients report's "not booked recently" list, which
+// needs the full history (not just the 1-2 years the report otherwise loads).
+export const clientRecency = query({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await requireCurrentUser(ctx);
+    } catch {
+      return [];
+    }
+    const events = await ctx.db.query("events").collect();
+    const bookings = await ctx.db.query("eventBookings").collect();
+    const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
+    const byClient = new Map();
+    for (const e of events) {
+      const name = (e.name || "").trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      let rec = byClient.get(key);
+      if (!rec) {
+        rec = { name, lastDate: "", branches: new Set(), corporate: false, priv: false, totalBookings: 0 };
+        byClient.set(key, rec);
+      }
+      rec.totalBookings += 1;
+      if (e.date && e.date > rec.lastDate) rec.lastDate = e.date;
+      (e.branch || []).forEach((b) => rec.branches.add(b));
+      const ct = (typeByKey.get(e.eventKey) || "").toLowerCase();
+      if (ct.includes("corporate")) rec.corporate = true;
+      else if (ct.includes("private")) rec.priv = true;
+    }
+    return Array.from(byClient.values()).map((r) => ({
+      name: r.name,
+      lastDate: r.lastDate,
+      branches: Array.from(r.branches),
+      customerType: r.corporate ? "Corporate" : r.priv ? "Private" : "Unclassified",
+      totalBookings: r.totalBookings,
+    }));
+  },
+});
+
 export const hasAny = query({
   args: {},
   handler: async (ctx) => {
