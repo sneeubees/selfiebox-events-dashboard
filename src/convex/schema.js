@@ -320,6 +320,24 @@ export default defineSchema({
     visits: v.number(),
     quotes: v.number(),
   }).index("by_date", ["date"]),
+  // VPS/service health snapshots, pushed by the on-server collector cron.
+  serverHealth: defineTable({
+    ts: v.number(),
+    diskPct: v.number(),
+    memPct: v.number(),
+    overallOk: v.boolean(),
+    payload: v.string(), // full snapshot JSON (host + apps + containers)
+  }).index("by_ts", ["ts"]),
+  // Automated backup runs (one row per run), pushed by the backup cron.
+  serverBackups: defineTable({
+    ts: v.number(),
+    ok: v.boolean(),
+    target: v.string(),
+    sizeBytes: v.number(),
+    label: v.string(),
+    detail: v.string(),
+    durationMs: v.number(),
+  }).index("by_ts", ["ts"]),
   // Long-lived OAuth refresh tokens for external analytics integrations
   // (currently "ga4"). One row per integration key.
   integrations: defineTable({

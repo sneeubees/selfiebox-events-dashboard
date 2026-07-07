@@ -312,4 +312,50 @@ http.route({
   }),
 });
 
+// ---- Server-health + backup ingest (from the on-VPS collector/backup crons) ----
+// Secret-guarded: the collector sends `x-health-secret: $HEALTH_INGEST_SECRET`.
+http.route({
+  path: "/health/ingest",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = request.headers.get("x-health-secret") || "";
+    if (!process.env.HEALTH_INGEST_SECRET || secret !== process.env.HEALTH_INGEST_SECRET) {
+      return new Response("forbidden", { status: 403 });
+    }
+    let body;
+    try { body = await request.json(); } catch { return new Response("bad json", { status: 400 }); }
+    await ctx.runMutation(internal.serverHealth.ingest, {
+      ts: Number(body.ts) || Date.now(),
+      diskPct: Number(body.diskPct) || 0,
+      memPct: Number(body.memPct) || 0,
+      overallOk: Boolean(body.overallOk),
+      payload: JSON.stringify(body),
+    });
+    return new Response("ok", { status: 200 });
+  }),
+});
+
+http.route({
+  path: "/backup/report",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = request.headers.get("x-health-secret") || "";
+    if (!process.env.HEALTH_INGEST_SECRET || secret !== process.env.HEALTH_INGEST_SECRET) {
+      return new Response("forbidden", { status: 403 });
+    }
+    let body;
+    try { body = await request.json(); } catch { return new Response("bad json", { status: 400 }); }
+    await ctx.runMutation(internal.serverHealth.recordBackup, {
+      ts: Number(body.ts) || Date.now(),
+      ok: Boolean(body.ok),
+      target: String(body.target || "unknown"),
+      sizeBytes: Number(body.sizeBytes) || 0,
+      label: String(body.label || ""),
+      detail: String(body.detail || ""),
+      durationMs: Number(body.durationMs) || 0,
+    });
+    return new Response("ok", { status: 200 });
+  }),
+});
+
 export default http;

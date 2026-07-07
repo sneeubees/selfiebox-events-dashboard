@@ -6354,11 +6354,11 @@ const INFO_NAV = [
     { key: 'ai', label: 'AI Analytics' },
   ] },
   { type: 'group', key: 'reporting', label: 'Reporting', icon: NAV_ICON.reporting, children: [
-    { key: 'rep-general', label: 'General', soon: true },
-    { key: 'rep-clients', label: 'Clients', soon: true },
-    { key: 'rep-attendants', label: 'Attendants', soon: true },
+    { key: 'rep-general', label: 'General' },
+    { key: 'rep-clients', label: 'Clients' },
+    { key: 'rep-attendants', label: 'Attendants' },
   ] },
-  { type: 'item', key: 'server', label: 'Server Health', soon: true, icon: NAV_ICON.server },
+  { type: 'item', key: 'server', label: 'Server Health', icon: NAV_ICON.server },
 ];
 
 function daysAgoISO(n) {
