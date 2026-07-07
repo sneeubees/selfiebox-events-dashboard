@@ -434,14 +434,14 @@ button { cursor: pointer; }
 /* Digital Only tick + the standout highlight on its two cells. */
 .digital-only-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .digital-only-cell input:disabled { cursor: not-allowed; opacity: 0.55; }
-.board-entry.is-digital-only .cell-products,
-.board-entry.is-digital-only .cell-digitalOnly { background: #ffe6a0; box-shadow: inset 0 0 0 1px rgba(214,173,74,0.55); }
-.board-entry.is-digital-only:hover .cell-products,
-.board-entry.is-digital-only:hover .cell-digitalOnly { background: #ffdf88; }
-:root[data-theme="dark"] .board-entry.is-digital-only .cell-products,
-:root[data-theme="dark"] .board-entry.is-digital-only .cell-digitalOnly { background: #4c3d12; box-shadow: inset 0 0 0 1px rgba(150,120,45,0.55); }
-:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell-products,
-:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell-digitalOnly { background: #5a4816; }
+.board-entry.is-digital-only .cell.cell-products,
+.board-entry.is-digital-only .cell.cell-digitalOnly { background: #ffe6a0; box-shadow: inset 0 0 0 1px rgba(214,173,74,0.55); }
+.board-entry.is-digital-only:hover .cell.cell-products,
+.board-entry.is-digital-only:hover .cell.cell-digitalOnly { background: #ffdf88; }
+:root[data-theme="dark"] .board-entry.is-digital-only .cell.cell-products,
+:root[data-theme="dark"] .board-entry.is-digital-only .cell.cell-digitalOnly { background: #4c3d12; box-shadow: inset 0 0 0 1px rgba(150,120,45,0.55); }
+:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell.cell-products,
+:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell.cell-digitalOnly { background: #5a4816; }
 .month-section > .board-row.board-entry:first-of-type .cell { border-top: 1px solid var(--line); }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }
