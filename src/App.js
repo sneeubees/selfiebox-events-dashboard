@@ -593,8 +593,8 @@ function DashboardApp() {
   const [showCommissionRatesModal, setShowCommissionRatesModal] = useState(false);
   const [showCommissionSummaryModal, setShowCommissionSummaryModal] = useState(false);
   const [showCommissionSummarySnapshotsModal, setShowCommissionSummarySnapshotsModal] = useState(false);
-  const [showTurnoverModal, setShowTurnoverModal] = useState(false);
   const [showWebsiteStats, setShowWebsiteStats] = useState(false);
+  const [statsInitialTab, setStatsInitialTab] = useState('turnover');
   const [statsRange, setStatsRange] = useState('7d');
   const [turnoverRegion, setTurnoverRegion] = useState('combined');
   const [turnoverNetProfitPct, setTurnoverNetProfitPct] = useState('70');
@@ -613,7 +613,7 @@ function DashboardApp() {
   const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
   const liveTurnoverRecords = useQuery(
     api.turnover.getLiveTurnover,
-    canAccessDashboard && currentUser?.role === 'admin' && showTurnoverModal
+    canAccessDashboard && currentUser?.role === 'admin' && showWebsiteStats
       ? { workspaceYear: selectedWorkspaceYear }
       : 'skip'
   );
@@ -2731,11 +2731,12 @@ function DashboardApp() {
     });
   };
 
-  const openTurnoverDialog = () => {
+  const openInfoPage = (tab) => {
     if (!currentUser || currentUser.role !== 'admin') {
       return;
     }
-    setShowTurnoverModal(true);
+    setStatsInitialTab(tab || 'turnover');
+    setShowWebsiteStats(true);
   };
 
   const exportTurnoverToExcel = async () => {
@@ -4431,7 +4432,7 @@ function DashboardApp() {
         <div className="topbar-actions compact-actions">
           {currentUser.role === 'admin' ? (
             <div className="topbar-admin-actions">
-              <button className="turnover-top-icon" type="button" title="Turnover Figures" aria-label="Turnover Figures" onClick={openTurnoverDialog}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg></button>
+              <button className="turnover-top-icon" type="button" title="Information & Reporting" aria-label="Information & Reporting" onClick={() => openInfoPage('turnover')}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg></button>
             </div>
           ) : null}
           <div className="profile-menu-wrap">
@@ -4441,8 +4442,7 @@ function DashboardApp() {
                 <div className="profile-menu-name">{currentUser.firstName} {currentUser.surname}</div>
                 <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowProfileModal(true); }}>Profile</button>
                 {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowUsersModal(true); }}>Manage Users</button> : null}
-                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); openTurnoverDialog(); }}>Reports</button> : null}
-                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowWebsiteStats(true); }}>Website Stats</button> : null}
+                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); openInfoPage('turnover'); }}>Info &amp; Reporting</button> : null}
               </div>
             ) : null}
           </div>
@@ -4572,7 +4572,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V1.3.002</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} /> : null}
+            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel }} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -5011,74 +5011,6 @@ function DashboardApp() {
             <button className="primary-button" type="button" onClick={() => setShowCommissionSummarySnapshotsModal(false)}>
               Close
             </button>
-          </div>
-        </ModalShell>
-      ) : null}
-      {showTurnoverModal ? (
-        <ModalShell title="Turnover history" onClose={() => setShowTurnoverModal(false)} closeOnScrimClick={false} panelClassName="turnover-modal-panel">
-          <div className="turnover-sheet">
-            <div className="turnover-toolbar">
-              <label>
-                <span>Region</span>
-                <CustomSelect value={turnoverRegion} options={turnoverRegionOptions} onChange={setTurnoverRegion} />
-              </label>
-              <label>
-                <span>Nett profit %</span>
-                <input
-                  className="turnover-profit-input"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={turnoverNetProfitPct}
-                  onChange={(event) => setTurnoverNetProfitPct(event.target.value)}
-                />
-              </label>
-              <div className="modal-actions">
-                <button className="primary-button" type="button" onClick={() => void exportTurnoverToExcel()}>Export to Excel</button>
-              </div>
-            </div>
-            <div className="turnover-table-wrap">
-              <div className="turnover-table turnover-table-header">
-                <span>Year</span>
-                {TURNOVER_HISTORY_DATA.months.map((month) => <span key={month}>{TURNOVER_MONTH_LABELS[month] || month}</span>)}
-                <span>Total</span>
-                <span>Growth %</span>
-                <span>Growth R</span>
-                <span>NETT PROF</span>
-                <span>No Events</span>
-              </div>
-              {turnoverRows.length ? turnoverRows.map((row, rowIndex) => (
-                <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''} ${row.rowType === 'diffPct' ? 'is-diff-pct-row' : ''} ${row.rowType === 'totals' ? 'is-totals-row' : ''} ${rowIndex % 2 === 1 ? 'is-alt-row' : ''}`} key={row.key}>
-                  <span className="turnover-year-cell">{row.label}</span>
-                  {TURNOVER_HISTORY_DATA.months.map((month) => {
-                    const value = row.months[month];
-                    const monthClassNames = [
-                      'turnover-value-cell',
-                      row.rowType === 'diffPct' ? 'turnover-percent-cell' : '',
-                      row.rowType === 'diff' && Number(value) < 0 ? 'is-negative' : '',
-                      row.rowType === 'diffPct' && Number(value) > 0 ? 'is-positive' : '',
-                      row.rowType === 'diffPct' && Number(value) < 0 ? 'is-negative' : '',
-                      row.bestMonth === month ? 'is-row-best-month' : '',
-                      row.bestEverMonth === month ? 'is-best-ever-month' : '',
-                    ].filter(Boolean).join(' ');
-                    const content = row.rowType === 'diffPct'
-                      ? formatTurnoverGrowthPct(value)
-                      : formatTurnoverCurrency(value);
-                    return <span className={monthClassNames} key={`${row.key}-${month}`}>{content}</span>;
-                  })}
-                  <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
-                  <span className={`turnover-value-cell turnover-growth-cell ${row.rowType !== 'diffPct' && Number(row.growthPct) > 0 ? 'is-positive' : ''} ${row.rowType !== 'diffPct' && Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.rowType === 'diffPct' ? '' : row.growthPctDisplay}</span>
-                  <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
-                  <span className="turnover-value-cell turnover-nett-profit-cell">{formatTurnoverCurrency(row.nettProfit)}</span>
-                  <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
-                </div>
-              )) : (
-                <div className="empty-month">No turnover history for this selection yet.</div>
-              )}
-            </div>
-            <div className="modal-actions">
-              <button className="primary-button" type="button" onClick={() => setShowTurnoverModal(false)}>Close</button>
-            </div>
           </div>
         </ModalShell>
       ) : null}
@@ -6395,11 +6327,28 @@ const STATS_PERIODS = [
 ];
 
 // Left-nav for the full-screen analytics area. Third tuple item = "coming soon".
-const STATS_NAV = [
-  ['website', 'Website Stats'],
-  ['seo', 'SEO Stats'],
-  ['ads', 'Google Ads', true],
-  ['ai', 'AI Analysis', true],
+const NAV_ICON = {
+  turnover: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="2" x2="12" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>),
+  website: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>),
+  reporting: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>),
+  server: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2" /><rect x="2" y="13" width="20" height="8" rx="2" /><line x1="6" y1="7" x2="6.01" y2="7" /><line x1="6" y1="17" x2="6.01" y2="17" /></svg>),
+};
+
+// Left-nav for the Information & Reporting page: top-level items + expandable groups.
+const INFO_NAV = [
+  { type: 'item', key: 'turnover', label: 'Turnover Figures', icon: NAV_ICON.turnover },
+  { type: 'group', key: 'web', label: 'Website', icon: NAV_ICON.website, children: [
+    { key: 'website', label: 'Website Stats' },
+    { key: 'seo', label: 'SEO Stats' },
+    { key: 'ads', label: 'Google Ads' },
+    { key: 'ai', label: 'AI Analytics' },
+  ] },
+  { type: 'group', key: 'reporting', label: 'Reporting', icon: NAV_ICON.reporting, children: [
+    { key: 'rep-general', label: 'General', soon: true },
+    { key: 'rep-clients', label: 'Clients', soon: true },
+    { key: 'rep-attendants', label: 'Attendants', soon: true },
+  ] },
+  { type: 'item', key: 'server', label: 'Server Health', soon: true, icon: NAV_ICON.server },
 ];
 
 function daysAgoISO(n) {
@@ -6424,11 +6373,13 @@ function seoRange(key) {
   return { startDate: daysAgoISO(1 + days), endDate: end, label };
 }
 
-// Full-screen analytics area with its own left-nav. Replaces the old popup.
-function WebsiteStatsPage({ onClose, isAdmin, canAccess }) {
-  const [tab, setTab] = useState('website');
+// Full-screen Information & Reporting area with its own grouped left-nav.
+function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover }) {
+  const [tab, setTab] = useState(initialTab || 'turnover');
+  const [openGroups, setOpenGroups] = useState({ web: true, reporting: true });
   const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
   const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
+  const toggleGroup = (key) => setOpenGroups((groups) => ({ ...groups, [key]: !groups[key] }));
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -6440,21 +6391,121 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess }) {
     <div className="statspage">
       <aside className="statspage-nav">
         <button className="statspage-back" type="button" onClick={onClose}><span aria-hidden="true">&larr;</span> Back to Dashboard</button>
-        <div className="statspage-navlabel">Analytics</div>
         <nav className="statspage-menu">
-          {STATS_NAV.map(([k, label, soon]) => (
-            <button key={k} type="button" className={`statspage-navitem${tab === k ? ' is-active' : ''}${soon ? ' is-soon' : ''}`} onClick={() => setTab(k)}>
-              <span>{label}</span>{soon ? <span className="statspage-soon-tag">Soon</span> : null}
-            </button>
-          ))}
+          {INFO_NAV.map((entry) => {
+            if (entry.type === 'group') {
+              const isOpen = openGroups[entry.key];
+              return (
+                <div className="statspage-navgroup" key={entry.key}>
+                  <button type="button" className={`statspage-navgroup-toggle${isOpen ? ' is-open' : ''}`} aria-expanded={isOpen} onClick={() => toggleGroup(entry.key)}>
+                    <span className="statspage-navitem-icon" aria-hidden="true">{entry.icon}</span>
+                    <span className="statspage-navgroup-label">{entry.label}</span>
+                    <svg className="statspage-navchev" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                  {isOpen ? (
+                    <div className="statspage-navsub">
+                      {entry.children.map((child) => (
+                        <button key={child.key} type="button" className={`statspage-navsubitem${tab === child.key ? ' is-active' : ''}${child.soon ? ' is-soon' : ''}`} onClick={() => setTab(child.key)}>
+                          <span>{child.label}</span>{child.soon ? <span className="statspage-soon-tag">Soon</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+            return (
+              <button key={entry.key} type="button" className={`statspage-navitem${tab === entry.key ? ' is-active' : ''}${entry.soon ? ' is-soon' : ''}`} onClick={() => setTab(entry.key)}>
+                <span className="statspage-navitem-icon" aria-hidden="true">{entry.icon}</span>
+                <span>{entry.label}</span>{entry.soon ? <span className="statspage-soon-tag">Soon</span> : null}
+              </button>
+            );
+          })}
         </nav>
       </aside>
       <main className="statspage-body">
+        {tab === 'turnover' ? <TurnoverView isAdmin={isAdmin} turnover={turnover} /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ads' ? <ComingSoonView title="Google Ads" blurb="Ad spend, clicks, conversions, cost-per-lead and audience demographics — pulled straight from your Google Ads account into this same friendly view." /> : null}
-        {tab === 'ai' ? <ComingSoonView title="AI Analysis" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
+        {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
+        {tab === 'rep-general' ? <ComingSoonView title="General Reporting" blurb="High-level business reporting across events, revenue and performance — a single overview to share with the team." /> : null}
+        {tab === 'rep-clients' ? <ComingSoonView title="Client Reporting" blurb="Per-client history, spend and booking patterns — see who your best clients are and who's due a follow-up." /> : null}
+        {tab === 'rep-attendants' ? <ComingSoonView title="Attendant Reporting" blurb="Per-attendant activity, hours and commission summaries — a clear view of who worked what across the year." /> : null}
+        {tab === 'server' ? <ComingSoonView title="Server Health" blurb="Live status of the website, backend and databases — uptime, response times and alerts, all in one place." /> : null}
       </main>
+    </div>
+  );
+}
+
+// Turnover history table, now built directly into the Information & Reporting page.
+function TurnoverView({ isAdmin, turnover }) {
+  if (!isAdmin || !turnover) {
+    return (
+      <div className="statspage-view">
+        <header className="statspage-viewhead"><div><h2>Turnover Figures</h2></div></header>
+        <div className="statspage-soon-panel"><div className="statspage-soon-badge">Restricted</div><p>Turnover figures are available to admins only.</p></div>
+      </div>
+    );
+  }
+  const { region, setRegion, regionOptions, netProfitPct, setNetProfitPct, rows, exportToExcel } = turnover;
+  return (
+    <div className="statspage-view statspage-view-wide">
+      <header className="statspage-viewhead"><div><h2>Turnover Figures</h2></div></header>
+      <div className="turnover-sheet turnover-sheet-inpage">
+        <div className="turnover-toolbar">
+          <label>
+            <span>Region</span>
+            <CustomSelect value={region} options={regionOptions} onChange={setRegion} />
+          </label>
+          <label>
+            <span>Nett profit %</span>
+            <input className="turnover-profit-input" type="number" min="0" step="1" value={netProfitPct} onChange={(event) => setNetProfitPct(event.target.value)} />
+          </label>
+          <div className="modal-actions">
+            <button className="primary-button" type="button" onClick={() => void exportToExcel()}>Export to Excel</button>
+          </div>
+        </div>
+        <div className="turnover-table-wrap">
+          <div className="turnover-table turnover-table-header">
+            <span>Year</span>
+            {TURNOVER_HISTORY_DATA.months.map((month) => <span key={month}>{TURNOVER_MONTH_LABELS[month] || month}</span>)}
+            <span>Total</span>
+            <span>Growth %</span>
+            <span>Growth R</span>
+            <span>NETT PROF</span>
+            <span>No Events</span>
+          </div>
+          {rows.length ? rows.map((row, rowIndex) => (
+            <div className={`turnover-table turnover-table-row ${row.rowType === 'diff' ? 'is-diff-row' : ''} ${row.rowType === 'diffPct' ? 'is-diff-pct-row' : ''} ${row.rowType === 'totals' ? 'is-totals-row' : ''} ${rowIndex % 2 === 1 ? 'is-alt-row' : ''}`} key={row.key}>
+              <span className="turnover-year-cell">{row.label}</span>
+              {TURNOVER_HISTORY_DATA.months.map((month) => {
+                const value = row.months[month];
+                const monthClassNames = [
+                  'turnover-value-cell',
+                  row.rowType === 'diffPct' ? 'turnover-percent-cell' : '',
+                  row.rowType === 'diff' && Number(value) < 0 ? 'is-negative' : '',
+                  row.rowType === 'diffPct' && Number(value) > 0 ? 'is-positive' : '',
+                  row.rowType === 'diffPct' && Number(value) < 0 ? 'is-negative' : '',
+                  row.bestMonth === month ? 'is-row-best-month' : '',
+                  row.bestEverMonth === month ? 'is-best-ever-month' : '',
+                ].filter(Boolean).join(' ');
+                const content = row.rowType === 'diffPct'
+                  ? formatTurnoverGrowthPct(value)
+                  : formatTurnoverCurrency(value);
+                return <span className={monthClassNames} key={`${row.key}-${month}`}>{content}</span>;
+              })}
+              <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
+              <span className={`turnover-value-cell turnover-growth-cell ${row.rowType !== 'diffPct' && Number(row.growthPct) > 0 ? 'is-positive' : ''} ${row.rowType !== 'diffPct' && Number(row.growthPct) < 0 ? 'is-negative' : ''}`}>{row.rowType === 'diffPct' ? '' : row.growthPctDisplay}</span>
+              <span className={`turnover-value-cell turnover-difference-cell ${Number(row.growthRand) < 0 ? 'is-negative' : ''}`}>{formatTurnoverCurrency(row.growthRand)}</span>
+              <span className="turnover-value-cell turnover-nett-profit-cell">{formatTurnoverCurrency(row.nettProfit)}</span>
+              <span className="turnover-value-cell turnover-no-events-cell">{row.noEvents ?? ''}</span>
+            </div>
+          )) : (
+            <div className="empty-month">No turnover history for this selection yet.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
