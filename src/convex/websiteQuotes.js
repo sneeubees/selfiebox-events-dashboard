@@ -191,11 +191,13 @@ const REGION_TO_BRANCH = {
 
 // Booth choice -> dashboard product (names must match live labelOptions exactly).
 // Used for Photo Booth, AI Experience (booth chosen further down) and Hashtag (InstaBox/SideKick only).
+// Keys = the exact value the website form submits (photoBoothChoice); values =
+// the live product name (from Johan's PRODUCTS MAP.xlsx). Must match live exactly.
 const PHOTO_BOOTH_TO_PRODUCT = {
   "Any, you can decide": "",       // "Select" / leave blank
-  "Nano Box": "Nano",
-  "Halo Box": "HaloBox White",
-  "Selfie Box": "SelfieBox",
+  Nano: "Nano",
+  HaloBox: "HB White",
+  SelfieBox: "SelfieBox",
   Vintage: "Vintage",
   Mirror: "Mirror Booth",
   "Retro Pod": "Retro Pod",
@@ -211,15 +213,16 @@ const SPIN_TO_PRODUCT = {
   "Orbit 360° Spin": "360° Orbit",
 };
 
-const VIDEO_TO_PRODUCT = {
-  "Slow-Motion Video": "HB White",
-};
-
-// Services that resolve straight to a product (no booth/spin/video sub-choice).
+// Experiences that resolve straight to a product from primarySelection (no booth
+// sub-choice). Keys = the form's primarySelection value; values = live product name.
+// "Other" is intentionally absent -> leaves the product blank.
 const PRIMARY_TO_PRODUCT = {
-  "Sketch Bot (NEW!)": "AI Sketchbot",
+  "Sketch Bot (NEW!)": "AI Selfie Sketch",
   Mosaic: "Mosaic",
   Karaoke: "Karaoke",
+  "Video (Slow-Mo / Messages)": "Video Booth",
+  "Magazine Booth": "Magazine Booth",
+  "Audio Guest Book": "Audio GB",
 };
 
 function normalizeDashboardCustomerType(value) {
@@ -300,8 +303,6 @@ async function resolveProducts(ctx, formData) {
     mappedProduct = PHOTO_BOOTH_TO_PRODUCT[formData.photoBoothChoice] || "";
   } else if (sel === "360° Video") {
     mappedProduct = SPIN_TO_PRODUCT[formData.spinChoice] || "";
-  } else if (sel === "Video (Slow-Mo / Messages)") {
-    mappedProduct = VIDEO_TO_PRODUCT[formData.videoChoice] || "";
   } else {
     mappedProduct = PRIMARY_TO_PRODUCT[sel] || "";
   }
@@ -443,8 +444,8 @@ export const submitWebsiteQuote = mutation({
       time,
       branch: branchAbbreviation ? [branchAbbreviation] : [],
       products,
-      // Photo-booth "Digital" output (no printing) => tick the Digital Only column.
-      digitalOnly: normalizeString(formData.photoOutput) === "Digital",
+      // Photo-booth "Digital Only" output (no printing) => tick the Digital Only column.
+      digitalOnly: normalizeString(formData.photoOutput) === "Digital Only",
       status: "Web Request",
       location: formData.address || "",
       locationPlaceId: formData.addressPlaceId || "",
