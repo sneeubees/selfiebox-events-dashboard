@@ -577,6 +577,7 @@ function DashboardApp() {
   const saveCommissionOverrideMutation = useMutation(api.commissions.saveOverride);
   const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
   const [search, setSearch] = useState('');
+  const [newOnlyMode, setNewOnlyMode] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
   const [savedFilterViews, setSavedFilterViews] = useState([]);
@@ -1104,9 +1105,23 @@ function DashboardApp() {
     return visible.sort((left, right) => left.fullName.localeCompare(right.fullName));
   }, [attendantOptions, filteredAttendantOptions, selectedAttendantEvent]);
 
+  const yearEvents = useMemo(() => {
+    return events.filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear));
+  }, [events, selectedWorkspaceYear]);
+
+  const hasNewRequests = useMemo(() => yearEvents.some((event) => event.status === 'Web Request'), [yearEvents]);
+
+  // If the last remaining Web Request row gets its status changed away while
+  // "New" mode is active, drop out of it automatically instead of leaving the
+  // user stuck on a hidden toggle with nothing left to show.
+  useEffect(() => {
+    if (newOnlyMode && !hasNewRequests) {
+      setNewOnlyMode(false);
+    }
+  }, [newOnlyMode, hasNewRequests]);
+
   const filteredEvents = useMemo(() => {
-    return [...events]
-      .filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear))
+    return [...yearEvents]
       .filter((event) => {
         if (!search.trim()) {
           return true;
@@ -1114,13 +1129,14 @@ function DashboardApp() {
         const query = search.trim().toLowerCase();
         return event.name.toLowerCase().includes(query) || String(event.eventTitle || '').toLowerCase().includes(query);
       })
+      .filter((event) => (newOnlyMode ? event.status === 'Web Request' : true))
       .filter((event) => (selectedBranches.length ? event.branch.some((item) => selectedBranches.includes(item)) : true))
         .filter((event) => (selectedProducts.length ? event.products.some((item) => selectedProducts.includes(item)) : true))
         .filter((event) => (selectedStatuses.length ? selectedStatuses.includes(event.status) : true))
         .filter((event) => (selectedPayments.length ? selectedPayments.includes(event.paymentStatus) : true))
         .filter((event) => (selectedAttendants.length ? (event.attendants || []).some((item) => selectedAttendants.includes(item)) : true))
         .sort((left, right) => sortEvents(left, right));
-  }, [events, search, selectedAttendants, selectedBranches, selectedPayments, selectedProducts, selectedStatuses, selectedWorkspaceYear]);
+  }, [yearEvents, search, newOnlyMode, selectedAttendants, selectedBranches, selectedPayments, selectedProducts, selectedStatuses]);
 
   const eventsByMonth = useMemo(() => {
     const grouped = Object.fromEntries(monthNames.map((month) => [month, []]));
@@ -1131,8 +1147,8 @@ function DashboardApp() {
   }, [filteredEvents]);
 
   useEffect(() => {
-    const trimmedSearch = search.trim();
-    if (!trimmedSearch) {
+    const isNarrowedView = Boolean(search.trim()) || newOnlyMode;
+    if (!isNarrowedView) {
       if (searchCollapsedStateRef.current) {
         setCollapsedMonths(searchCollapsedStateRef.current);
         searchCollapsedStateRef.current = null;
@@ -1152,7 +1168,7 @@ function DashboardApp() {
     if (hasChanged) {
       setCollapsedMonths(nextState);
     }
-  }, [collapsedMonths, eventsByMonth, search]);
+  }, [collapsedMonths, eventsByMonth, search, newOnlyMode]);
 
   const selectedEvent = useMemo(() => events.find((event) => event.id === selectedId) || null, [events, selectedId]);
   const editingUser = useMemo(() => users.find((user) => user.id === editingUserId) || null, [users, editingUserId]);
@@ -4385,6 +4401,17 @@ function DashboardApp() {
               <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" />
               {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
+            {hasNewRequests ? (
+              <button
+                className={["new-requests-button", newOnlyMode ? "is-active" : ""].join(" ").trim()}
+                type="button"
+                title="Show only new web requests"
+                aria-pressed={newOnlyMode}
+                onClick={() => setNewOnlyMode((current) => !current)}
+              >
+                New
+              </button>
+            ) : null}
             <div className="filter-button-wrap">
               <button
                 className={[
