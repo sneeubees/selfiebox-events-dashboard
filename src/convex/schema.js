@@ -90,6 +90,8 @@ export default defineSchema({
     // deduplicated set (e.g. the product-rename remap uses `new Set(...)`).
     productQuantities: v.optional(v.record(v.string(), v.number())),
     status: v.optional(v.string()),
+    // "Digital Only" tick - highlights the products cell when on.
+    digitalOnly: v.optional(v.boolean()),
     location: v.optional(v.string()),
     locationPlaceId: v.optional(v.string()),
     locationLat: v.optional(v.number()),

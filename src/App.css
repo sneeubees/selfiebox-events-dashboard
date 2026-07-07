@@ -430,6 +430,18 @@ button { cursor: pointer; }
 .board-entry.is-new-request .cell-name { background: #dbe8ff; box-shadow: inset 4px 0 0 #d64545, 1px 0 0 var(--line); }
 .board-entry.is-new-request .cell-date { background: #dbe8ff; }
 .board-entry.is-new-request:hover .cell { background: #cbdcfc; }
+/* Digital Only tick + the standout highlight on its two cells. */
+.digital-only-cell { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.digital-only-cell input[type="checkbox"] { width: 17px; height: 17px; margin: 0; cursor: pointer; accent-color: #2f73e6; }
+.digital-only-cell input:disabled { cursor: not-allowed; }
+.board-entry.is-digital-only .cell-products,
+.board-entry.is-digital-only .cell-digitalOnly { background: #ffe6a0; box-shadow: inset 0 0 0 1px rgba(214,173,74,0.55); }
+.board-entry.is-digital-only:hover .cell-products,
+.board-entry.is-digital-only:hover .cell-digitalOnly { background: #ffdf88; }
+:root[data-theme="dark"] .board-entry.is-digital-only .cell-products,
+:root[data-theme="dark"] .board-entry.is-digital-only .cell-digitalOnly { background: #4c3d12; box-shadow: inset 0 0 0 1px rgba(150,120,45,0.55); }
+:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell-products,
+:root[data-theme="dark"] .board-entry.is-digital-only:hover .cell-digitalOnly { background: #5a4816; }
 .month-section > .board-row.board-entry:first-of-type .cell { border-top: 1px solid var(--line); }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }

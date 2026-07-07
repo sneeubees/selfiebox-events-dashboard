@@ -43,6 +43,7 @@ const STATIC_COLUMN_TYPES = {
   time: 'text',
   branch: 'multiItem',
   products: 'multiItem',
+  digitalOnly: 'check',
   status: 'singleItem',
   location: 'text',
   paymentStatus: 'singleItem',
@@ -72,6 +73,11 @@ const _hoursColIdx = EXTENDED_BOARD_COLUMNS.findIndex((column) => column.key ===
 if (_hoursColIdx >= 0 && !EXTENDED_BOARD_COLUMNS.some((column) => column.key === 'time')) {
   EXTENDED_BOARD_COLUMNS.splice(_hoursColIdx + 1, 0, { key: 'time', label: 'Time' });
 }
+// Inject the "Digital Only" tick column between "Products" and "Status".
+const _productsColIdx = EXTENDED_BOARD_COLUMNS.findIndex((column) => column.key === 'products');
+if (_productsColIdx >= 0 && !EXTENDED_BOARD_COLUMNS.some((column) => column.key === 'digitalOnly')) {
+  EXTENDED_BOARD_COLUMNS.splice(_productsColIdx + 1, 0, { key: 'digitalOnly', label: 'Digital Only' });
+}
 const STATIC_COLUMNS = EXTENDED_BOARD_COLUMNS.map((column) => ({
   ...column,
   type: STATIC_COLUMN_TYPES[column.key] || 'text',
@@ -95,6 +101,7 @@ const eventDefaults = {
   products: [],
   productQuantities: {},
   status: '',
+  digitalOnly: false,
   location: '',
   locationPlaceId: '',
   locationLat: null,
@@ -454,6 +461,7 @@ function getColumnWidth(column) {
   if (column.key === 'time') return 130;
   if (column.key === 'branch') return 100;
   if (column.key === 'products') return 156;
+  if (column.key === 'digitalOnly') return 96;
   if (column.key === 'status') return 132;
   if (column.key === 'location') return 230;
   if (column.key === 'paymentStatus') return 104;
@@ -489,6 +497,7 @@ function serializeEventForConvex(event) {
     branch: event.branch || [],
     products: event.products || [],
     status: event.status || '',
+    digitalOnly: Boolean(event.digitalOnly),
     location: event.location || '',
     locationPlaceId: event.locationPlaceId || '',
     locationLat: typeof event.locationLat === 'number' ? event.locationLat : null,
@@ -4559,7 +4568,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -5618,6 +5627,7 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
   if (columnKey === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === 'date' ? <DateInlineEditor value={dateEditor.value} allowPastDates={allowPastDates} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, 'date')} /> : <button className='cell-select-button date-cell-button' type='button' title={event.date || ''} disabled={!canEdit} onClick={() => openDateEditor(event, 'date')}><span>{formatDateDisplay(event.date) || 'Pick date'}</span></button>;
   if (columnKey === 'branch') return <button className='cell-select-button' type='button' title={event.branch.map((item) => branchFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openBranchSelector(event.id)}><CompactTagList items={event.branch} styles={branchStyles} /></button>;
   if (columnKey === 'products') return <button className='cell-select-button' type='button' title={event.products.map((item) => productFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openProductSelector(event.id)}><CompactTagList items={event.products} styles={productStyles} quantities={event.productQuantities} /></button>;
+  if (columnKey === 'digitalOnly') return <label className='digital-only-cell' title='Digital Only'><input type='checkbox' checked={Boolean(event.digitalOnly)} disabled={!canEdit} onChange={(inputEvent) => updateEventField(event.id, 'digitalOnly', inputEvent.target.checked)} /></label>;
   if (columnKey === 'status') return <button className='cell-select-button' type='button' title={event.status || ''} disabled={!canEdit} onClick={() => openStatusSelector(event.id)}><Tag value={event.status || ''} styles={statusStyles} placeholder='' /></button>;
   if (columnKey === 'paymentStatus') return <button className='cell-select-button' type='button' title={event.paymentStatus || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('paymentStatus', event.id)}><Tag value={event.paymentStatus || ''} styles={managedSingleStyles.paymentStatus || {}} placeholder='' width={90} className='managed-finance-pill' /></button>;
   if (columnKey === 'accounts') return <button className='cell-select-button' type='button' title={event.accounts || ''} disabled={!canEdit} onClick={() => openManagedSingleSelector('accounts', event.id)}><Tag value={event.accounts || ''} styles={managedSingleStyles.accounts || {}} placeholder='' width={90} className='managed-finance-pill' /></button>;
@@ -6831,6 +6841,7 @@ function isPreviewPdf(file) {
 }
 
 function formatExportValue(columnKey, event, lookups) {
+  if (columnKey === 'digitalOnly') return event.digitalOnly ? 'Yes' : '';
   if (columnKey === 'date') return formatDateDisplay(event.date);
   if (columnKey === 'branch') return (event.branch || []).map((item) => lookups.branchFullNames[item] || item).join(', ');
   if (columnKey === 'products') return (event.products || []).map((item) => lookups.productFullNames[item] || item).join(', ');
