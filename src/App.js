@@ -6442,7 +6442,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
         {tab === 'rep-attendants' ? <AttendantsReportView reports={reports} /> : null}
-        {tab === 'server' ? <ComingSoonView title="Server Health" blurb="Live status of the website, backend and databases — uptime, response times and alerts, all in one place." /> : null}
+        {tab === 'server' ? <ServerHealthView reports={reports} /> : null}
       </main>
     </div>
   );
@@ -7513,6 +7513,147 @@ function AttendantsReportView({ reports }) {
       </div>
 
       <div className="webstats-foot">{att.length.toLocaleString()} attendants · {team.cur.functions.toLocaleString()} functions · {range.label} · {regionSel.length ? `${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : 'all regions'}</div>
+    </div>
+  );
+}
+
+function healthAgo(ms) {
+  if (ms == null) return '—';
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60); if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60); if (h < 48) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+function healthUptime(sec) {
+  if (!sec) return '—';
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
+  return d ? `${d}d ${h}h` : `${h}h ${Math.floor((sec % 3600) / 60)}m`;
+}
+function healthSince(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime(); if (!t) return '—';
+  return healthUptime(Math.round((Date.now() - t) / 1000));
+}
+function healthBytes(n) {
+  if (!n) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; let v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i += 1; }
+  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
+function healthLevel(pct, warn, crit) { return pct >= crit ? 'is-crit' : pct >= warn ? 'is-warn' : 'is-ok'; }
+
+// VPS + per-app health, restart history and last-backup status.
+function ServerHealthView({ reports }) {
+  const canAccess = reports?.canAccess;
+  const latest = useQuery(api.serverHealth.getLatest, canAccess ? {} : 'skip');
+  const backups = useQuery(api.serverHealth.getBackups, canAccess ? { limit: 20 } : 'skip');
+  const snap = useMemo(() => { if (!latest?.payload) return null; try { return JSON.parse(latest.payload); } catch { return null; } }, [latest]);
+
+  const head = <header className="statspage-viewhead report-head"><div><h2>Server Health</h2><p>Live status of the VPS and every app it hosts.</p></div></header>;
+  if (latest === undefined) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading server health&hellip;</div></div>;
+  if (!latest || !snap) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">No health data yet — the collector runs every 5 minutes, check back shortly.</div></div>;
+
+  const now = Date.now();
+  const ageMs = now - latest.ts;
+  const stale = ageMs > 16 * 60 * 1000;
+  const host = snap.host || {};
+  const apps = snap.apps || [];
+  const containers = snap.containers || [];
+  const lastBackup = (backups || [])[0];
+  const backupStale = !lastBackup || (now - lastBackup.ts) > 36 * 60 * 60 * 1000;
+  const bannerOk = snap.overallOk && !stale;
+
+  const gauge = (label, pct, sub, warn, crit) => (
+    <div className="health-gauge">
+      <div className="health-gauge-head"><span>{label}</span><span>{sub}</span></div>
+      <div className="health-bar"><span className={healthLevel(pct, warn, crit)} style={{ width: `${Math.min(100, pct)}%` }} /></div>
+    </div>
+  );
+
+  return (
+    <div className="statspage-view statspage-view-wide report-view">
+      {head}
+      <div className={`health-banner ${bannerOk ? 'is-ok' : 'is-bad'}`}>
+        <span className="health-dot" />
+        <strong>{stale ? 'Collector offline — data may be out of date' : snap.overallOk ? 'All systems operational' : 'Issues detected'}</strong>
+        <span className="health-banner-meta">updated {healthAgo(ageMs)} · uptime {healthUptime(host.uptimeSec)} · load {host.load}</span>
+      </div>
+
+      <div className="webstats-cols health-gauges">
+        <div className="webstats-section">
+          <h4>Host resources</h4>
+          {gauge('CPU', host.cpuPct || 0, `${host.cpuPct || 0}% · ${host.ncpu || '?'} vCPU`, 70, 90)}
+          {gauge('Memory', snap.memPct || 0, `${host.memUsedMb || 0} / ${host.memTotalMb || 0} MB · ${snap.memPct}%`, 80, 92)}
+          {gauge('Disk', snap.diskPct || 0, `${host.diskUsedGb || 0} / ${host.diskTotalGb || 0} GB · ${host.diskFreeGb || 0} GB free`, 80, 90)}
+          {snap.diskPct >= 85 ? <div className="health-warn-note">Disk is {snap.diskPct}% full — watch this; Docker build cache tends to creep up.</div> : null}
+        </div>
+        <div className="webstats-section">
+          <h4>Latest backup</h4>
+          {lastBackup ? (
+            <div className={`health-backup ${lastBackup.ok && !backupStale ? 'is-ok' : 'is-bad'}`}>
+              <div className="health-backup-status"><span className="health-dot" />{lastBackup.ok ? 'Backup succeeded' : 'Backup FAILED'}{backupStale ? ' · overdue' : ''}</div>
+              <div className="health-backup-meta">{healthAgo(now - lastBackup.ts)} · {lastBackup.label || 'backup'} · {healthBytes(lastBackup.sizeBytes)} · &rarr; {lastBackup.target}</div>
+              {lastBackup.detail ? <div className="webstats-muted">{lastBackup.detail}</div> : null}
+            </div>
+          ) : <div className="webstats-muted">No automated backup has run yet. (Set up below.)</div>}
+        </div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Apps <span>{apps.filter((a) => a.ok).length}/{apps.length} healthy</span></h4>
+        <div className="health-apps">
+          {apps.map((a) => (
+            <div className={`health-app ${a.ok ? 'is-ok' : 'is-down'}`} key={a.key}>
+              <div className="health-app-top"><span className="health-dot" /><span className="health-app-name">{a.name}</span><span className="health-app-code">{a.httpCode || '—'}{a.respMs ? ` · ${a.respMs}ms` : ''}</span></div>
+              {a.container ? (
+                <div className="health-app-meta">
+                  <span className={`health-chip ${a.container.health === 'healthy' ? 'is-ok' : a.container.health === 'unhealthy' ? 'is-bad' : ''}`}>{a.container.status}{a.container.health && a.container.health !== 'none' ? ` · ${a.container.health}` : ''}</span>
+                  <span>up {healthSince(a.container.started)}</span>
+                  <span className={`health-restart ${a.container.restarts >= 5 ? 'is-warn' : ''}`}>{a.container.restarts} restart{a.container.restarts === 1 ? '' : 's'}</span>
+                </div>
+              ) : <div className="health-app-meta"><span className="health-chip">nginx static</span></div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Supporting containers</h4>
+        <div className="health-containers">
+          {containers.map((c) => (
+            <div className={`health-crow ${c.running ? 'is-ok' : 'is-down'}`} key={c.name}>
+              <span className="health-dot" />
+              <span className="health-crow-name">{c.name}</span>
+              <span className={`health-chip ${c.health === 'healthy' ? 'is-ok' : c.health === 'unhealthy' ? 'is-bad' : ''}`}>{c.status}{c.health && c.health !== 'none' ? ` · ${c.health}` : ''}</span>
+              <span className="health-crow-up">up {healthSince(c.started)}</span>
+              <span className={`health-restart ${c.restarts >= 5 ? 'is-warn' : ''}`}>{c.restarts} restart{c.restarts === 1 ? '' : 's'}</span>
+            </div>
+          ))}
+        </div>
+        {apps.concat(containers).some((x) => (x.container?.restarts || x.restarts) >= 5) ? <div className="health-warn-note">One or more containers have restarted 5+ times — worth checking that service&rsquo;s logs.</div> : null}
+      </div>
+
+      {backups && backups.length ? (
+        <div className="webstats-section">
+          <h4>Backup history <span>last {backups.length}</span></h4>
+          <div className="report-att-table">
+            <div className="report-att-tr health-bk-head"><span>When</span><span>Result</span><span>What</span><span>Size</span><span>Target</span><span>Took</span></div>
+            {backups.map((b, i) => (
+              <div className="report-att-tr health-bk-row" key={i}>
+                <span>{reportFmtDate(b.ts)} {new Date(b.ts).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className={b.ok ? 'health-ok-txt' : 'health-bad-txt'}>{b.ok ? '✓ OK' : '✗ Failed'}</span>
+                <span title={b.detail}>{b.label || '—'}</span>
+                <span>{healthBytes(b.sizeBytes)}</span>
+                <span>{b.target}</span>
+                <span>{b.durationMs ? `${Math.round(b.durationMs / 1000)}s` : '—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="webstats-foot">Snapshot {new Date(latest.ts).toLocaleString('en-ZA')} · collector runs every 5 min</div>
     </div>
   );
 }
