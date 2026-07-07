@@ -47,7 +47,7 @@ button { cursor: pointer; }
 .dashboard-ambient-glow--bl { bottom: -240px; left: -180px; width: 700px; height: 700px; background: radial-gradient(closest-side, rgba(64, 190, 245, 0.34), rgba(40, 160, 235, 0.16) 58%, transparent 74%); animation-delay: 3s; }
 .dashboard-ambient-glow--l { top: 44%; left: -340px; width: 540px; height: 540px; background: radial-gradient(closest-side, rgba(52, 182, 240, 0.4), transparent 70%); animation-delay: 2s; }
 @keyframes dashboard-ambient-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
-.topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 2px 14px; margin-bottom: 12px; }
+.topbar { position: relative; z-index: 30; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 2px 14px; margin-bottom: 12px; }
 /* Centre the dashboard title in the top bar (logo left, actions right). */
 .topbar-title-wrap { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -63,6 +63,11 @@ button { cursor: pointer; }
   letter-spacing: -0.02em;
 }
 .topbar-logo-selfie { color: #1a2540; }
+.topbar-logo-boxwrap {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
+}
 .topbar-logo-box {
   font-size: 1.06em;
   line-height: 0.94;
@@ -71,29 +76,30 @@ button { cursor: pointer; }
   background-clip: text;
   color: transparent;
 }
-/* Three cyan stripes (short -> long, leaning right) matching the website wordmark. */
+/* Three cyan dashes staggered up-right off the top-right corner of the "x". */
 .topbar-logo-spark {
-  display: inline-block;
-  width: 17px;
-  height: 17px;
-  margin-left: 1px;
-  margin-top: -3px;
-  align-self: flex-start;
+  position: absolute;
+  top: -0.34em;
+  right: -0.42em;
+  width: 0.62em;
+  height: 0.62em;
   background-repeat: no-repeat;
+  background-position: center;
   background-size: contain;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg stroke='%2334c2f4' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='5' y1='13' x2='7.5' y2='8'/%3E%3Cline x1='10.5' y1='12.5' x2='13.5' y2='5.5'/%3E%3Cline x1='16' y1='13' x2='20.5' y2='2'/%3E%3C/g%3E%3C/svg%3E");
-  filter: drop-shadow(0 0 4px rgba(84, 212, 255, 0.5));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg stroke='%2334c2f4' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='2.5' y1='13' x2='4.5' y2='10'/%3E%3Cline x1='6.5' y1='11.5' x2='9' y2='7.5'/%3E%3Cline x1='10.5' y1='10' x2='14.5' y2='3'/%3E%3C/g%3E%3C/svg%3E");
+  filter: drop-shadow(0 0 3px rgba(84, 212, 255, 0.55));
 }
-/* Registered mark, small, at the bottom-right of the wordmark. */
+/* Registered mark, small, at the baseline just right of the "x". */
 .topbar-logo-r {
-  align-self: flex-end;
-  font-size: 0.34em;
+  position: absolute;
+  right: -0.66em;
+  bottom: 0.06em;
+  font-size: 0.3em;
   font-weight: 700;
-  color: #34c2f4;
-  margin-left: 1px;
-  margin-bottom: 0.12em;
+  color: #8a93a8;
   line-height: 1;
 }
+:root[data-theme="dark"] .topbar-logo-r { color: #9aa4bd; }
 :root[data-theme="dark"] .topbar-logo-selfie { color: #ffffff; }
 .topbar-kicker, .auth-brand { margin-bottom: 3px; font-size: 0.54rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #b5bcc8; }
 .topbar-kicker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
@@ -203,6 +209,7 @@ button { cursor: pointer; }
 .turnover-top-icon { width: 36px; height: 36px; padding: 0; display: inline-grid; place-items: center; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-alt); color: #4a5f91; cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
 .turnover-top-icon:hover { background: #fdf0e1; border-color: #f2b46f; color: #a5590f; }
 .turnover-top-icon svg { display: block; }
+:root[data-theme="dark"] .turnover-top-icon { color: #aebfe4; }
 :root[data-theme="dark"] .turnover-top-icon:hover { background: #33240f; border-color: #c98a3e; color: #f2a35a; }
 .users-modal { display: grid; gap: 10px; max-height: min(70vh, 420px); overflow-y: auto; padding-right: 4px; }
 .rights-modal { display: grid; gap: 14px; }
