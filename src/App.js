@@ -982,6 +982,40 @@ function DashboardApp() {
   const eventRowRefs = useRef(new Map());
   const pendingDateAnchorRef = useRef(null);
   const pendingNewEventFocusRef = useRef(null);
+
+  // Publish the board scrollport's visible content width as a global CSS var so
+  // the (sticky, both-axes) month header can be capped to exactly that width and
+  // stay fully on screen with its side gaps at any horizontal scroll position.
+  // Set on documentElement (not the React-managed board-surface node) to avoid
+  // any inline-style reconciliation conflict. rAF retry handles the board
+  // mounting after auth/loading gates.
+  useEffect(() => {
+    let ro;
+    let raf;
+    const publish = () => {
+      const surface = boardSurfaceRef.current;
+      if (!surface) return;
+      const width = Math.max(0, surface.clientWidth - 20); // 10px left + 10px right gutter
+      document.documentElement.style.setProperty('--visible-board-width', `${width}px`);
+    };
+    const attach = () => {
+      const surface = boardSurfaceRef.current;
+      if (!surface) { raf = requestAnimationFrame(attach); return; }
+      publish();
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(publish);
+        ro.observe(surface);
+      }
+    };
+    attach();
+    window.addEventListener('resize', publish);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', publish);
+      document.documentElement.style.removeProperty('--visible-board-width');
+    };
+  }, []);
   const userSyncKeyRef = useRef('');
   const eventsSeededRef = useRef(false);
   const labelsSeededRef = useRef(false);
@@ -4480,7 +4514,7 @@ function DashboardApp() {
               const fullyPaidCount = monthItems.filter((event) => event.accounts === '100%').length;
             return (
               <section className={`month-section ${collapsedMonths[month] ? 'is-collapsed-month' : 'is-expanded-month'} ${monthAccentClass[month]} ${draggedMonth === month ? 'is-dragging-month' : ''} ${dragOverMonth === month ? 'is-drag-target-month' : ''}`} key={month} style={{ minWidth: `${boardWidth}px` }}>
-                <button className="month-header" type="button" draggable style={{ minWidth: `${boardWidth}px` }} onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
+                <button className="month-header" type="button" draggable onDragStart={() => startMonthDrag(month)} onDragOver={(event) => handleMonthDragOver(event, month)} onDrop={() => void handleMonthDrop(month)} onDragEnd={endMonthDrag} onClick={() => toggleMonth(month)}>
                   <div className="month-header-main">
                     <strong>{month} {selectedWorkspaceYear}</strong>
                     <div className="month-header-stats">

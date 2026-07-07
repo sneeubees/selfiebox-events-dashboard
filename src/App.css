@@ -245,7 +245,10 @@ button { cursor: pointer; }
 .saved-filter-chip-close { position: absolute; top: 1px; right: 3px; width: 13px; height: 13px; border: 0; border-radius: 999px; background: #ffd9aa; color: #8b5a18; font-size: 0.56rem; line-height: 1; display: inline-grid; place-items: center; padding: 0; cursor: pointer; }
 .saved-filter-chip.is-active .saved-filter-chip-close { background: #c6ecd0; color: #3e8350; }
 .saved-filter-chip-close:hover { background: #f7cb91; color: #70450e; }
-.board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable; }
+/* --visible-board-width is (re)set imperatively to board-surface.clientWidth-20px
+   by a ResizeObserver in App.js; this is the pre-measure/JS-off fallback. */
+:root { --visible-board-width: calc(100vw - 40px); }
+.board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable; padding-right: 10px; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: visible; }
 .board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #2f3440; background: #f3f5f9; }
@@ -254,10 +257,10 @@ button { cursor: pointer; }
 .board-header .cell.is-dragging-column { opacity: 0.55; }
 .board-header .cell.is-drag-target { background: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
 .board-header .cell[draggable="true"]:active { cursor: grabbing; }
-.board-header .cell-name, .board-entry .cell-name { position: sticky; left: 0; }
+.board-header .cell-name, .board-entry .cell-name { position: sticky; left: 10px; }
 .board-header .cell-name { z-index: 24; background: #f3f5f9; }
 .board-entry .cell-name { z-index: 12; background: #fff; box-shadow: 1px 0 0 var(--line); }
-.board-header .cell-date, .board-entry .cell-date { position: sticky; left: 260px; }
+.board-header .cell-date, .board-entry .cell-date { position: sticky; left: 270px; }
 .board-header .cell-date { z-index: 23; background: #f3f5f9; box-shadow: 1px 0 0 var(--line); }
 .board-entry .cell-date { z-index: 11; background: #fff; box-shadow: 1px 0 0 var(--line); }
 .cell-name { overflow: visible; }
@@ -277,7 +280,14 @@ button { cursor: pointer; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
 .month-section { margin: 0 10px 10px; border: 0; outline: 1px solid var(--line); border-radius: 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
-.month-header { position: sticky; top: 0; z-index: 19; isolation: isolate; overflow: clip; width: 100%; min-width: var(--board-width); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); border-radius: 12px 12px 0 0; }
+/* Frozen full-viewport-width month header: sticky in BOTH axes (top + left) and
+   capped to the scrollport's visible width so its rounded corners + the 10px
+   side gaps stay on screen at every horizontal scroll position, while the rows
+   scroll underneath. width var is published by a ResizeObserver (App.js);
+   max-width guards the fallback/no-JS case. (Deliberately NOT container-query
+   based - container-type would create a containing block that breaks the
+   position:fixed .admin-menu inside the board.) */
+.month-header { position: sticky; top: 0; left: 10px; z-index: 19; isolation: isolate; overflow: clip; width: var(--visible-board-width); max-width: calc(100% - 20px); display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); border-radius: 12px 12px 0 0; }
 .month-header::before { content: ''; position: absolute; inset: 0; background: inherit; z-index: -1; }
 .month-section.is-collapsed-month .month-header { border-radius: 12px; }
 .month-section.is-expanded-month .month-header { border-radius: 12px 12px 0 0; }
