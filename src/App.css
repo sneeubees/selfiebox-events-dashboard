@@ -309,10 +309,10 @@ button { cursor: pointer; }
 .admin-menu { position: fixed; z-index: 9999; display: grid; gap: 6px; min-width: 170px; padding: 8px; border-radius: 10px; background: #fff; border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18); }
 .admin-menu button { border: 0; background: transparent; text-align: left; color: var(--text); padding: 6px 8px; border-radius: 8px; }
 .admin-menu button:hover { background: rgba(59, 130, 246, 0.08); }
-/* box-shadow (not outline) for the 1px card line so it FOLLOWS the border-radius
-   and is occludable; square top corners since the frozen header pill supplies the
-   card's visual top (a rounded section top would peek past the header's corners). */
-.month-section { margin: 0 0 10px; border: 0; box-shadow: 0 0 0 1px var(--line); border-radius: 0 0 12px 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
+/* No outline/box-shadow ring: its top edge sat just above the frozen header and
+   crossed over it (the "cyan" leak). The section reads as a card from its lighter
+   background + rounded bottom against the darker board; the header pill is the top. */
+.month-section { margin: 0 0 10px; border: 0; border-radius: 0 0 12px 12px; overflow: visible; background: #fff; width: max-content; min-width: var(--board-width); }
 .month-section + .month-section { margin-top: 0; }
 /* Frozen full-viewport-width month header: sticky in BOTH axes (top + left) and
    capped to the scrollport's visible width so its rounded corners + the 10px
@@ -354,12 +354,6 @@ button { cursor: pointer; }
    visual separator instead. */
 .month-board-header { position: sticky; top: 46px; z-index: 18; border-top: 0; }
 .month-board-header .cell { border-top: 0; }
-
-/* === TEMP DIAGNOSTIC (remove after identifying the leaking row) === */
-.month-board-header .cell { border: 2px solid #ff00ff !important; }                                    /* PINK  = column-header row */
-.month-section > .board-row.board-entry:first-of-type .cell { border-top: 3px solid #00e000 !important; } /* GREEN = first data row's top */
-.month-section { box-shadow: 0 0 0 3px #00e5ff !important; }                                            /* CYAN  = section outline */
-/* === END TEMP === */
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 2px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 /* Commission (green) + Logistics (orange) are the two most-used month tools -
