@@ -100,8 +100,8 @@ button { cursor: pointer; }
 :root[data-theme="dark"] .topbar.compact h1 { color: #ffffff; }
 /* Inline year picker in the dashboard title: click the year to choose. */
 .title-year { position: relative; display: inline-flex; }
-.title-year-button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
-.title-year-caret { color: var(--blue); flex: 0 0 auto; transition: transform 140ms ease; }
+.title-year-button { display: inline-flex; align-items: flex-start; gap: 1px; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.title-year-caret { width: 11px; height: 11px; margin-top: 4px; color: var(--blue); flex: 0 0 auto; transition: transform 140ms ease; }
 .title-year.is-open .title-year-caret, .title-year-button[aria-expanded="true"] .title-year-caret { transform: rotate(180deg); }
 .title-year-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 9999; display: grid; gap: 2px; min-width: 120px; padding: 6px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2); }
 .title-year-option { border: 0; background: transparent; text-align: left; color: var(--text); padding: 8px 11px; border-radius: 8px; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
@@ -111,9 +111,9 @@ button { cursor: pointer; }
 .title-year-option.is-selected.title-year-add { color: #fff; }
 :root[data-theme="dark"] .title-year-menu { background: #16264a; border-color: #34507e; }
 :root[data-theme="dark"] .title-year-option:hover { background: #22345c; }
-/* Count badge on the New button. */
-.new-requests-button { display: inline-flex; align-items: center; gap: 7px; }
-.new-requests-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.28); color: #fff; font-size: 0.68rem; font-weight: 800; line-height: 1; }
+/* Count badge overlapping the New button's top-right corner. */
+.new-requests-button { position: relative; }
+.new-requests-count { position: absolute; top: -7px; right: -7px; display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: #fff; color: #c23a3a; font-size: 0.6rem; font-weight: 800; line-height: 1; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28); }
 .footer-version-button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0; }
 .footer-version-button:hover { color: var(--blue); }
 .topbar-actions, .profile-pill, .modal-actions, .drawer-header { display: flex; align-items: center; gap: 8px; }
@@ -216,7 +216,7 @@ button { cursor: pointer; }
 .danger-button { background: #ffe9ee; color: #c23c57; border-radius: 10px; padding: 8px 12px; }
 .danger-button:hover { background: #ffdce5; }
 .board-shell { border-radius: 14px; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-.board-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.board-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 13px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .board-toolbar-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .board-activities-link, .board-export-link { font-size: 0.78rem; }
 /* Export + Activities reduced to icon buttons (labels in tooltip). Base class
@@ -272,7 +272,14 @@ button { cursor: pointer; }
    (padding on a scroll container does NOT clip overflow content, hence the
    wrapper). The frame is panel-alt so the 10px gutters read as the board bg. */
 .board-scroll-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 10px; background: var(--panel-alt); }
-.board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); scrollbar-gutter: stable; }
+/* No scrollbar-gutter: with it, clientWidth is ~15px narrower than the padding
+   box where rows clip, so the frozen header (sized to clientWidth) left a strip
+   of section showing on the right. Without it, clientWidth == the true visible
+   clip width, so the header spans exactly the visible area. */
+.board-surface { flex: 1; min-height: 0; overflow: auto; background: var(--panel-alt); }
+/* Gap above the first month; the sticky header still docks flush at the
+   scrollport top when scrolled (the margin scrolls away, sticky top:0 pins at 0). */
+.board-surface > .month-section:first-child { margin-top: 10px; }
 .board-row { display: grid; grid-template-columns: var(--board-columns); width: var(--board-width); }
 .board-header { position: relative; z-index: 1; background: #f3f5f9; margin: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 0; border-right: 0; border-radius: 0; overflow: visible; }
 .board-header .cell { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 30px; padding-top: 3px; padding-bottom: 3px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #2f3440; background: #f3f5f9; }
@@ -320,7 +327,7 @@ button { cursor: pointer; }
    the corners "cut out" to panel-alt instead of revealing the table.
    Accent colour + radius flow through --header-bg / --header-radius so all the
    hover/expanded/drag/dark rules keep working by setting those vars. */
-.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: var(--panel-alt); --header-bg: #edf3ff; --header-radius: 12px 12px 0 0; text-align: left; box-sizing: border-box; }
+.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 12px; border: 0; margin-top: 0; background: var(--panel-alt); --header-bg: #edf3ff; --header-radius: 12px 12px 0 0; text-align: left; box-sizing: border-box; }
 /* The rounded accent + its bottom accent line both live on ::before so the line
    follows the rounded corners (curls at the collapsed pill, straight along the
    expanded bottom) instead of running past them as a square element shadow. */

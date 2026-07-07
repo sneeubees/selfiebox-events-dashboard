@@ -996,14 +996,11 @@ function DashboardApp() {
     const publish = () => {
       const surface = boardSurfaceRef.current;
       if (!surface) return;
-      // Use the padding-box width (getBoundingClientRect includes the reserved
-      // scrollbar-gutter:stable strip), NOT clientWidth (which excludes it).
-      // Scrolling rows clip at the padding box, so the header must span that full
-      // width or a ~gutter-wide strip of the section leaks to its right.
-      const cs = getComputedStyle(surface);
-      const bl = parseFloat(cs.borderLeftWidth) || 0;
-      const br = parseFloat(cs.borderRightWidth) || 0;
-      const width = Math.max(0, surface.getBoundingClientRect().width - bl - br);
+      // clientWidth == the visible content width where the rows actually clip
+      // (with no scrollbar-gutter reserved, the vertical scrollbar is subtracted
+      // from clientWidth exactly like it is from the rows' clip edge), so the
+      // frozen header spans precisely that - no leak, no over-width.
+      const width = Math.max(0, surface.clientWidth);
       document.documentElement.style.setProperty('--visible-board-width', `${width}px`);
     };
     const attach = () => {
