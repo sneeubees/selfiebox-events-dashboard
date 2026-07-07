@@ -354,6 +354,12 @@ button { cursor: pointer; }
    visual separator instead. */
 .month-board-header { position: sticky; top: 46px; z-index: 18; border-top: 0; }
 .month-board-header .cell { border-top: 0; }
+
+/* === TEMP DIAGNOSTIC (remove after identifying the leaking row) === */
+.month-board-header .cell { border: 2px solid #ff00ff !important; }                                    /* PINK  = column-header row */
+.month-section > .board-row.board-entry:first-of-type .cell { border-top: 3px solid #00e000 !important; } /* GREEN = first data row's top */
+.month-section { box-shadow: 0 0 0 3px #00e5ff !important; }                                            /* CYAN  = section outline */
+/* === END TEMP === */
 .month-export-button { border: 1px solid #d7e1f4; border-radius: 999px; background: #f6f9ff; color: #355190; padding: 2px 10px; font-size: 0.68rem; line-height: 1; white-space: nowrap; }
 .month-export-button:hover { background: #eaf1ff; }
 /* Commission (green) + Logistics (orange) are the two most-used month tools -
