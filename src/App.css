@@ -320,10 +320,12 @@ button { cursor: pointer; }
 .board-entry.is-active .cell { background: #eef4ff; }
 .board-entry.is-active .cell-name { background: #e6efff; box-shadow: inset 4px 0 0 #2f5cae, 1px 0 0 var(--line); }
 .board-entry.is-active .cell-date { background: #eef4ff; }
-.board-entry.is-new-request .cell { background: #fdeaea; }
-.board-entry.is-new-request .cell-name { background: #fbdbdb; box-shadow: inset 4px 0 0 #d64545, 1px 0 0 var(--line); }
-.board-entry.is-new-request .cell-date { background: #fbdbdb; }
-.board-entry.is-new-request:hover .cell { background: #fadcdc; }
+/* New-request row fill is blue (not red) - the red left line + red NEW badge
+   below carry the urgency cue instead. */
+.board-entry.is-new-request .cell { background: #dbe8ff; }
+.board-entry.is-new-request .cell-name { background: #dbe8ff; box-shadow: inset 4px 0 0 #d64545, 1px 0 0 var(--line); }
+.board-entry.is-new-request .cell-date { background: #dbe8ff; }
+.board-entry.is-new-request:hover .cell { background: #cbdcfc; }
 .month-section > .board-row.board-entry:first-of-type .cell { border-top: 1px solid var(--line); }
 .empty-month { padding: 0 12px 10px; color: var(--muted); font-size: 0.82rem; }
 .name-cell { display: grid; grid-template-columns: 22px 22px 1fr; gap: 6px; align-items: center; width: 100%; min-width: 0; }
