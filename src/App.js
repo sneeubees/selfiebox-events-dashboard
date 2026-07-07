@@ -1910,6 +1910,20 @@ function DashboardApp() {
     };
   }, [adminMenuColumn]);
 
+  useEffect(() => {
+    if (!profileMenuOpen) {
+      return undefined;
+    }
+    const closeMenu = () => setProfileMenuOpen(false);
+    const closeOnEscape = (event) => { if (event.key === 'Escape') closeMenu(); };
+    document.addEventListener('mousedown', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [profileMenuOpen]);
+
   const persistLabelOption = (
     columnKey,
     optionKey,
@@ -4349,14 +4363,15 @@ function DashboardApp() {
               <button className="turnover-top-icon" type="button" title="Turnover Figures" aria-label="Turnover Figures" onClick={openTurnoverDialog}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg></button>
             </div>
           ) : null}
-          <div className={`profile-menu-wrap${currentUser.role === 'admin' ? ' is-admin' : ''}`} onMouseEnter={currentUser.role === 'admin' ? () => setProfileMenuOpen(true) : undefined} onMouseLeave={currentUser.role === 'admin' ? () => setProfileMenuOpen(false) : undefined}>
-            <button className="profile-pill" type="button" aria-haspopup={currentUser.role === 'admin' ? 'menu' : undefined} aria-expanded={currentUser.role === 'admin' ? profileMenuOpen : undefined} onClick={() => { if (currentUser.role === 'admin') { setProfileMenuOpen((open) => !open); } else { setShowProfileModal(true); } }}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span><strong>{currentUser.firstName} {currentUser.surname}</strong></button>
-            {currentUser.role === 'admin' && profileMenuOpen ? (
-              <div className="profile-menu" role="menu">
+          <div className="profile-menu-wrap">
+            <button className="profile-pill" type="button" title={`${currentUser.firstName} ${currentUser.surname}`} aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}><span className="profile-pill-media">{currentUser.profilePic ? <img className="profile-pill-image" src={currentUser.profilePic} alt={`${currentUser.firstName} ${currentUser.surname}`} /> : initials}</span></button>
+            {profileMenuOpen ? (
+              <div className="profile-menu" role="menu" onMouseDown={(event) => event.stopPropagation()}>
+                <div className="profile-menu-name">{currentUser.firstName} {currentUser.surname}</div>
                 <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowProfileModal(true); }}>Profile</button>
-                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowUsersModal(true); }}>Manage Users</button>
-                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); openTurnoverDialog(); }}>Reports</button>
-                <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowWebsiteStats(true); }}>Website Stats</button>
+                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowUsersModal(true); }}>Manage Users</button> : null}
+                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); openTurnoverDialog(); }}>Reports</button> : null}
+                {currentUser.role === 'admin' ? <button type="button" role="menuitem" onClick={() => { setProfileMenuOpen(false); setShowWebsiteStats(true); }}>Website Stats</button> : null}
               </div>
             ) : null}
           </div>
