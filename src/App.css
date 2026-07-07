@@ -292,15 +292,21 @@ button { cursor: pointer; }
    max-width guards the fallback/no-JS case. (Deliberately NOT container-query
    based - container-type would create a containing block that breaks the
    position:fixed .admin-menu inside the board.) */
-.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; overflow: clip; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: #edf3ff; text-align: left; transition: background 140ms ease; box-sizing: border-box; box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); border-radius: 12px 12px 0 0; }
-.month-header::before { content: ''; position: absolute; inset: 0; background: inherit; z-index: -1; }
-.month-section.is-collapsed-month .month-header { border-radius: 12px; }
-.month-section.is-expanded-month .month-header { border-radius: 12px 12px 0 0; }
-.month-header:hover { background: #e5eeff; }
+/* The header ELEMENT is an opaque panel-alt square (matches the gutter) so the
+   table scrolling behind it is fully occluded - including in the rounded-corner
+   notches. The rounded accent header is painted by ::before ON TOP of it, so
+   the corners "cut out" to panel-alt instead of revealing the table.
+   Accent colour + radius flow through --header-bg / --header-radius so all the
+   hover/expanded/drag/dark rules keep working by setting those vars. */
+.month-header { position: sticky; top: 0; left: 0; z-index: 19; isolation: isolate; overflow: clip; width: var(--visible-board-width); max-width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 5px 12px; border: 0; margin-top: 0; background: var(--panel-alt); --header-bg: #edf3ff; --header-radius: 12px 12px 0 0; text-align: left; box-sizing: border-box; box-shadow: 0 1.5px 0 var(--month-accent, #d4def2); }
+.month-header::before { content: ''; position: absolute; inset: 0; background: var(--header-bg); border-radius: var(--header-radius, 12px 12px 0 0); z-index: -1; transition: background 140ms ease; }
+.month-section.is-collapsed-month .month-header { --header-radius: 12px; }
+.month-section.is-expanded-month .month-header { --header-radius: 12px 12px 0 0; }
+.month-header:hover { --header-bg: #e5eeff; }
 /* TRIAL: tint expanded-month headers with a shade of the month's own accent
    colour (collapsed months keep the neutral chrome). Easy to revert. */
-.month-section.is-expanded-month .month-header { background: color-mix(in srgb, var(--month-accent, var(--blue)) 15%, var(--panel)); }
-:root[data-theme="dark"] .month-section.is-expanded-month .month-header { background: color-mix(in srgb, var(--month-accent, var(--blue)) 24%, var(--panel)); }
+.month-section.is-expanded-month .month-header { --header-bg: color-mix(in srgb, var(--month-accent, var(--blue)) 15%, var(--panel)); }
+:root[data-theme="dark"] .month-section.is-expanded-month .month-header { --header-bg: color-mix(in srgb, var(--month-accent, var(--blue)) 24%, var(--panel)); }
 .month-header[draggable="true"] { cursor: grab; }
 .month-header[draggable="true"]:active { cursor: grabbing; }
 .month-header-main { position: sticky; left: 5px; z-index: 20; display: grid; gap: 6px; align-items: start; flex: 0 0 auto; min-width: max-content; padding: 0 18px 0 5px; background: inherit; box-shadow: 16px 0 14px -14px rgba(255, 255, 255, 0.96); }
@@ -334,7 +340,7 @@ button { cursor: pointer; }
 :root[data-theme="dark"] .month-logistics-icon { color: #f2a35a; border-color: #8a5f27; }
 :root[data-theme="dark"] .month-logistics-icon:hover { background: #33240f; border-color: #c98a3e; }
 .month-section.is-dragging-month { opacity: 0.72; }
-.month-section.is-drag-target-month .month-header { background: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
+.month-section.is-drag-target-month .month-header { --header-bg: #e6efff; box-shadow: inset 0 0 0 2px #9fb8f1; }
 .month-toggle { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: #e8edf8; color: #355190; font-size: 1rem; font-weight: 700; }
 /* Per-month accent as a CSS variable (inherits section -> header) so both the
    month title AND the header's bottom divider share one colour. */
@@ -1364,10 +1370,19 @@ textarea { resize: vertical; min-height: 110px; }
 }
 :root[data-theme="dark"] .board-header,
 :root[data-theme="dark"] .board-header .cell,
-:root[data-theme="dark"] .month-header {
+:root[data-theme="dark"] .board-header,
+:root[data-theme="dark"] .board-header .cell {
   /* one step "up" from --panel so header bars read as distinct chrome,
      not just another row */
   background: #182b52;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .month-header {
+  /* header element stays panel-alt (the opaque notch backing); the accent
+     tone lives on ::before via --header-bg. */
+  --header-bg: #182b52;
+  background: var(--panel-alt);
   color: var(--text);
   border-color: var(--line);
 }
@@ -1449,7 +1464,7 @@ textarea { resize: vertical; min-height: 110px; }
 :root[data-theme="dark"] .month-header:hover,
 :root[data-theme="dark"] .board-header .cell.is-drag-target,
 :root[data-theme="dark"] .month-section.is-drag-target-month .month-header {
-  background: #1d3868;
+  --header-bg: #1d3868;
 }
 :root[data-theme="dark"] .board-entry.is-active .cell-name {
   box-shadow: inset 4px 0 0 #5b9bff, 1px 0 0 var(--line);
