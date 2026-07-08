@@ -6573,6 +6573,7 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('last7');
   const [saOnly, setSaOnly] = useState(false);
+  const [showQuoteDays, setShowQuoteDays] = useState(false);
   // Durable count of quotes actually submitted FROM the website (bumped at submit
   // time in websiteStats, before the event's status is ever changed).
   const websiteQuoteStats = useQuery(api.websiteStats.getWebsiteStats, {});
@@ -6582,6 +6583,23 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
     const today = zaDay(0);
     const start = period === 'today' ? today : period === 'last30' ? zaDay(29) : period === 'launch' ? SITE_LAUNCH_DATE : zaDay(6);
     return days.filter((d) => d.date >= start && d.date <= today).reduce((sum, d) => sum + (d.quotes || 0), 0);
+  }, [websiteQuoteStats, period]);
+
+  // One block per day in the selected period (incl. zero-count days), oldest -> newest,
+  // for the "Quote requests per day" popup. today=1 block, 7d=7, 30d=30, launch=since new site.
+  const quoteDayList = useMemo(() => {
+    const zaDay = (n) => new Date(Date.now() - n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' });
+    const today = zaDay(0);
+    let startOffset;
+    if (period === 'today') startOffset = 0;
+    else if (period === 'last30') startOffset = 29;
+    else if (period === 'launch') startOffset = Math.max(0, Math.round((new Date(today + 'T00:00:00') - new Date(SITE_LAUNCH_DATE + 'T00:00:00')) / 86400000));
+    else startOffset = 6; // last7
+    const counts = Object.fromEntries((websiteQuoteStats?.days || []).map((r) => [r.date, r.quotes || 0]));
+    return Array.from({ length: startOffset + 1 }, (_, i) => {
+      const date = zaDay(startOffset - i);
+      return { date, count: counts[date] || 0, isToday: date === today };
+    });
   }, [websiteQuoteStats, period]);
 
   const load = useCallback(async (p, sa, force) => {
@@ -6658,7 +6676,21 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
     ];
     inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
       <div className="webstats-kpis">
-        {kpis.map(([label, val, tip]) => <div className={`webstats-kpi${label === 'Quote Requests' ? ' is-highlight' : ''}`} key={label} title={tip || ''}><div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div><div className="webstats-kpi-label">{label}</div></div>)}
+        {kpis.map(([label, val, tip]) => {
+          const isQuotes = label === 'Quote Requests';
+          return <div
+            className={`webstats-kpi${isQuotes ? ' is-highlight is-clickable' : ''}`}
+            key={label}
+            title={isQuotes ? 'Click for the day-by-day breakdown' : (tip || '')}
+            role={isQuotes ? 'button' : undefined}
+            tabIndex={isQuotes ? 0 : undefined}
+            onClick={isQuotes ? () => setShowQuoteDays(true) : undefined}
+            onKeyDown={isQuotes ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowQuoteDays(true); } } : undefined}
+          >
+            <div className="webstats-kpi-val">{typeof val === 'number' ? val.toLocaleString() : val}</div>
+            <div className="webstats-kpi-label">{label}{isQuotes ? <span className="webstats-kpi-hint"> · daily ▾</span> : null}</div>
+          </div>;
+        })}
       </div>
       <div className="webstats-section">
         <h4>{data.trendMode === 'hourly' ? 'Visits by hour' : 'Daily visits'} <span>{periodLabel}</span></h4>
@@ -6691,7 +6723,29 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
     </div>;
   }
 
-  return <div className="statspage-view">{head}{inner}</div>;
+  const blockDow = (ds) => new Date(ds + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'short' });
+  const blockDate = (ds) => new Date(ds + 'T12:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' });
+  const maxQuoteDay = Math.max(1, ...quoteDayList.map((d) => d.count));
+  const quoteDaysModal = showQuoteDays ? (
+    <ModalShell title="Quote requests per day" onClose={() => setShowQuoteDays(false)} panelClassName="quote-days-modal-panel">
+      <div className="quote-days">
+        <div className="quote-days-summary"><strong>{quoteRequests.toLocaleString()}</strong> quote request{quoteRequests === 1 ? '' : 's'} &middot; <span>{periodLabel}</span> &middot; {quoteDayList.length} day{quoteDayList.length === 1 ? '' : 's'}</div>
+        <div className={`quote-days-grid${quoteDayList.length <= 1 ? ' is-single' : ''}`}>
+          {quoteDayList.map((d) => {
+            const ratio = d.count > 0 ? 0.4 + 0.55 * (d.count / maxQuoteDay) : 0;
+            return <div key={d.date} className={`quote-day${d.count > 0 ? ' has-quotes' : ''}${d.isToday ? ' is-today' : ''}`} style={d.count > 0 ? { background: `rgba(34,197,94,${ratio.toFixed(3)})` } : undefined} title={`${blockDate(d.date)} — ${d.count} quote${d.count === 1 ? '' : 's'}`}>
+              <span className="quote-day-dow">{blockDow(d.date)}</span>
+              <span className="quote-day-num">{d.count}</span>
+              <span className="quote-day-date">{blockDate(d.date)}</span>
+            </div>;
+          })}
+        </div>
+        <div className="quote-days-legend"><span className="quote-days-legend-item"><i className="quote-days-swatch is-today-swatch" /> Today</span><span className="quote-days-legend-item"><i className="quote-days-swatch is-quote-swatch" /> Quote received (darker = more)</span></div>
+      </div>
+    </ModalShell>
+  ) : null;
+
+  return <div className="statspage-view">{head}{inner}{quoteDaysModal}</div>;
 }
 
 // Google Search Console — rankings and search terms, with its own date ranges.
