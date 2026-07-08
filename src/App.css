@@ -1954,10 +1954,13 @@ textarea { resize: vertical; min-height: 110px; }
 .webstats-section { margin-bottom: 20px; }
 .webstats-section h4 { margin: 0 0 10px; font-size: 0.84rem; }
 .webstats-section h4 span { color: var(--muted); font-weight: 600; font-size: 0.68rem; margin-left: 6px; }
-.webstats-bars { display: flex; align-items: flex-end; gap: 3px; height: 88px; }
-.webstats-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 0; }
-.webstats-bar span { width: 100%; background: linear-gradient(180deg, #42d6ff, #2f73e6); border-radius: 3px 3px 0 0; min-height: 3px; transition: opacity 120ms ease; }
-.webstats-bar:hover span { opacity: 0.75; }
+.webstats-bars { display: flex; align-items: flex-end; gap: 3px; padding-top: 16px; }
+.webstats-bar { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.webstats-bar-track { width: 100%; height: 88px; display: flex; align-items: flex-end; }
+.webstats-bar-fill { position: relative; width: 100%; background: linear-gradient(180deg, #42d6ff, #2f73e6); border-radius: 3px 3px 0 0; min-height: 3px; transition: opacity 120ms ease; }
+.webstats-bar:hover .webstats-bar-fill { opacity: 0.78; }
+.webstats-bar-count { position: absolute; top: -15px; left: -3px; right: -3px; text-align: center; font-size: 0.62rem; font-weight: 700; color: var(--text); line-height: 1; }
+.webstats-bar-label { font-size: 0.58rem; color: var(--muted); line-height: 1.15; margin-top: 5px; white-space: nowrap; min-height: 0.8em; }
 .webstats-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 .webstats-row { margin-bottom: 9px; }
 .webstats-row-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.76rem; margin-bottom: 4px; }

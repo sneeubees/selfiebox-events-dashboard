@@ -6695,7 +6695,19 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
       <div className="webstats-section">
         <h4>{data.trendMode === 'hourly' ? 'Visits by hour' : 'Daily visits'} <span>{periodLabel}</span></h4>
         <div className="webstats-bars">
-          {data.daily.map((d, i) => <div className="webstats-bar" key={d.label + i} title={`${d.label} - ${d.sessions} visits`}><span style={{ height: `${Math.max(3, (d.sessions / maxDaily) * 100)}%` }} /></div>)}
+          {data.daily.map((d, i) => {
+            // Thin labels on dense views (e.g. 24 hourly / 30 daily bars) so they never crowd.
+            const labelEvery = data.daily.length <= 12 ? 1 : Math.ceil(data.daily.length / 8);
+            const showLabel = i % labelEvery === 0 || i === data.daily.length - 1;
+            return <div className="webstats-bar" key={d.label + i} title={`${d.label} - ${d.sessions} visits`}>
+              <div className="webstats-bar-track">
+                <div className="webstats-bar-fill" style={{ height: `${Math.max(3, (d.sessions / maxDaily) * 100)}%` }}>
+                  {d.sessions ? <span className="webstats-bar-count">{d.sessions.toLocaleString()}</span> : null}
+                </div>
+              </div>
+              <span className="webstats-bar-label">{showLabel ? d.label : ''}</span>
+            </div>;
+          })}
         </div>
       </div>
       <div className="webstats-cols">
