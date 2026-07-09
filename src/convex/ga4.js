@@ -126,7 +126,8 @@ export const getTokenIfAdmin = internalQuery({
 });
 
 // ---------- GA4 Data API ----------
-async function accessTokenFromRefresh(refreshToken) {
+// Exported for reuse by aiAnalysis.js (same OAuth client + refresh token).
+export async function accessTokenFromRefresh(refreshToken) {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

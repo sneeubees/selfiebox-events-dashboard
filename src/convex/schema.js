@@ -338,6 +338,18 @@ export default defineSchema({
     detail: v.string(),
     durationMs: v.number(),
   }).index("by_ts", ["ts"]),
+  // Weekly (or manually triggered) AI analysis of GA4 + Search Console + Ads.
+  // `report` = JSON string {summary, quickWins, sections[...]} from the model.
+  aiReports: defineTable({
+    createdAt: v.number(),
+    trigger: v.string(), // "cron" | "manual"
+    status: v.string(), // "running" | "done" | "error"
+    model: v.optional(v.string()),
+    periodLabel: v.optional(v.string()),
+    report: v.optional(v.string()),
+    error: v.optional(v.string()),
+    finishedAt: v.optional(v.number()),
+  }).index("by_created", ["createdAt"]),
   // Long-lived OAuth refresh tokens for external analytics integrations
   // (currently "ga4"). One row per integration key.
   integrations: defineTable({

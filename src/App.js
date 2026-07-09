@@ -6484,7 +6484,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
-        {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
+        {tab === 'ai' ? <AIAnalysisView isAdmin={isAdmin} /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
         {tab === 'rep-attendants' ? <AttendantsReportView reports={reports} /> : null}
@@ -7785,6 +7785,126 @@ function ServerHealthView({ reports }) {
       <div className="webstats-foot">Snapshot {new Date(latest.ts).toLocaleString('en-ZA')} · collector runs every 5 min</div>
     </div>
   );
+}
+
+function AIAnalysisView({ isAdmin }) {
+  const reports = useQuery(api.aiAnalysis.getReports, {});
+  const startAnalysis = useMutation(api.aiAnalysis.startAnalysis);
+  const [selectedId, setSelectedId] = useState(null);
+  const [startErr, setStartErr] = useState('');
+  const latest = reports && reports.length ? reports[0] : null;
+  const effectiveId = selectedId || latest?.id || null;
+  const report = useQuery(api.aiAnalysis.getReport, effectiveId ? { id: effectiveId } : 'skip');
+  const running = Boolean(latest && latest.status === 'running');
+
+  const onAnalyze = async () => {
+    setStartErr('');
+    try {
+      const res = await startAnalysis({});
+      if (res?.ok) setSelectedId(null); // jump to the new (latest) run
+      else if (res?.reason === 'already_running') setStartErr('An analysis is already running — give it a minute.');
+    } catch (e) { setStartErr(String(e?.message || e)); }
+  };
+
+  const fmtWhen = (ts) => new Date(ts).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const HEALTH = { good: ['On track', 'is-good'], warn: ['Needs attention', 'is-warn'], bad: ['Off track', 'is-bad'] };
+  const SECTION_TITLES = { website: 'Website', seo: 'SEO', ads: 'Google Ads' };
+
+  let parsed = null;
+  if (report && report.status === 'done' && report.report) {
+    try { parsed = JSON.parse(report.report); } catch { parsed = null; }
+  }
+
+  const head = (
+    <header className="statspage-viewhead">
+      <div><h2>AI Analysis</h2><p>Claude reads your GA4, Search Console and Google Ads data and tells you what to do next. Runs automatically every Monday 07:00.</p></div>
+      <div className="webstats-controls">
+        {isAdmin ? <button className="primary-button" type="button" onClick={onAnalyze} disabled={running}>{running ? 'Analysing…' : 'Analyze now'}</button> : null}
+      </div>
+    </header>
+  );
+
+  let inner;
+  if (reports === undefined) {
+    inner = <div className="webstats-empty">Loading…</div>;
+  } else if (reports === null) {
+    inner = <div className="webstats-empty">AI analysis is available to admins only.</div>;
+  } else if (!reports.length) {
+    inner = <div className="webstats-empty">
+      <p>No analysis yet. The first one runs automatically on Monday morning — or kick one off now.</p>
+      {isAdmin ? <button className="primary-button" type="button" onClick={onAnalyze}>Analyze now</button> : null}
+      {startErr ? <p className="webstats-muted">{startErr}</p> : null}
+    </div>;
+  } else {
+    const cur = report;
+    let body = null;
+    if (!cur) {
+      body = <div className="webstats-empty">Loading report…</div>;
+    } else if (cur.status === 'running') {
+      body = <div className="webstats-empty aireport-running">
+        <div className="aireport-spinner" aria-hidden="true" />
+        <p>Claude is reading 8 weeks of Analytics, Search Console and Ads data and writing your report…</p>
+        <p className="webstats-muted">This usually takes a minute or two. The page updates by itself when it&apos;s done.</p>
+      </div>;
+    } else if (cur.status === 'error') {
+      const keyMissing = /ANTHROPIC_API_KEY/.test(cur.error);
+      body = <div className="webstats-empty">
+        <p>{keyMissing ? 'The Anthropic API key isn&apos;t set up on this backend yet.' : 'The analysis failed.'}</p>
+        <p className="webstats-muted">{cur.error}</p>
+        {isAdmin && !keyMissing ? <button className="ghost-button" type="button" onClick={onAnalyze}>Try again</button> : null}
+      </div>;
+    } else if (parsed) {
+      body = <div className="aireport">
+        <div className="aireport-summary">
+          <h4>This week&apos;s headline</h4>
+          <p>{parsed.summary}</p>
+        </div>
+        {parsed.quickWins?.length ? <div className="aireport-wins">
+          <h4>Quick wins</h4>
+          <ul>{parsed.quickWins.map((w, i) => <li key={i}>{w}</li>)}</ul>
+        </div> : null}
+        {(parsed.sections || []).map((s) => {
+          const [healthLabel, healthClass] = HEALTH[s.health] || HEALTH.warn;
+          return <div className="aireport-section" key={s.key || s.title}>
+            <div className="aireport-section-head">
+              <h4>{SECTION_TITLES[s.key] || s.title}</h4>
+              <span className={`aireport-health ${healthClass}`}>{healthLabel}</span>
+            </div>
+            {s.findings?.length ? <ul className="aireport-findings">{s.findings.map((f, i) => <li key={i}>{f}</li>)}</ul> : null}
+            {s.recommendations?.length ? <div className="aireport-recs">
+              {s.recommendations.map((r, i) => <div className="aireport-rec" key={i}>
+                <div className="aireport-rec-head">
+                  <strong>{r.action}</strong>
+                  <span className="aireport-chips">
+                    <span className={`aireport-chip impact-${r.impact}`}>{r.impact} impact</span>
+                    <span className="aireport-chip effort">{r.effort} effort</span>
+                  </span>
+                </div>
+                <p>{r.why}</p>
+              </div>)}
+            </div> : null}
+          </div>;
+        })}
+        <div className="webstats-foot"><span>{cur.model} · {cur.periodLabel} · ran {fmtWhen(cur.createdAt)}{cur.trigger === 'cron' ? ' (scheduled)' : ''}</span></div>
+      </div>;
+    } else {
+      body = <div className="aireport"><div className="aireport-summary"><h4>Report</h4><pre className="aireport-raw">{cur.report}</pre></div></div>;
+    }
+    inner = <>
+      {startErr ? <div className="webstats-muted aireport-starterr">{startErr}</div> : null}
+      {reports.length > 1 ? <div className="aireport-history">
+        {reports.map((r) => <button key={r.id} type="button"
+          className={`aireport-hist-pill${r.id === effectiveId ? ' is-active' : ''}${r.status === 'error' ? ' is-error' : ''}`}
+          onClick={() => setSelectedId(r.id)}
+          title={r.status === 'error' ? r.error : r.periodLabel}>
+          {r.trigger === 'cron' ? '🗓 ' : '⚡ '}{fmtWhen(r.createdAt)}{r.status === 'running' ? ' …' : r.status === 'error' ? ' ✕' : ''}
+        </button>)}
+      </div> : null}
+      {body}
+    </>;
+  }
+
+  return <div className="statspage-view">{head}{inner}</div>;
 }
 
 function AdsStatsView({ isAdmin, connectUrl, openConnect }) {
