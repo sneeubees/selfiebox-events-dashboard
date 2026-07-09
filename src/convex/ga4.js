@@ -3,10 +3,12 @@ import { action, mutation, query, internalMutation, internalQuery, internalActio
 import { internal } from "./_generated/api";
 
 // analytics.readonly = GA4 traffic stats; webmasters.readonly = Search Console
-// (SEO rankings). Both are requested together so one connect flow covers both.
+// (SEO rankings); adwords = Google Ads API (ad spend/performance). All requested
+// together so one connect flow covers the whole analytics area.
 const SCOPES = [
   "https://www.googleapis.com/auth/analytics.readonly",
   "https://www.googleapis.com/auth/webmasters.readonly",
+  "https://www.googleapis.com/auth/adwords",
 ];
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";

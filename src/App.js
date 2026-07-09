@@ -6483,7 +6483,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'turnover' ? <TurnoverView isAdmin={isAdmin} turnover={turnover} /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
-        {tab === 'ads' ? <ComingSoonView title="Google Ads" blurb="Ad spend, clicks, conversions, cost-per-lead and audience demographics — pulled straight from your Google Ads account into this same friendly view." /> : null}
+        {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ai' ? <ComingSoonView title="AI Analytics" blurb="A weekly AI review of your traffic, rankings and ad performance that explains — in plain English — what's working, what's slipping, and exactly what to do next." /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
@@ -7785,6 +7785,145 @@ function ServerHealthView({ reports }) {
       <div className="webstats-foot">Snapshot {new Date(latest.ts).toLocaleString('en-ZA')} · collector runs every 5 min</div>
     </div>
   );
+}
+
+function AdsStatsView({ isAdmin, connectUrl, openConnect }) {
+  const runAds = useAction(api.ads.getAdsStats);
+  const [byPeriod, setByPeriod] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState('last7');
+
+  // Google Ads GAQL needs absolute dates (SA timezone), unlike GA4's "6daysAgo".
+  const rangeFor = (p) => {
+    const zaDay = (n) => new Date(Date.now() - n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' });
+    const today = zaDay(0);
+    if (p === 'today') return { startDate: today, endDate: today };
+    if (p === 'last30') return { startDate: zaDay(29), endDate: today };
+    if (p === 'launch') return { startDate: SITE_LAUNCH_DATE, endDate: today };
+    return { startDate: zaDay(6), endDate: today };
+  };
+
+  const load = useCallback(async (p, force) => {
+    setPeriod(p);
+    if (!force && byPeriod[p] && !byPeriod[p].error) return;
+    setLoading(true);
+    try {
+      const res = await runAds(rangeFor(p));
+      setByPeriod((cur) => ({ ...cur, [p]: res }));
+    } catch (e) {
+      setByPeriod((cur) => ({ ...cur, [p]: { error: String(e?.message || e) } }));
+    }
+    setLoading(false);
+  }, [runAds, byPeriod]);
+  useEffect(() => { void load('last7', false); /* eslint-disable-next-line */ }, []);
+
+  const data = byPeriod[period];
+  const meta = STATS_PERIODS.find((x) => x[0] === period) || STATS_PERIODS[1];
+  const periodLabel = meta[3];
+  const fmtR = (n, dec = 0) => 'R ' + Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+  const head = (
+    <header className="statspage-viewhead">
+      <div><h2>Google Ads</h2><p>Ad spend and performance from your Google Ads account.</p></div>
+      <div className="webstats-controls">
+        <div className="webstats-tabs">
+          {STATS_PERIODS.map(([k, l]) => (
+            <button key={k} type="button" className={period === k ? 'is-active' : ''} onClick={() => void load(k, false)}>{l}</button>
+          ))}
+        </div>
+      </div>
+    </header>
+  );
+
+  const reconnectBlock = (msg) => <div className="webstats-empty">
+    <p>{msg}</p>
+    {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Reconnect Google</button> : <p className="webstats-muted">Ask an admin to reconnect.</p>}
+    <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
+  </div>;
+
+  let inner;
+  if (loading && !data) {
+    inner = <div className="webstats-empty">Loading your Google Ads stats…</div>;
+  } else if (data && data.connected === false && !data.tokenExpired) {
+    inner = <div className="webstats-empty">
+      <p>Connect Google to see your Ads performance here.</p>
+      {isAdmin ? <button className="primary-button" type="button" disabled={!connectUrl} onClick={openConnect}>Connect Google</button> : <p className="webstats-muted">Ask an admin to connect.</p>}
+      <button className="ghost-button" type="button" onClick={() => void load(period, true)}>Refresh</button>
+    </div>;
+  } else if (data && data.needsAdsScope) {
+    inner = reconnectBlock('One-time step: reconnect Google to grant Ads access (adds the Google Ads permission to the existing connection).');
+  } else if (data && data.tokenExpired) {
+    inner = reconnectBlock('The Google connection expired — reconnect to refresh the data.');
+  } else if (data && data.error) {
+    inner = <div className="webstats-empty"><p>Couldn&apos;t load Google Ads stats.</p><p className="webstats-muted">{data.error}</p><button className="ghost-button" type="button" onClick={() => void load(period, true)}>Retry</button></div>;
+  } else if (data && data.totals) {
+    const t = data.totals;
+    const kpis = [
+      ['Spend', fmtR(t.cost)],
+      ['Clicks', t.clicks.toLocaleString()],
+      ['Impressions', t.impressions.toLocaleString()],
+      ['CTR', `${(t.ctr * 100).toFixed(1)}%`],
+      ['Conversions', Math.round(t.conversions).toLocaleString()],
+      ['Cost / conv.', t.conversions ? fmtR(t.costPerConv, 2) : '—'],
+    ];
+    const maxSpendDay = Math.max(1, ...(data.trend || []).map((d) => d.cost));
+    const maxDev = Math.max(1, ...(data.devices || []).map((d) => d.cost));
+    const maxAge = Math.max(1, ...(data.ages || []).map((d) => d.cost));
+    const maxGen = Math.max(1, ...(data.genders || []).map((d) => d.cost));
+    const maxReg = Math.max(1, ...(data.regions || []).map((d) => d.cost));
+    const breakdown = (title, rows, max) => <div className="webstats-section">
+      <h4>{title} <span>{periodLabel}</span></h4>
+      {rows?.length ? rows.map((r) => <div className="webstats-row" key={r.label}><div className="webstats-row-head"><span className="webstats-row-label">{r.label}</span><span className="webstats-row-val">{fmtR(r.cost)} · {r.clicks.toLocaleString()} clicks</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(r.cost / max) * 100}%` }} /></div></div>) : <div className="webstats-muted">No data for this period.</div>}
+    </div>;
+    inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
+      <div className="webstats-kpis">
+        {kpis.map(([label, val]) => <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{val}</div><div className="webstats-kpi-label">{label}</div></div>)}
+      </div>
+      <div className="webstats-section">
+        <h4>Daily spend <span>{periodLabel}</span></h4>
+        <div className="webstats-bars">
+          {(data.trend || []).map((d, i) => {
+            const labelEvery = data.trend.length <= 12 ? 1 : Math.ceil(data.trend.length / 8);
+            const showLabel = i % labelEvery === 0 || i === data.trend.length - 1;
+            const dayLabel = d.label.length === 10 ? `${d.label.slice(8, 10)}/${d.label.slice(5, 7)}` : d.label;
+            return <div className="webstats-bar" key={d.label + i} title={`${dayLabel} — ${fmtR(d.cost, 2)} · ${d.clicks} clicks · ${Math.round(d.conversions)} conv`}>
+              <div className="webstats-bar-track">
+                <div className="webstats-bar-fill" style={{ height: `${Math.max(3, (d.cost / maxSpendDay) * 100)}%` }}>
+                  {d.cost ? <span className="webstats-bar-count">{Math.round(d.cost)}</span> : null}
+                </div>
+              </div>
+              <span className="webstats-bar-label">{showLabel ? dayLabel : ''}</span>
+            </div>;
+          })}
+        </div>
+      </div>
+      {data.campaigns?.length ? <div className="webstats-section">
+        <h4>Campaigns <span>{periodLabel}</span></h4>
+        <div className="ads-table-wrap"><table className="ads-table">
+          <thead><tr><th>Campaign</th><th>Spend</th><th>Clicks</th><th>Impr.</th><th>Conv.</th><th>Cost/conv.</th></tr></thead>
+          <tbody>{data.campaigns.map((c) => <tr key={c.name} className={c.status !== 'ENABLED' ? 'is-paused' : ''}>
+            <td title={c.status !== 'ENABLED' ? `Status: ${c.status.toLowerCase()}` : ''}>{c.name}{c.status !== 'ENABLED' ? <span className="ads-status"> ({c.status.toLowerCase()})</span> : null}</td>
+            <td>{fmtR(c.cost)}</td><td>{c.clicks.toLocaleString()}</td><td>{c.impressions.toLocaleString()}</td>
+            <td>{Math.round(c.conversions).toLocaleString()}</td><td>{c.conversions ? fmtR(c.cost / c.conversions, 2) : '—'}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </div> : null}
+      <div className="webstats-cols">
+        {breakdown('By device', data.devices, maxDev)}
+        {breakdown('By age', data.ages, maxAge)}
+      </div>
+      <div className="webstats-cols">
+        {breakdown('By gender', data.genders, maxGen)}
+        {breakdown('Top regions', data.regions, maxReg)}
+      </div>
+      <div className="webstats-foot">
+        <span>Google Ads</span>
+        <button className="ghost-button" type="button" onClick={() => void load(period, true)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+      </div>
+    </div>;
+  }
+
+  return <div className="statspage-view">{head}{inner}</div>;
 }
 
 function ComingSoonView({ title, blurb }) {

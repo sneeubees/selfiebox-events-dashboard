@@ -2226,3 +2226,13 @@ button.report-th.is-sorted { color: var(--blue); }
   .statspage-body { padding: 18px; }
 }
 @media (max-width: 720px) { .webstats-kpis { grid-template-columns: repeat(2, 1fr); } .webstats-cols { grid-template-columns: 1fr; } .webseo-kpis, .statspage-view .webseo-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+/* Google Ads stats view (Info & Reporting > Website > Google Ads) */
+.ads-table-wrap { overflow-x: auto; }
+.ads-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ads-table th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid rgba(140, 170, 220, 0.18); }
+.ads-table td { padding: 7px 10px; border-bottom: 1px solid rgba(140, 170, 220, 0.10); color: var(--text); white-space: nowrap; }
+.ads-table td:first-child { white-space: normal; min-width: 180px; }
+.ads-table th:not(:first-child), .ads-table td:not(:first-child) { text-align: right; }
+.ads-table tr.is-paused td { opacity: 0.55; }
+.ads-status { color: var(--muted); font-size: 0.72rem; }
