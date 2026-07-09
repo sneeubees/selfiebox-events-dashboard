@@ -7787,6 +7787,13 @@ function ServerHealthView({ reports }) {
   );
 }
 
+// Highlight the numbers inside AI-report sentences (R-amounts, percentages,
+// positions, "48 vs 45" comparisons) so the figures jump out when scanning.
+function AiRichText({ text }) {
+  const parts = String(text || '').split(/(R ?[\d][\d\s,.]*|[+\-]?\d+(?:[.,]\d+)?%|\b\d[\d\s,.]*\d\b|\b\d+(?:\.\d+)?\b)/g);
+  return <>{parts.map((p, i) => (i % 2 === 1 ? <strong className="aireport-num" key={i}>{p}</strong> : p))}</>;
+}
+
 function AIAnalysisView({ isAdmin }) {
   const reports = useQuery(api.aiAnalysis.getReports, {});
   const startAnalysis = useMutation(api.aiAnalysis.startAnalysis);
@@ -7857,11 +7864,11 @@ function AIAnalysisView({ isAdmin }) {
       body = <div className="aireport">
         <div className="aireport-summary">
           <h4>This week&apos;s headline</h4>
-          <p>{parsed.summary}</p>
+          <p><AiRichText text={parsed.summary} /></p>
         </div>
         {parsed.quickWins?.length ? <div className="aireport-wins">
           <h4>Quick wins</h4>
-          <ul>{parsed.quickWins.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          <ul>{parsed.quickWins.map((w, i) => <li key={i}><AiRichText text={w} /></li>)}</ul>
         </div> : null}
         {(parsed.sections || []).map((s) => {
           const [healthLabel, healthClass] = HEALTH[s.health] || HEALTH.warn;
@@ -7870,7 +7877,7 @@ function AIAnalysisView({ isAdmin }) {
               <h4>{SECTION_TITLES[s.key] || s.title}</h4>
               <span className={`aireport-health ${healthClass}`}>{healthLabel}</span>
             </div>
-            {s.findings?.length ? <ul className="aireport-findings">{s.findings.map((f, i) => <li key={i}>{f}</li>)}</ul> : null}
+            {s.findings?.length ? <ul className="aireport-findings">{s.findings.map((f, i) => <li key={i}><AiRichText text={f} /></li>)}</ul> : null}
             {s.recommendations?.length ? <div className="aireport-recs">
               {s.recommendations.map((r, i) => <div className="aireport-rec" key={i}>
                 <div className="aireport-rec-head">
@@ -7880,7 +7887,7 @@ function AIAnalysisView({ isAdmin }) {
                     <span className="aireport-chip effort">{r.effort} effort</span>
                   </span>
                 </div>
-                <p>{r.why}</p>
+                <p><AiRichText text={r.why} /></p>
               </div>)}
             </div> : null}
           </div>;

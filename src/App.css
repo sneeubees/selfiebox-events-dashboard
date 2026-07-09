@@ -2268,3 +2268,5 @@ button.report-th.is-sorted { color: var(--blue); }
 .aireport-spinner { width: 26px; height: 26px; border: 3px solid rgba(140, 170, 220, 0.25); border-top-color: #4a92f5; border-radius: 50%; animation: aireport-spin 0.9s linear infinite; margin: 0 auto 4px; }
 @keyframes aireport-spin { to { transform: rotate(360deg); } }
 .aireport-starterr { margin-bottom: 10px; }
+.aireport-num { color: #6fb2ff; font-weight: 700; font-variant-numeric: tabular-nums; }
+:root[data-theme="light"] .aireport-num { color: #1d63d8; }

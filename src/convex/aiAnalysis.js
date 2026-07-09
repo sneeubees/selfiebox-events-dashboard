@@ -243,7 +243,7 @@ You receive a JSON snapshot with three sources: "website" (Google Analytics; cur
 
 Analyse holistically and be SPECIFIC: cite real numbers, name real queries/campaigns/pages, compare windows, compute derived figures (conversion rate, cost per lead) where useful. Look for: trend shifts, funnel leaks (traffic up but leads flat?), wasted ad spend (high-cost zero-conversion search terms), SEO quick wins (page-2 keywords worth pushing), device/geo mismatches. Recommendations must be concrete actions the owner can take this week, not generic advice.
 
-Respond with ONLY valid JSON (no markdown, no code fences) exactly matching:
+Keep it tight: findings are single punchy sentences (max ~30 words each); 3-6 findings and 2-4 recommendations per section. Respond with ONLY valid JSON (no markdown, no code fences) exactly matching:
 {"summary": string (2-4 sentences, plain English, the week's headline),
  "quickWins": string[] (max 4, most valuable immediate actions),
  "sections": [{"key": "website"|"seo"|"ads", "title": string, "health": "good"|"warn"|"bad",
@@ -282,15 +282,19 @@ export const runAnalysis = internalAction({
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 4096,
+          max_tokens: 12000,
           system: SYSTEM_PROMPT,
           messages: [{ role: "user", content: `Here is this week's data snapshot:\n${JSON.stringify(snapshot)}` }],
         }),
       });
       const out = await res.json();
       if (!res.ok) return await fail("Claude API error: " + JSON.stringify(out.error || out).slice(0, 300));
+      if (out.stop_reason === "max_tokens") return await fail("The model's report was cut off (max_tokens) — try again.");
       let text = (out.content || []).map((b) => b.text || "").join("").trim();
-      text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+      // harden: strip any fences/preamble, keep the outermost JSON object
+      const first = text.indexOf("{");
+      const last = text.lastIndexOf("}");
+      if (first >= 0 && last > first) text = text.slice(first, last + 1);
       try { JSON.parse(text); } catch { /* UI falls back to raw text rendering */ }
 
       await ctx.runMutation(internal.aiAnalysis.finishReport, {
@@ -343,6 +347,17 @@ export const cronRun = internalMutation({
   handler: async (ctx) => {
     if (process.env.AI_CRON_ENABLED !== "1") return { ok: false, reason: "cron_disabled" };
     return await kickOff(ctx, "cron");
+  },
+});
+
+// CLI housekeeping only (internal — not client-callable): clears report history,
+// e.g. junk runs from before a fix. `convex run aiAnalysis:purgeAll`.
+export const purgeAll = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("aiReports").collect();
+    for (const r of rows) await ctx.db.delete(r._id);
+    return { deleted: rows.length };
   },
 });
 
