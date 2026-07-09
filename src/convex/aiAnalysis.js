@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { accessTokenFromRefresh } from "./ga4";
+import { sendAiReportEmail } from "./aiReportEmail";
 
 // Weekly AI analysis of the whole marketing funnel: pulls DEEPER data than the
 // dashboard views (GA4 weekly trends + leads-by-channel, Search Console query
@@ -325,13 +326,62 @@ export const runAnalysis = internalAction({
       if (first >= 0 && last > first) text = text.slice(first, last + 1);
       try { JSON.parse(text); } catch { /* UI falls back to raw text rendering */ }
 
+      const periodLabel = `28 days to ${zaDay(0)}`;
       await ctx.runMutation(internal.aiAnalysis.finishReport, {
-        reportId, status: "done", report: text, model: MODEL,
-        periodLabel: `28 days to ${zaDay(0)}`,
+        reportId, status: "done", report: text, model: MODEL, periodLabel,
       });
+
+      // Email the report (AI_REPORT_EMAIL is set on live only). A mail failure
+      // must never fail the run — the report is already stored above.
+      try {
+        const row = await ctx.runQuery(internal.aiAnalysis.getReportRaw, { reportId });
+        const mail = await sendAiReportEmail(
+          { createdAt: row?.createdAt || Date.now(), trigger: row?.trigger || "manual", model: MODEL, periodLabel },
+          text
+        );
+        console.log("ai report email:", JSON.stringify(mail));
+        if (mail.sent) await ctx.runMutation(internal.aiAnalysis.markEmailed, { reportId, emailedTo: mail.to });
+      } catch (e) {
+        console.error("ai report email failed", String(e));
+      }
     } catch (e) {
       await fail(e.message || e);
     }
+  },
+});
+
+// Raw row for the mailer / CLI resend (internal only).
+export const getReportRaw = internalQuery({
+  args: { reportId: v.id("aiReports") },
+  handler: async (ctx, { reportId }) => ctx.db.get(reportId),
+});
+
+export const markEmailed = internalMutation({
+  args: { reportId: v.id("aiReports"), emailedTo: v.string() },
+  handler: async (ctx, { reportId, emailedTo }) => {
+    await ctx.db.patch(reportId, { emailedTo });
+  },
+});
+
+// CLI utility: (re)send the latest completed report, optionally to an explicit
+// address — `convex run aiAnalysis:emailLatest '{"to":"info@selfiebox.co.za"}'`.
+export const emailLatest = internalAction({
+  args: { to: v.optional(v.string()) },
+  handler: async (ctx, { to }) => {
+    const list = await ctx.runQuery(internal.aiAnalysis.getLatestDone, {});
+    if (!list) return { sent: false, reason: "no completed report" };
+    return await sendAiReportEmail(
+      { createdAt: list.createdAt, trigger: list.trigger, model: list.model, periodLabel: list.periodLabel },
+      list.report, to
+    );
+  },
+});
+
+export const getLatestDone = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("aiReports").withIndex("by_created").order("desc").take(10);
+    return rows.find((r) => r.status === "done" && r.report) || null;
   },
 });
 

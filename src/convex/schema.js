@@ -349,6 +349,7 @@ export default defineSchema({
     report: v.optional(v.string()),
     error: v.optional(v.string()),
     finishedAt: v.optional(v.number()),
+    emailedTo: v.optional(v.string()),
   }).index("by_created", ["createdAt"]),
   // Long-lived OAuth refresh tokens for external analytics integrations
   // (currently "ga4"). One row per integration key.
