@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation, internalAction } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { accessTokenFromRefresh } from "./ga4";
 
@@ -243,12 +243,38 @@ You receive a JSON snapshot with three sources: "website" (Google Analytics; cur
 
 Analyse holistically and be SPECIFIC: cite real numbers, name real queries/campaigns/pages, compare windows, compute derived figures (conversion rate, cost per lead) where useful. Look for: trend shifts, funnel leaks (traffic up but leads flat?), wasted ad spend (high-cost zero-conversion search terms), SEO quick wins (page-2 keywords worth pushing), device/geo mismatches. Recommendations must be concrete actions the owner can take this week, not generic advice.
 
+Campaign status matters: each campaign has a status (ENABLED/PAUSED/REMOVED). Spend from PAUSED or REMOVED campaigns inside the window is HISTORICAL — say so explicitly (e.g. "Main SB Video spent R723 before being paused"), never describe them as running, and never recommend optimising a non-ENABLED campaign (recommending where to reallocate the freed budget is fine).
+
+If a "previousReport" is provided, use it for continuity: briefly note where things moved since then and whether its recommendations appear to have been acted on (only where the data actually shows it — don't speculate).
+
 Keep it tight: findings are single punchy sentences (max ~30 words each); 3-6 findings and 2-4 recommendations per section. Respond with ONLY valid JSON (no markdown, no code fences) exactly matching:
 {"summary": string (2-4 sentences, plain English, the week's headline),
  "quickWins": string[] (max 4, most valuable immediate actions),
  "sections": [{"key": "website"|"seo"|"ads", "title": string, "health": "good"|"warn"|"bad",
    "findings": string[] (3-6, each citing numbers),
    "recommendations": [{"action": string, "why": string, "impact": "high"|"medium"|"low", "effort": "low"|"medium"|"high"}] (2-4)}]}`;
+
+// Latest completed report (summary + quick wins only) — fed back into the next
+// run so the model can comment on week-over-week progress.
+export const getPreviousReport = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("aiReports").withIndex("by_created").order("desc").take(10);
+    const prev = rows.find((r) => r.status === "done" && r.report);
+    if (!prev) return null;
+    try {
+      const parsed = JSON.parse(prev.report);
+      return {
+        date: new Date(prev.createdAt).toISOString().slice(0, 10),
+        summary: parsed.summary || "",
+        quickWins: (parsed.quickWins || []).slice(0, 4),
+        sectionHealth: Object.fromEntries((parsed.sections || []).map((s) => [s.key, s.health])),
+      };
+    } catch {
+      return null;
+    }
+  },
+});
 
 export const runAnalysis = internalAction({
   args: { reportId: v.id("aiReports") },
@@ -272,7 +298,9 @@ export const runAnalysis = internalAction({
         return await fail(`All three sources failed. website: ${ga4.error} | seo: ${gsc.error} | ads: ${ads.error}`);
       }
 
-      const snapshot = { generatedFor: zaDay(0), website: ga4, seo: gsc, ads };
+      // week-over-week continuity: the model sees last report's headline + advice
+      const previousReport = await ctx.runQuery(internal.aiAnalysis.getPreviousReport, {});
+      const snapshot = { generatedFor: zaDay(0), previousReport: previousReport || undefined, website: ga4, seo: gsc, ads };
       const res = await fetch(ANTHROPIC_API, {
         method: "POST",
         headers: {
