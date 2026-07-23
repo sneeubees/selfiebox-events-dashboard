@@ -3144,18 +3144,45 @@ function DashboardApp() {
     if (!file) {
       return;
     }
-    if (file.size > 1024 * 1024) {
-      window.alert('Profile images must be 1 MB or smaller.');
+    if (file.size > 8 * 1024 * 1024) {
+      window.alert('Profile images must be 8 MB or smaller.');
       changeEvent.target.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setter((current) => ({ ...current, profilePic: String(reader.result || '') }));
+    // Avatars render at ~40px; storing full-size base64 blobs bloated every query
+    // that touches users (board avatars, file uploader names). Resize to a 128px
+    // JPEG (~3-5KB) before storing.
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const side = Math.min(image.naturalWidth, image.naturalHeight);
+        const target = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = target;
+        canvas.height = target;
+        const ctx2d = canvas.getContext('2d');
+        ctx2d.imageSmoothingQuality = 'high';
+        // centre-crop to square, then scale down
+        const sx = (image.naturalWidth - side) / 2;
+        const sy = (image.naturalHeight - side) / 2;
+        ctx2d.drawImage(image, sx, sy, side, side, 0, 0, target, target);
+        const resized = canvas.toDataURL('image/jpeg', 0.82);
+        setter((current) => ({ ...current, profilePic: resized }));
+      } catch {
+        window.alert('Could not process that image — try a JPG or PNG.');
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+        changeEvent.target.value = '';
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      window.alert('Could not read that image — try a JPG or PNG.');
       changeEvent.target.value = '';
     };
-    reader.readAsDataURL(file);
+    image.src = objectUrl;
   };
 
   const saveProfile = async () => {

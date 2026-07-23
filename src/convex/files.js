@@ -103,10 +103,16 @@ export const listEventFiles = query({
       .query("eventFiles")
       .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
       .collect();
-    const users = await ctx.db.query("users").collect();
-    const userNameById = new Map(
-      users.map((user) => [String(user._id), [user.firstName, user.surname].filter(Boolean).join(" ").trim() || user.email || "Unknown"])
-    );
+    // Fetch only the uploaders present on this event's files (typically 1-3
+    // users) instead of collecting every user document.
+    const userNameById = new Map();
+    for (const file of files) {
+      if (!file.createdByUserId) continue;
+      const key = String(file.createdByUserId);
+      if (userNameById.has(key)) continue;
+      const user = await ctx.db.get(file.createdByUserId);
+      userNameById.set(key, user ? ([user.firstName, user.surname].filter(Boolean).join(" ").trim() || user.email || "Unknown") : "Unknown");
+    }
 
     const results = [];
     for (const entry of files.sort((left, right) => right.createdAt - left.createdAt)) {

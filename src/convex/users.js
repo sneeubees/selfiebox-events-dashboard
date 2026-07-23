@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const DEFAULT_WORKSPACE_YEARS = [2026, 2027];
@@ -712,5 +712,36 @@ export const cleanupDuplicateEmails = mutation({
     }
 
     return { cleaned };
+  },
+});
+
+// ---- profile-pic shrink migration (CLI-only; internal) ----
+// Avatars were stored as full-size base64 blobs (some 256KB+), bloating every
+// query that touches users. New uploads are resized client-side; these let the
+// existing pics be pulled, resized locally, and written back:
+//   convex run users:listProfilePicSizes
+//   convex run users:getProfilePic '{"id":"..."}'
+//   convex run users:setProfilePic '{"id":"...","profilePic":"data:image/jpeg;base64,..."}'
+export const listProfilePicSizes = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.map((u) => ({ id: u._id, email: u.email || "", picBytes: (u.profilePic || "").length }));
+  },
+});
+
+export const getProfilePic = internalQuery({
+  args: { id: v.id("users") },
+  handler: async (ctx, { id }) => {
+    const user = await ctx.db.get(id);
+    return user ? user.profilePic || "" : "";
+  },
+});
+
+export const setProfilePic = internalMutation({
+  args: { id: v.id("users"), profilePic: v.string() },
+  handler: async (ctx, { id, profilePic }) => {
+    await ctx.db.patch(id, { profilePic });
+    return { ok: true, bytes: profilePic.length };
   },
 });
