@@ -2285,3 +2285,19 @@ button.report-th.is-sorted { color: var(--blue); }
 .finx-ladder { display: flex; flex-wrap: wrap; gap: 8px; }
 .finx-step { background: rgba(90, 150, 245, 0.12); border: 1px solid rgba(90, 150, 245, 0.3); color: var(--text); font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .finx-step.is-more { background: transparent; border-style: dashed; color: var(--muted); font-weight: 400; }
+.finx-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(240, 180, 60, 0.1); border: 1px solid rgba(240, 180, 60, 0.35); border-radius: 10px; padding: 9px 14px; margin-bottom: 14px; font-size: 0.82rem; color: var(--text); }
+.finx-history { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.finx-history-label { font-size: 0.74rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.finx-hist-pill { display: inline-flex; align-items: center; border: 1px solid rgba(140, 170, 220, 0.22); border-radius: 999px; overflow: hidden; }
+.finx-hist-pill.is-active { background: rgba(90, 150, 245, 0.16); border-color: rgba(90, 150, 245, 0.5); }
+.finx-hist-open { background: none; border: 0; color: var(--text); font-size: 0.74rem; padding: 4px 4px 4px 11px; cursor: pointer; }
+.finx-hist-del { background: none; border: 0; color: var(--muted); font-size: 0.85rem; padding: 4px 9px 4px 5px; cursor: pointer; }
+.finx-hist-del:hover { color: #f08080; }
+.finx-add-cat, .finx-add-item { background: none; border: 1px dashed rgba(90, 150, 245, 0.45); color: #6fb2ff; border-radius: 8px; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; cursor: pointer; margin-left: 10px; }
+.finx-add-item { display: block; width: 100%; margin: 8px 0 0; padding: 5px 0; }
+.finx-row.is-edit { display: flex; gap: 6px; align-items: center; border-bottom: 0; padding: 2px 0; }
+.finx-input { flex: 1; min-width: 0; background: rgba(120, 160, 230, 0.08); border: 1px solid rgba(140, 170, 220, 0.25); border-radius: 6px; color: var(--text); font-size: 0.78rem; padding: 4px 8px; }
+.finx-input-amount { flex: 0 0 86px; text-align: right; font-variant-numeric: tabular-nums; }
+.finx-input-title { font-weight: 700; font-size: 0.85rem; }
+.finx-del { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 2px 4px; }
+.finx-del:hover { color: #f08080; }

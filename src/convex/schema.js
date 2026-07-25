@@ -338,6 +338,19 @@ export default defineSchema({
     detail: v.string(),
     durationMs: v.number(),
   }).index("by_ts", ["ts"]),
+  // Editable fixed-monthly expenses (Finances > Expenses): a single "current"
+  // document plus named point-in-time snapshots (history over years).
+  expensesCurrent: defineTable({
+    data: v.any(),
+    updatedAt: v.number(),
+    updatedByEmail: v.optional(v.string()),
+  }),
+  expenseSnapshots: defineTable({
+    name: v.string(),
+    data: v.any(),
+    createdAt: v.number(),
+    createdByEmail: v.optional(v.string()),
+  }).index("by_created", ["createdAt"]),
   // Weekly (or manually triggered) AI analysis of GA4 + Search Console + Ads.
   // `report` = JSON string {summary, quickWins, sections[...]} from the model.
   aiReports: defineTable({

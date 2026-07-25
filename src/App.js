@@ -6557,43 +6557,161 @@ const FINANCE_BREAKEVEN = {
 const finR = (n) => 'R ' + Math.round(n).toLocaleString('en-ZA');
 
 function ExpensesView() {
+  const current = useQuery(api.expenses.getCurrent, {});
+  const snapshots = useQuery(api.expenses.listSnapshots, {});
+  const saveCurrent = useMutation(api.expenses.saveCurrent);
+  const createSnapshot = useMutation(api.expenses.createSnapshot);
+  const deleteSnapshot = useMutation(api.expenses.deleteSnapshot);
+
   const [scope, setScope] = useState('combined');
-  const regions = scope === 'combined' ? ['gauteng', 'capetown'] : [scope];
-  const regionTotal = (key) => FINANCE_EXPENSES_2025[key].sections.reduce((s, sec) => s + sec.items.reduce((a, [, v]) => a + v, 0), 0);
-  const grand = regions.reduce((s, key) => s + regionTotal(key), 0);
-  return <div className="statspage-view">
+  const [draft, setDraft] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [viewSnapshotId, setViewSnapshotId] = useState(null);
+  const snapshot = useQuery(api.expenses.getSnapshot, viewSnapshotId ? { id: viewSnapshotId } : 'skip');
+
+  // working copy: saved data once loaded, else the xlsx seed
+  useEffect(() => {
+    if (current === undefined || draft !== null) return;
+    setDraft(structuredClone(current?.data || FINANCE_EXPENSES_2025));
+    // eslint-disable-next-line
+  }, [current]);
+
+  const viewingSnapshot = Boolean(viewSnapshotId);
+  const data = viewingSnapshot ? (snapshot?.data || null) : draft;
+
+  const mutate = (fn) => setDraft((cur) => { const next = structuredClone(cur); fn(next); setDirty(true); return next; });
+  const setItem = (rk, si, ii, field, value) => mutate((d) => {
+    const item = d[rk].sections[si].items[ii];
+    if (field === 'name') item[0] = value;
+    else item[1] = Math.max(0, reportParseMoney(value));
+  });
+  const addItem = (rk, si) => mutate((d) => { d[rk].sections[si].items.push(['New expense', 0]); });
+  const removeItem = (rk, si, ii) => mutate((d) => { d[rk].sections[si].items.splice(ii, 1); });
+  const addSection = (rk) => {
+    const title = window.prompt('New category name:');
+    if (!title || !title.trim()) return;
+    mutate((d) => { d[rk].sections.push({ title: title.trim(), items: [] }); });
+  };
+  const renameSection = (rk, si, value) => mutate((d) => { d[rk].sections[si].title = value; });
+  const removeSection = (rk, si) => {
+    const sec = draft[rk].sections[si];
+    if (sec.items.length && !window.confirm(`Remove the whole "${sec.title}" category (${sec.items.length} items)?`)) return;
+    mutate((d) => { d[rk].sections.splice(si, 1); });
+  };
+
+  const saveChanges = async () => {
+    setBusy(true);
+    try { await saveCurrent({ data: draft }); setDirty(false); setEditing(false); }
+    catch (e) { window.alert('Could not save: ' + (e?.message || e)); }
+    setBusy(false);
+  };
+  const discardChanges = () => {
+    setDraft(structuredClone(current?.data || FINANCE_EXPENSES_2025));
+    setDirty(false); setEditing(false);
+  };
+  const saveReference = async () => {
+    const suggestion = `Expenses ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'short' })}`;
+    const name = window.prompt('Name for this reference (saved as a point-in-time copy):', suggestion);
+    if (!name) return;
+    setBusy(true);
+    try { await createSnapshot({ name, data: draft }); }
+    catch (e) { window.alert('Could not save reference: ' + (e?.message || e)); }
+    setBusy(false);
+  };
+  const removeReference = async (id, name) => {
+    if (!window.confirm(`Delete the reference "${name}"? This cannot be undone.`)) return;
+    if (viewSnapshotId === id) setViewSnapshotId(null);
+    try { await deleteSnapshot({ id }); } catch (e) { window.alert(String(e?.message || e)); }
+  };
+
+  const regionKeys = data ? (scope === 'combined' ? Object.keys(data) : [scope]) : [];
+  const regionTotal = (rk) => data[rk].sections.reduce((s2, sec) => s2 + sec.items.reduce((a, it) => a + (Number(it[1]) || 0), 0), 0);
+  const grand = data ? regionKeys.reduce((s2, rk) => s2 + regionTotal(rk), 0) : 0;
+  const fmtWhen = (ts) => new Date(ts).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const head = (
     <header className="statspage-viewhead">
-      <div><h2>Expenses</h2><p>Fixed monthly expenses — 2025 figures from Uitgawes.xlsx.</p></div>
-      <div className="webstats-controls"><div className="webstats-tabs">
-        {[['combined', 'Combined'], ['gauteng', 'Gauteng'], ['capetown', 'Cape Town']].map(([k, l]) => (
-          <button key={k} type="button" className={scope === k ? 'is-active' : ''} onClick={() => setScope(k)}>{l}</button>
-        ))}
-      </div></div>
+      <div><h2>Expenses</h2><p>Fixed monthly expenses. Edit freely — save a reference first to keep a point-in-time copy.</p></div>
+      <div className="webstats-controls">
+        <div className="webstats-tabs">
+          {[['combined', 'Combined'], ['gauteng', 'Gauteng'], ['capetown', 'Cape Town']].map(([k, l]) => (
+            <button key={k} type="button" className={scope === k ? 'is-active' : ''} onClick={() => setScope(k)}>{l}</button>
+          ))}
+        </div>
+        {!viewingSnapshot ? (editing
+          ? <>
+              <button className="primary-button" type="button" onClick={saveChanges} disabled={busy || !dirty}>{busy ? 'Saving…' : 'Save changes'}</button>
+              <button className="ghost-button" type="button" onClick={discardChanges} disabled={busy}>Cancel</button>
+            </>
+          : <>
+              <button className="ghost-button" type="button" onClick={() => setEditing(true)} disabled={!data}>Edit</button>
+              <button className="ghost-button" type="button" onClick={saveReference} disabled={!data || busy}>Save as reference</button>
+            </>) : null}
+      </div>
     </header>
+  );
+
+  if (!data) {
+    return <div className="statspage-view">{head}<div className="webstats-empty">Loading expenses…</div></div>;
+  }
+
+  return <div className="statspage-view">
+    {head}
+    {viewingSnapshot ? <div className="finx-banner">
+      <span>Viewing reference: <strong>{snapshot?.name || '…'}</strong>{snapshot ? ` (saved ${fmtWhen(snapshot.createdAt)})` : ''} — read-only.</span>
+      <button className="ghost-button" type="button" onClick={() => setViewSnapshotId(null)}>Back to current</button>
+    </div> : null}
+    {snapshots?.length ? <div className="finx-history">
+      <span className="finx-history-label">References:</span>
+      {snapshots.map((s2) => (
+        <span key={s2.id} className={`finx-hist-pill${viewSnapshotId === s2.id ? ' is-active' : ''}`}>
+          <button type="button" className="finx-hist-open" onClick={() => setViewSnapshotId(viewSnapshotId === s2.id ? null : s2.id)} title={`Saved ${fmtWhen(s2.createdAt)} by ${s2.createdByEmail}`}>{s2.name}</button>
+          <button type="button" className="finx-hist-del" aria-label={`Delete ${s2.name}`} onClick={() => removeReference(s2.id, s2.name)}>&times;</button>
+        </span>
+      ))}
+    </div> : null}
     <div className="webstats-kpis finx-kpis">
       <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(grand)}</div><div className="webstats-kpi-label">Total monthly expenses{scope === 'combined' ? ' (combined)' : ''}</div></div>
       {(FINANCE_BREAKEVEN[scope] || []).map(([label, val]) => (
         <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{finR(val)}</div><div className="webstats-kpi-label">{label} turnover</div></div>
       ))}
     </div>
-    {regions.map((key) => {
-      const region = FINANCE_EXPENSES_2025[key];
-      return <div className="webstats-section" key={key}>
-        <h4>{region.label} <span>{finR(regionTotal(key))} / month</span></h4>
+    {regionKeys.map((rk) => {
+      const region = data[rk];
+      return <div className="webstats-section" key={rk}>
+        <h4>{region.label} <span>{finR(regionTotal(rk))} / month</span>
+          {editing && !viewingSnapshot ? <button className="finx-add-cat" type="button" onClick={() => addSection(rk)}>+ Add category</button> : null}
+        </h4>
         <div className="finx-grid">
-          {region.sections.map((sec) => {
-            const secTotal = sec.items.reduce((a, [, v]) => a + v, 0);
-            return <div className="finx-card" key={sec.title}>
-              <div className="finx-card-head"><strong>{sec.title}</strong><span>{finR(secTotal)}</span></div>
-              {sec.items.map(([name, val], i) => (
-                <div className="finx-row" key={name + i}><span>{name}</span><span>{val ? finR(val) : '—'}</span></div>
+          {region.sections.map((sec, si) => {
+            const secTotal = sec.items.reduce((a, it) => a + (Number(it[1]) || 0), 0);
+            return <div className="finx-card" key={si}>
+              <div className="finx-card-head">
+                {editing && !viewingSnapshot
+                  ? <input className="finx-input finx-input-title" value={sec.title} onChange={(e) => renameSection(rk, si, e.target.value)} />
+                  : <strong>{sec.title}</strong>}
+                <span>{finR(secTotal)}</span>
+                {editing && !viewingSnapshot ? <button className="finx-del" type="button" aria-label="Remove category" onClick={() => removeSection(rk, si)}>&times;</button> : null}
+              </div>
+              {sec.items.map((it, ii) => (
+                editing && !viewingSnapshot
+                  ? <div className="finx-row is-edit" key={ii}>
+                      <input className="finx-input" value={it[0]} onChange={(e) => setItem(rk, si, ii, 'name', e.target.value)} />
+                      <input className="finx-input finx-input-amount" inputMode="numeric" value={it[1]} onChange={(e) => setItem(rk, si, ii, 'amount', e.target.value)} />
+                      <button className="finx-del" type="button" aria-label="Remove item" onClick={() => removeItem(rk, si, ii)}>&times;</button>
+                    </div>
+                  : <div className="finx-row" key={ii}><span>{it[0]}</span><span>{Number(it[1]) ? finR(it[1]) : '—'}</span></div>
               ))}
+              {editing && !viewingSnapshot ? <button className="finx-add-item" type="button" onClick={() => addItem(rk, si)}>+ Add expense</button> : null}
             </div>;
           })}
         </div>
       </div>;
     })}
-    <p className="webstats-muted finx-note">Totals are computed from the line items. Note: the sheet&apos;s Insurance subtotal (R 15 300) doesn&apos;t match its own items (R 12 989) — the computed figure is used here, so the Gauteng total shows R 339 153 vs the sheet&apos;s R 341 464.</p>
+    {!viewingSnapshot && current && !current.exists && !dirty ? <p className="webstats-muted finx-note">Showing the 2025 figures from Uitgawes.xlsx — nothing saved to the database yet. Hit Edit &rarr; Save changes (or Save as reference) to persist them.</p> : null}
+    {dirty ? <p className="webstats-muted finx-note">Unsaved changes — totals update live; hit Save changes to persist.</p> : null}
   </div>;
 }
 
