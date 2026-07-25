@@ -6738,7 +6738,7 @@ function CommissionView({ reports }) {
 
   const countsForCommission = (status) => {
     const s2 = String(status || '').trim().toLowerCase();
-    return s2 === 'completed' || s2 === 'in progress';
+    return s2 === 'event completed' || s2 === 'completed' || s2 === 'in progress';
   };
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const rows = months.map((label, idx) => {
@@ -6769,7 +6769,7 @@ function CommissionView({ reports }) {
 
   return <div className="statspage-view">
     <header className="statspage-viewhead">
-      <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Completed + In Progress events, {year}.</p></div>
+      <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Event Completed + In Progress events, {year}.</p></div>
     </header>
     <div className="webstats-kpis finx-kpis">
       <div className="webstats-kpi"><div className="webstats-kpi-val">{finR(totalTurnover)}</div><div className="webstats-kpi-label">GP Package-Only turnover {year}</div></div>
@@ -6809,7 +6809,7 @@ function CommissionView({ reports }) {
         <span className="finx-step is-more">…continues +{finR(cfg.amount)} per {finR(cfg.step)}</span>
       </div>
     </div>
-    <p className="webstats-muted finx-note">Counts events whose Branch includes GP with status Completed or In Progress; month taken from the event date. GP monthly expenses come from the Expenses page&apos;s Gauteng total (current saved figures).</p>
+    <p className="webstats-muted finx-note">Counts events whose Branch includes GP with status Event Completed or In Progress; month taken from the event date. GP monthly expenses come from the Expenses page&apos;s Gauteng total (current saved figures).</p>
   </div>;
 }
 
