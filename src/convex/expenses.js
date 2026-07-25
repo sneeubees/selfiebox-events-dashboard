@@ -84,3 +84,29 @@ export const deleteSnapshot = mutation({
     return { ok: true };
   },
 });
+
+// ---- Commission ladder config (Finances > Commission) ----
+// start = turnover where commission begins, step = bracket size, amount = R per bracket.
+const LADDER_DEFAULTS = { start: 350000, step: 50000, amount: 2000 };
+
+export const getCommissionConfig = query({
+  args: {},
+  handler: async (ctx) => {
+    try { await requireAdmin(ctx); } catch { return null; }
+    const row = await ctx.db.query("commissionConfig").first();
+    return row ? { start: row.start, step: row.step, amount: row.amount } : { ...LADDER_DEFAULTS };
+  },
+});
+
+export const saveCommissionConfig = mutation({
+  args: { start: v.number(), step: v.number(), amount: v.number() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    if (args.start <= 0 || args.step <= 0 || args.amount <= 0) throw new Error("All ladder values must be positive.");
+    const row = await ctx.db.query("commissionConfig").first();
+    const doc = { start: args.start, step: args.step, amount: args.amount, updatedAt: Date.now() };
+    if (row) await ctx.db.patch(row._id, doc);
+    else await ctx.db.insert("commissionConfig", doc);
+    return { ok: true };
+  },
+});

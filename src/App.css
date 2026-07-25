@@ -2301,3 +2301,8 @@ button.report-th.is-sorted { color: var(--blue); }
 .finx-input-title { font-weight: 700; font-size: 0.85rem; }
 .finx-del { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 2px 4px; }
 .finx-del:hover { color: #f08080; }
+.webstats-kpi.is-danger { border-color: rgba(235, 90, 90, 0.45); }
+.webstats-kpi.is-danger .webstats-kpi-val { color: #f08080; }
+.finx-ladder-edit { display: inline-flex; align-items: center; gap: 10px; margin-left: 12px; flex-wrap: wrap; }
+.finx-ladder-field { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--muted); font-weight: 600; }
+.finx-ladder-field .finx-input-amount { width: 92px; }

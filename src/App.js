@@ -6715,45 +6715,75 @@ function ExpensesView() {
   </div>;
 }
 
-// ---- Finances: Commission (TK, current ladder from Uitgawes.xlsx Sheet2) ----
-// R2 000 once monthly turnover reaches R350 000, +R2 000 per further R50 000.
-// Turnover basis = the "Package Only" column, Gauteng events only.
-function tkCommissionFor(turnover) {
-  if (turnover < 350000) return 0;
-  return 2000 * (Math.floor((turnover - 350000) / 50000) + 1);
+// ---- Finances: Commission (TK) ----
+// Ladder is stored in convex (commissionConfig) and editable in the UI.
+// Turnover basis: "Package Only" on Gauteng events with status Completed or In Progress.
+function tkCommissionFor(turnover, cfg) {
+  if (!cfg || turnover < cfg.start) return 0;
+  return cfg.amount * (Math.floor((turnover - cfg.start) / cfg.step) + 1);
 }
 
 function CommissionView({ reports }) {
   const year = reports?.year || new Date().getFullYear();
   const events = useQuery(api.events.listByWorkspaceYear, { workspaceYear: year }) || [];
+  const ladderCfg = useQuery(api.expenses.getCommissionConfig, {});
+  const expensesCurrent = useQuery(api.expenses.getCurrent, {});
+  const saveLadder = useMutation(api.expenses.saveCommissionConfig);
+  const [editLadder, setEditLadder] = useState(false);
+  const [ladderDraft, setLadderDraft] = useState(null);
+  const cfg = ladderCfg || { start: 350000, step: 50000, amount: 2000 };
+
+  const expensesData = expensesCurrent?.data || FINANCE_EXPENSES_2025;
+  const gpExpenses = (expensesData.gauteng?.sections || []).reduce((s2, sec) => s2 + sec.items.reduce((a, it) => a + (Number(it[1]) || 0), 0), 0);
+
+  const countsForCommission = (status) => {
+    const s2 = String(status || '').trim().toLowerCase();
+    return s2 === 'completed' || s2 === 'in progress';
+  };
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const rows = months.map((label, idx) => {
     const turnover = events.reduce((sum, event) => {
       if (!(event.branch || []).includes('GP')) return sum;
+      if (!countsForCommission(event.status)) return sum;
       const d = new Date(`${event.date}T12:00:00`);
       if (!Number.isFinite(d.getTime()) || d.getMonth() !== idx || d.getFullYear() !== year) return sum;
       return sum + reportParseMoney(event.packageOnly);
     }, 0);
-    return { label, turnover, commission: tkCommissionFor(turnover) };
+    return { label, turnover, commission: tkCommissionFor(turnover, cfg) };
   });
-  const totalTurnover = rows.reduce((s, r) => s + r.turnover, 0);
-  const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+  const totalTurnover = rows.reduce((s2, r) => s2 + r.turnover, 0);
+  const totalCommission = rows.reduce((s2, r) => s2 + r.commission, 0);
+
+  const startLadderEdit = () => { setLadderDraft({ ...cfg }); setEditLadder(true); };
+  const saveLadderEdit = async () => {
+    try {
+      await saveLadder({ start: Number(ladderDraft.start) || 0, step: Number(ladderDraft.step) || 0, amount: Number(ladderDraft.amount) || 0 });
+      setEditLadder(false);
+    } catch (e) { window.alert('Could not save ladder: ' + (e?.message || e)); }
+  };
+  const ladderField = (key, label) => (
+    <label className="finx-ladder-field"><span>{label}</span>
+      <input className="finx-input finx-input-amount" inputMode="numeric" value={ladderDraft?.[key] ?? ''} onChange={(e) => setLadderDraft((c) => ({ ...c, [key]: e.target.value.replace(/[^0-9]/g, '') }))} />
+    </label>
+  );
+
   return <div className="statspage-view">
     <header className="statspage-viewhead">
-      <div><h2>Commission — TK</h2><p>Based on Gauteng &ldquo;Package Only&rdquo; turnover for {year}. R2 000 from R350k, +R2 000 per further R50k.</p></div>
+      <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Completed + In Progress events, {year}.</p></div>
     </header>
     <div className="webstats-kpis finx-kpis">
       <div className="webstats-kpi"><div className="webstats-kpi-val">{finR(totalTurnover)}</div><div className="webstats-kpi-label">GP Package-Only turnover {year}</div></div>
       <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(totalCommission)}</div><div className="webstats-kpi-label">TK commission {year}</div></div>
+      <div className="webstats-kpi is-danger"><div className="webstats-kpi-val">{finR(gpExpenses)}</div><div className="webstats-kpi-label">GP monthly expenses</div></div>
     </div>
     <div className="webstats-section">
       <h4>Per month <span>{year}</span></h4>
       <div className="ads-table-wrap"><table className="ads-table finx-table">
         <thead><tr><th>Month</th><th>GP Package-Only turnover</th><th>Next step</th><th>TK commission</th></tr></thead>
         <tbody>{rows.map((r) => {
-          const next = r.turnover >= 350000
-            ? finR(350000 + 50000 * (Math.floor((r.turnover - 350000) / 50000) + 1))
-            : finR(350000);
+          const next = r.turnover >= cfg.start
+            ? finR(cfg.start + cfg.step * (Math.floor((r.turnover - cfg.start) / cfg.step) + 1))
+            : finR(cfg.start);
           return <tr key={r.label} className={r.commission ? '' : 'is-paused'}>
             <td>{r.label}</td><td>{finR(r.turnover)}</td><td>{next}</td>
             <td>{r.commission ? <strong>{finR(r.commission)}</strong> : '—'}</td>
@@ -6762,15 +6792,24 @@ function CommissionView({ reports }) {
       </table></div>
     </div>
     <div className="webstats-section">
-      <h4>The ladder</h4>
+      <h4>The ladder
+        {!editLadder ? <button className="finx-add-cat" type="button" onClick={startLadderEdit}>Edit ladder</button>
+          : <span className="finx-ladder-edit">
+              {ladderField('start', 'Starts at R')}
+              {ladderField('step', 'Step R')}
+              {ladderField('amount', 'Pays R per step')}
+              <button className="primary-button" type="button" onClick={saveLadderEdit}>Save</button>
+              <button className="ghost-button" type="button" onClick={() => setEditLadder(false)}>Cancel</button>
+            </span>}
+      </h4>
       <div className="finx-ladder">
-        {[350, 400, 450, 500, 550, 600, 650, 700].map((t, i) => (
-          <span className="finx-step" key={t}>{`R${t}k → R${(i + 1) * 2}k`}</span>
+        {Array.from({ length: 8 }, (_, i) => (
+          <span className="finx-step" key={i}>{`R${Math.round((cfg.start + i * cfg.step) / 1000)}k → R${Math.round(((i + 1) * cfg.amount) / 1000)}k`}</span>
         ))}
-        <span className="finx-step is-more">…continues +R2k per R50k</span>
+        <span className="finx-step is-more">…continues +{finR(cfg.amount)} per {finR(cfg.step)}</span>
       </div>
     </div>
-    <p className="webstats-muted finx-note">Assumptions to check: counts every event whose Branch includes GP (any status); month taken from the event date; the sheet&apos;s older ladder (starting at R250k) and the &ldquo;TK Basic&rdquo; cells were ignored in favour of the current ladder.</p>
+    <p className="webstats-muted finx-note">Counts events whose Branch includes GP with status Completed or In Progress; month taken from the event date. GP monthly expenses come from the Expenses page&apos;s Gauteng total (current saved figures).</p>
   </div>;
 }
 

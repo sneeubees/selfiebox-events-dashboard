@@ -345,6 +345,12 @@ export default defineSchema({
     updatedAt: v.number(),
     updatedByEmail: v.optional(v.string()),
   }),
+  commissionConfig: defineTable({
+    start: v.number(),
+    step: v.number(),
+    amount: v.number(),
+    updatedAt: v.number(),
+  }),
   expenseSnapshots: defineTable({
     name: v.string(),
     data: v.any(),
