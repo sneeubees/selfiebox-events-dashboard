@@ -2270,3 +2270,18 @@ button.report-th.is-sorted { color: var(--blue); }
 .aireport-starterr { margin-bottom: 10px; }
 .aireport-num { color: #6fb2ff; font-weight: 700; font-variant-numeric: tabular-nums; }
 :root[data-theme="light"] .aireport-num { color: #1d63d8; }
+
+/* Finances: Expenses + Commission views */
+.finx-kpis { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+.finx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.finx-card { background: rgba(120, 160, 230, 0.06); border: 1px solid rgba(140, 170, 220, 0.14); border-radius: 12px; padding: 12px 14px; }
+.finx-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 0.85rem; color: var(--text); }
+.finx-card-head span { font-weight: 700; color: #6fb2ff; font-size: 0.8rem; }
+.finx-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: var(--muted); padding: 3px 0; border-bottom: 1px dashed rgba(140, 170, 220, 0.08); }
+.finx-row:last-child { border-bottom: 0; }
+.finx-row span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+.finx-note { margin-top: 14px; font-size: 0.75rem; }
+.finx-table td strong { color: #58d98f; }
+.finx-ladder { display: flex; flex-wrap: wrap; gap: 8px; }
+.finx-step { background: rgba(90, 150, 245, 0.12); border: 1px solid rgba(90, 150, 245, 0.3); color: var(--text); font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.finx-step.is-more { background: transparent; border-style: dashed; color: var(--muted); font-weight: 400; }

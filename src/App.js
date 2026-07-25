@@ -6419,7 +6419,11 @@ const NAV_ICON = {
 
 // Left-nav for the Information & Reporting page: top-level items + expandable groups.
 const INFO_NAV = [
-  { type: 'item', key: 'turnover', label: 'Turnover Figures', icon: NAV_ICON.turnover },
+  { type: 'group', key: 'finances', label: 'Finances', icon: NAV_ICON.turnover, children: [
+    { key: 'turnover', label: 'Turnover Figures' },
+    { key: 'expenses', label: 'Expenses' },
+    { key: 'commission', label: 'Commission' },
+  ] },
   { type: 'group', key: 'web', label: 'Website', icon: NAV_ICON.website, children: [
     { key: 'website', label: 'Website Stats' },
     { key: 'seo', label: 'SEO Stats' },
@@ -6459,7 +6463,7 @@ function seoRange(key) {
 // Full-screen Information & Reporting area with its own grouped left-nav.
 function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, reports }) {
   const [tab, setTab] = useState(initialTab || 'turnover');
-  const [openGroups, setOpenGroups] = useState({ web: true, reporting: true });
+  const [openGroups, setOpenGroups] = useState({ finances: true, web: true, reporting: true });
   const connectUrl = useQuery(api.ga4.getConnectUrl, (canAccess && isAdmin) ? {} : 'skip');
   const openConnect = () => { if (connectUrl) window.open(connectUrl, '_blank', 'noopener'); };
   const toggleGroup = (key) => setOpenGroups((groups) => ({ ...groups, [key]: !groups[key] }));
@@ -6508,6 +6512,8 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
       </aside>
       <main className="statspage-body">
         {tab === 'turnover' ? <TurnoverView isAdmin={isAdmin} turnover={turnover} /> : null}
+        {tab === 'expenses' ? <ExpensesView /> : null}
+        {tab === 'commission' ? <CommissionView reports={reports} /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
@@ -6522,6 +6528,134 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
 }
 
 // Turnover history table, now built directly into the Information & Reporting page.
+// ---- Finances: Expenses (from Uitgawes.xlsx, 2025 fixed-monthly column) ----
+const FINANCE_EXPENSES_2025 = {
+  gauteng: { label: 'Gauteng', sections: [
+    { title: 'Salaries', items: [['TK Sikonela', 12500], ['Amanda Snyman', 0], ['Joseph', 6955], ['Tshepo', 7490], ['Nicole', 14124], ['Tamika', 8560], ['Stephan', 80000], ['Johan', 80000], ['Andrea', 5500], ['Sara', 4500], ['Gingy', 1440]] },
+    { title: 'Vehicles', items: [['Triber 1', 2900], ['Triber 2', 2700], ['Ford Transit', 4200], ['BMW', 9200], ['Hawal', 6400], ['Ford Ranger', 4100]] },
+    { title: 'Insurance', items: [['Ford', 1350], ['Doblo', 850], ['Triber', 1230], ['Triber (2)', 960], ['Ranger', 1190], ['Haval', 1700], ['Suzuki', 1000], ['Ford (2)', 1400], ['BMW', 2250], ['Electronic Equipment', 240], ['SASRIA', 205], ['Huisinhoud Coetzee', 614]] },
+    { title: 'Services', items: [['Cornelia', 3000], ['Nikita', 4500], ['Sone', 2000], ['Pink Book', 300], ['Bank Fees', 600], ['Google Ads', 10000]] },
+    { title: 'Fuel', items: [['Petrol (non-event)', 6000]] },
+    { title: 'Donations', items: [['CRC GP (Advertising)', 10000], ['CRC CT (Advertising)', 10000]] },
+    { title: 'Office Expenses', items: [['Bull Security', 945], ['Electricity', 1000], ['Rent Malcolm 309', 9000], ['Storage Rent', 10000], ['General Office Expenses', 1000], ['Miscellaneous', 1000]] },
+    { title: 'Mobile & Internet', items: [['Office Internet', 1000], ['Office VOIP', 500], ['MTN Stephan', 1300], ['MTN Johan', 2000], ['SAGE Online', 450], ['SAGE EC SB', 450], ['Sage Payroll', 550]] },
+  ] },
+  capetown: { label: 'Cape Town', sections: [
+    { title: 'Salaries', items: [['Barbara Coetzee', 22042], ['Brian', 0], ['Esther', 35145], ['Lucia', 700]] },
+    { title: 'Vehicles', items: [['Suzuki EECO', 2900]] },
+    { title: 'Mobile & Internet', items: [['Office Internet', 574], ['16 Wenning Internet', 0], ['Sage', 450]] },
+    { title: 'Office Expenses', items: [['Armed Response 16 Wenning', 450], ['Electricity', 1000], ['Rent', 11700], ['Storage Rent', 10000], ['General Office Expenses', 1000], ['Miscellaneous', 1000]] },
+    { title: 'Services', items: [['Curator', 0], ['Bank Fees', 380], ['Google Ads', 2500]] },
+  ] },
+};
+// Sheet break-even notes (70%/80% margins), shown as chips per scope.
+const FINANCE_BREAKEVEN = {
+  gauteng: [['Break even @70%', 480000]],
+  capetown: [['Break even @80%', 110000], ['Break even @70%', 125000]],
+  combined: [['Break even @80%', 530000], ['Break even @70%', 600000]],
+};
+const finR = (n) => 'R ' + Math.round(n).toLocaleString('en-ZA');
+
+function ExpensesView() {
+  const [scope, setScope] = useState('combined');
+  const regions = scope === 'combined' ? ['gauteng', 'capetown'] : [scope];
+  const regionTotal = (key) => FINANCE_EXPENSES_2025[key].sections.reduce((s, sec) => s + sec.items.reduce((a, [, v]) => a + v, 0), 0);
+  const grand = regions.reduce((s, key) => s + regionTotal(key), 0);
+  return <div className="statspage-view">
+    <header className="statspage-viewhead">
+      <div><h2>Expenses</h2><p>Fixed monthly expenses — 2025 figures from Uitgawes.xlsx.</p></div>
+      <div className="webstats-controls"><div className="webstats-tabs">
+        {[['combined', 'Combined'], ['gauteng', 'Gauteng'], ['capetown', 'Cape Town']].map(([k, l]) => (
+          <button key={k} type="button" className={scope === k ? 'is-active' : ''} onClick={() => setScope(k)}>{l}</button>
+        ))}
+      </div></div>
+    </header>
+    <div className="webstats-kpis finx-kpis">
+      <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(grand)}</div><div className="webstats-kpi-label">Total monthly expenses{scope === 'combined' ? ' (combined)' : ''}</div></div>
+      {(FINANCE_BREAKEVEN[scope] || []).map(([label, val]) => (
+        <div className="webstats-kpi" key={label}><div className="webstats-kpi-val">{finR(val)}</div><div className="webstats-kpi-label">{label} turnover</div></div>
+      ))}
+    </div>
+    {regions.map((key) => {
+      const region = FINANCE_EXPENSES_2025[key];
+      return <div className="webstats-section" key={key}>
+        <h4>{region.label} <span>{finR(regionTotal(key))} / month</span></h4>
+        <div className="finx-grid">
+          {region.sections.map((sec) => {
+            const secTotal = sec.items.reduce((a, [, v]) => a + v, 0);
+            return <div className="finx-card" key={sec.title}>
+              <div className="finx-card-head"><strong>{sec.title}</strong><span>{finR(secTotal)}</span></div>
+              {sec.items.map(([name, val], i) => (
+                <div className="finx-row" key={name + i}><span>{name}</span><span>{val ? finR(val) : '—'}</span></div>
+              ))}
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+    <p className="webstats-muted finx-note">Totals are computed from the line items. Note: the sheet&apos;s Insurance subtotal (R 15 300) doesn&apos;t match its own items (R 12 989) — the computed figure is used here, so the Gauteng total shows R 339 153 vs the sheet&apos;s R 341 464.</p>
+  </div>;
+}
+
+// ---- Finances: Commission (TK, current ladder from Uitgawes.xlsx Sheet2) ----
+// R2 000 once monthly turnover reaches R350 000, +R2 000 per further R50 000.
+// Turnover basis = the "Package Only" column, Gauteng events only.
+function tkCommissionFor(turnover) {
+  if (turnover < 350000) return 0;
+  return 2000 * (Math.floor((turnover - 350000) / 50000) + 1);
+}
+
+function CommissionView({ reports }) {
+  const year = reports?.year || new Date().getFullYear();
+  const events = useQuery(api.events.listByWorkspaceYear, { workspaceYear: year }) || [];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const rows = months.map((label, idx) => {
+    const turnover = events.reduce((sum, event) => {
+      if (!(event.branch || []).includes('GP')) return sum;
+      const d = new Date(`${event.date}T12:00:00`);
+      if (!Number.isFinite(d.getTime()) || d.getMonth() !== idx || d.getFullYear() !== year) return sum;
+      return sum + reportParseMoney(event.packageOnly);
+    }, 0);
+    return { label, turnover, commission: tkCommissionFor(turnover) };
+  });
+  const totalTurnover = rows.reduce((s, r) => s + r.turnover, 0);
+  const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+  return <div className="statspage-view">
+    <header className="statspage-viewhead">
+      <div><h2>Commission — TK</h2><p>Based on Gauteng &ldquo;Package Only&rdquo; turnover for {year}. R2 000 from R350k, +R2 000 per further R50k.</p></div>
+    </header>
+    <div className="webstats-kpis finx-kpis">
+      <div className="webstats-kpi"><div className="webstats-kpi-val">{finR(totalTurnover)}</div><div className="webstats-kpi-label">GP Package-Only turnover {year}</div></div>
+      <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(totalCommission)}</div><div className="webstats-kpi-label">TK commission {year}</div></div>
+    </div>
+    <div className="webstats-section">
+      <h4>Per month <span>{year}</span></h4>
+      <div className="ads-table-wrap"><table className="ads-table finx-table">
+        <thead><tr><th>Month</th><th>GP Package-Only turnover</th><th>Next step</th><th>TK commission</th></tr></thead>
+        <tbody>{rows.map((r) => {
+          const next = r.turnover >= 350000
+            ? finR(350000 + 50000 * (Math.floor((r.turnover - 350000) / 50000) + 1))
+            : finR(350000);
+          return <tr key={r.label} className={r.commission ? '' : 'is-paused'}>
+            <td>{r.label}</td><td>{finR(r.turnover)}</td><td>{next}</td>
+            <td>{r.commission ? <strong>{finR(r.commission)}</strong> : '—'}</td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+    </div>
+    <div className="webstats-section">
+      <h4>The ladder</h4>
+      <div className="finx-ladder">
+        {[350, 400, 450, 500, 550, 600, 650, 700].map((t, i) => (
+          <span className="finx-step" key={t}>{`R${t}k → R${(i + 1) * 2}k`}</span>
+        ))}
+        <span className="finx-step is-more">…continues +R2k per R50k</span>
+      </div>
+    </div>
+    <p className="webstats-muted finx-note">Assumptions to check: counts every event whose Branch includes GP (any status); month taken from the event date; the sheet&apos;s older ladder (starting at R250k) and the &ldquo;TK Basic&rdquo; cells were ignored in favour of the current ladder.</p>
+  </div>;
+}
+
 function TurnoverView({ isAdmin, turnover }) {
   if (!isAdmin || !turnover) {
     return (
