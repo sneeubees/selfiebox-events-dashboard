@@ -345,6 +345,11 @@ export default defineSchema({
     updatedAt: v.number(),
     updatedByEmail: v.optional(v.string()),
   }),
+  directorsCurrent: defineTable({
+    data: v.any(),
+    updatedAt: v.number(),
+    updatedByEmail: v.optional(v.string()),
+  }),
   commissionConfig: defineTable({
     start: v.number(),
     step: v.number(),

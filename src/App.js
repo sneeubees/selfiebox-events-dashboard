@@ -6423,6 +6423,7 @@ const INFO_NAV = [
     { key: 'turnover', label: 'Turnover Figures' },
     { key: 'expenses', label: 'Expenses' },
     { key: 'commission', label: 'Commission' },
+    { key: 'directors', label: 'Directors' },
   ] },
   { type: 'group', key: 'web', label: 'Website', icon: NAV_ICON.website, children: [
     { key: 'website', label: 'Website Stats' },
@@ -6514,6 +6515,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'turnover' ? <TurnoverView isAdmin={isAdmin} turnover={turnover} /> : null}
         {tab === 'expenses' ? <ExpensesView /> : null}
         {tab === 'commission' ? <CommissionView reports={reports} /> : null}
+        {tab === 'directors' ? <DirectorsView /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
@@ -6712,6 +6714,88 @@ function ExpensesView() {
     })}
     {!viewingSnapshot && current && !current.exists && !dirty ? <p className="webstats-muted finx-note">Showing the 2025 figures from Uitgawes.xlsx — nothing saved to the database yet. Hit Edit &rarr; Save changes (or Save as reference) to persist them.</p> : null}
     {dirty ? <p className="webstats-muted finx-note">Unsaved changes — totals update live; hit Save changes to persist.</p> : null}
+  </div>;
+}
+
+// ---- Finances: Directors remuneration ----
+const DIRECTORS_SEED = {
+  johan: { label: 'Johan Coetzee', items: [['Salary', 80000]] },
+  stephan: { label: 'Stephan Swart', items: [['Salary', 80000]] },
+};
+
+function DirectorsView() {
+  const current = useQuery(api.expenses.getDirectors, {});
+  const saveDirectors = useMutation(api.expenses.saveDirectors);
+  const [draft, setDraft] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (current === undefined || draft !== null) return;
+    setDraft(structuredClone(current?.data || DIRECTORS_SEED));
+    // eslint-disable-next-line
+  }, [current]);
+
+  const mutate = (fn) => setDraft((cur) => { const next = structuredClone(cur); fn(next); setDirty(true); return next; });
+  const setItem = (dk, ii, field, value) => mutate((d) => {
+    const item = d[dk].items[ii];
+    if (field === 'name') item[0] = value;
+    else item[1] = Math.max(0, reportParseMoney(value));
+  });
+  const addItem = (dk) => mutate((d) => { d[dk].items.push(['New amount', 0]); });
+  const removeItem = (dk, ii) => mutate((d) => { d[dk].items.splice(ii, 1); });
+  const totalFor = (dk) => draft ? draft[dk].items.reduce((a, it) => a + (Number(it[1]) || 0), 0) : 0;
+
+  const saveChanges = async () => {
+    setBusy(true);
+    try { await saveDirectors({ data: draft }); setDirty(false); setEditing(false); }
+    catch (e) { window.alert('Could not save: ' + (e?.message || e)); }
+    setBusy(false);
+  };
+  const discardChanges = () => { setDraft(structuredClone(current?.data || DIRECTORS_SEED)); setDirty(false); setEditing(false); };
+
+  const keys = ['johan', 'stephan'];
+  return <div className="statspage-view">
+    <header className="statspage-viewhead">
+      <div><h2>Directors</h2><p>Remuneration per director — monthly amounts.</p></div>
+      <div className="webstats-controls">
+        {editing
+          ? <>
+              <button className="primary-button" type="button" onClick={saveChanges} disabled={busy || !dirty}>{busy ? 'Saving…' : 'Save changes'}</button>
+              <button className="ghost-button" type="button" onClick={discardChanges} disabled={busy}>Cancel</button>
+            </>
+          : <button className="ghost-button" type="button" onClick={() => setEditing(true)} disabled={!draft}>Edit</button>}
+      </div>
+    </header>
+    {!draft ? <div className="webstats-empty">Loading&hellip;</div> : <>
+      <div className="webstats-kpis finx-kpis">
+        {keys.map((dk) => (
+          <div className="webstats-kpi is-highlight" key={dk}>
+            <div className="webstats-kpi-val">{finR(totalFor(dk))}</div>
+            <div className="webstats-kpi-label">{draft[dk].label} — total</div>
+          </div>
+        ))}
+      </div>
+      <div className="finx-directors">
+        {keys.map((dk) => (
+          <div className="finx-card" key={dk}>
+            <div className="finx-card-head"><strong>{draft[dk].label}</strong><span>{finR(totalFor(dk))}</span></div>
+            {draft[dk].items.map((it, ii) => (
+              editing
+                ? <div className="finx-row is-edit" key={ii}>
+                    <input className="finx-input" value={it[0]} onChange={(e) => setItem(dk, ii, 'name', e.target.value)} />
+                    <input className="finx-input finx-input-amount" inputMode="numeric" value={it[1]} onChange={(e) => setItem(dk, ii, 'amount', e.target.value)} />
+                    <button className="finx-del" type="button" aria-label="Remove" onClick={() => removeItem(dk, ii)}>&times;</button>
+                  </div>
+                : <div className="finx-row" key={ii}><span>{it[0]}</span><span>{Number(it[1]) ? finR(it[1]) : '—'}</span></div>
+            ))}
+            {editing ? <button className="finx-add-item" type="button" onClick={() => addItem(dk)}>+ Add amount</button> : null}
+          </div>
+        ))}
+      </div>
+      {dirty ? <p className="webstats-muted finx-note">Unsaved changes — totals update live; hit Save changes to persist.</p> : null}
+    </>}
   </div>;
 }
 

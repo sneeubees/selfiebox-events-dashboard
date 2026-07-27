@@ -2306,3 +2306,5 @@ button.report-th.is-sorted { color: var(--blue); }
 .finx-ladder-edit { display: inline-flex; align-items: center; gap: 10px; margin-left: 12px; flex-wrap: wrap; }
 .finx-ladder-field { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--muted); font-weight: 600; }
 .finx-ladder-field .finx-input-amount { width: 92px; }
+.finx-directors { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 14px; }
+@media (max-width: 720px) { .finx-directors { grid-template-columns: 1fr; } }

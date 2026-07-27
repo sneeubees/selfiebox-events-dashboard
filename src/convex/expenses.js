@@ -110,3 +110,27 @@ export const saveCommissionConfig = mutation({
     return { ok: true };
   },
 });
+
+// ---- Directors remuneration (Finances > Directors) ----
+// Single editable doc: { johan: {label, items:[[name, amount],...]}, stephan: {...} }
+export const getDirectors = query({
+  args: {},
+  handler: async (ctx) => {
+    try { await requireAdmin(ctx); } catch { return null; }
+    const row = await ctx.db.query("directorsCurrent").first();
+    if (!row) return { exists: false, data: null, updatedAt: null };
+    return { exists: true, data: row.data, updatedAt: row.updatedAt };
+  },
+});
+
+export const saveDirectors = mutation({
+  args: { data: v.any() },
+  handler: async (ctx, { data }) => {
+    const user = await requireAdmin(ctx);
+    const now = Date.now();
+    const row = await ctx.db.query("directorsCurrent").first();
+    if (row) await ctx.db.patch(row._id, { data, updatedAt: now, updatedByEmail: user.email || "" });
+    else await ctx.db.insert("directorsCurrent", { data, updatedAt: now, updatedByEmail: user.email || "" });
+    return { ok: true };
+  },
+});
