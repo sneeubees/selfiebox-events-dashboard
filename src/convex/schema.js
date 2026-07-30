@@ -118,6 +118,10 @@ export default defineSchema({
     // never overwritten again. Drives the dashboard's new-request row
     // highlight + avatar swap (see events.js upsert()).
     firstStatusChangeByUserId: v.optional(v.id("users")),
+    // Structured status history: {status, at} appended on every status change
+    // (from Jul 2026). Booking build-up stats read this first, falling back to
+    // activity-log text for older events.
+    statusTimeline: v.optional(v.array(v.object({ status: v.string(), at: v.number() }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

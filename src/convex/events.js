@@ -524,6 +524,10 @@ export const upsert = mutation({
       ) {
         payload.firstStatusChangeByUserId = currentUser._id;
       }
+      // Structured status history for booking build-up stats - every change stamped.
+      if (payload.status && payload.status !== existing.status) {
+        payload.statusTimeline = [...(existing.statusTimeline || []), { status: payload.status, at: Date.now() }];
+      }
       await ctx.db.patch(existing._id, payload);
       const refreshed = await ctx.db.get(existing._id);
       const changedFields = getChangedEventFields(existing, refreshed);

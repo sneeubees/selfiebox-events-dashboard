@@ -6907,6 +6907,8 @@ function TurnoverView({ isAdmin, turnover }) {
     );
   }
   const { region, setRegion, regionOptions, netProfitPct, setNetProfitPct, rows, exportToExcel } = turnover;
+  const [drill, setDrill] = useState(null); // {year, monthIndex, monthLabel}
+  const regionLabel = (regionOptions.find((o) => o.value === region) || {}).label || region;
   return (
     <div className="statspage-view statspage-view-wide">
       <header className="statspage-viewhead"><div><h2>Turnover Figures</h2></div></header>
@@ -6951,6 +6953,19 @@ function TurnoverView({ isAdmin, turnover }) {
                 const content = row.rowType === 'diffPct'
                   ? formatTurnoverGrowthPct(value)
                   : formatTurnoverCurrency(value);
+                const monthIdx = TURNOVER_HISTORY_DATA.months.indexOf(month);
+                const rowYear = Number(row.label);
+                const drillable = !['diff', 'diffPct', 'totals'].includes(row.rowType || '')
+                  && Number.isFinite(rowYear) && rowYear >= 2026
+                  && !(rowYear === 2026 && monthIdx < 3);
+                if (drillable) {
+                  return <span
+                    className={`${monthClassNames} is-drillable`} key={`${row.key}-${month}`} role="button" tabIndex={0}
+                    title="Click for the booking build-up"
+                    onClick={() => setDrill({ year: rowYear, monthIndex: monthIdx, monthLabel: TURNOVER_MONTH_LABELS[month] || month })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setDrill({ year: rowYear, monthIndex: monthIdx, monthLabel: TURNOVER_MONTH_LABELS[month] || month }); }}
+                  >{content}</span>;
+                }
                 return <span className={monthClassNames} key={`${row.key}-${month}`}>{content}</span>;
               })}
               <span className="turnover-value-cell turnover-total-cell">{formatTurnoverCurrency(row.total)}</span>
@@ -6964,8 +6979,58 @@ function TurnoverView({ isAdmin, turnover }) {
           )}
         </div>
       </div>
+      {drill ? <BookingBuildupModal drill={drill} region={region} regionLabel={regionLabel} onClose={() => setDrill(null)} /> : null}
     </div>
   );
+}
+
+// Popup: how a month's confirmed bookings built up over time (click a month
+// cell on the Turnover Figures table). Honors the same region filter.
+function BookingBuildupModal({ drill, region, regionLabel, onClose }) {
+  const data = useQuery(api.bookingStats.monthDrilldown, { workspaceYear: drill.year, monthIndex: drill.monthIndex, region });
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const R = (n) => 'R ' + Math.round(n || 0).toLocaleString('en-ZA');
+  return <div className="bkdrill-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="bkdrill" role="dialog" aria-modal="true">
+      <header className="bkdrill-head">
+        <div>
+          <h3>{drill.monthLabel} {drill.year} — booking build-up</h3>
+          <p>{regionLabel} · confirmed = first moved to In Progress · amounts = Excl JC</p>
+        </div>
+        <button className="ghost-button" type="button" onClick={onClose}>Close</button>
+      </header>
+      {!data ? <div className="webstats-empty">Crunching the timeline…</div> : <>
+        <div className="webstats-kpis bkdrill-kpis">
+          <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{data.baseline.count}</div><div className="webstats-kpi-label">Confirmed before 1 {data.month} · {R(data.baseline.amount)}</div></div>
+          <div className="webstats-kpi"><div className="webstats-kpi-val">{data.total.count - data.baseline.count - data.after.count}</div><div className="webstats-kpi-label">Added during {data.month} · {R(data.total.amount - data.baseline.amount - data.after.amount)}</div></div>
+          <div className="webstats-kpi"><div className="webstats-kpi-val">{data.total.count}</div><div className="webstats-kpi-label">Total bookings · {R(data.total.amount)}</div></div>
+          <div className="webstats-kpi"><div className="webstats-kpi-val">{data.medianLeadDays}d</div><div className="webstats-kpi-label">Median lead time</div></div>
+        </div>
+        <div className="webstats-section">
+          <h4>Week by week</h4>
+          <div className="ads-table-wrap"><table className="ads-table">
+            <thead><tr><th>Confirmed</th><th>Bookings</th><th>Value (Excl JC)</th></tr></thead>
+            <tbody>
+              <tr><td>Before 1 {data.month}</td><td>{data.baseline.count}</td><td>{R(data.baseline.amount)}</td></tr>
+              {data.weeks.map((w) => <tr key={w.label} className={w.count ? '' : 'is-paused'}><td>Week {w.label}</td><td>{w.count || '—'}</td><td>{w.count ? R(w.amount) : '—'}</td></tr>)}
+              {data.after.count ? <tr><td>After {data.month} ended</td><td>{data.after.count}</td><td>{R(data.after.amount)}</td></tr> : null}
+            </tbody>
+          </table></div>
+        </div>
+        <div className="webstats-section">
+          <h4>How far in advance</h4>
+          <div className="finx-ladder">
+            {data.leadBuckets.map(([label, n]) => <span className="finx-step" key={label}>{label}: {n}</span>)}
+          </div>
+        </div>
+        <p className="webstats-muted finx-note">Data quality: {data.quality.exact} exact · {data.quality.heuristic} estimated from old logs (last change assumed = Event Completed, the one before = In Progress) · {data.quality.created} added after the event (creation date used). Multi-day duplicate days legitimately carry R0.</p>
+      </>}
+    </div>
+  </div>;
 }
 
 // GA4 website traffic (visits / pages / sources / countries / conversions).
