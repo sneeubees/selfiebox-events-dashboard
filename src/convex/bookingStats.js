@@ -137,22 +137,26 @@ export const monthDrilldown = query({
     const baseline = { count: 0, amount: 0 };
     const after = { count: 0, amount: 0 };
     const quality = { exact: 0, heuristic: 0, created: 0 };
-    const leadDays = [];
+    const leads = []; // {days, amount} per event
 
     for (const event of monthEvents) {
       const { at, quality: q } = await resolveConfirmedAt(ctx, event);
       const amount = parseAmount(event.customFields?.custom_excl_jc || event.customFields?.exclJc || "");
       quality[q] += 1;
       const eventDate = new Date(`${event.date}T12:00:00`).getTime();
-      leadDays.push(Math.max(0, Math.round((eventDate - at) / 86400000)));
+      leads.push({ days: Math.max(0, Math.round((eventDate - at) / 86400000)), amount });
       if (at < monthStart) { baseline.count += 1; baseline.amount += amount; continue; }
       if (at >= monthEnd) { after.count += 1; after.amount += amount; continue; }
       const week = weeks.find((w) => at >= w.start && at < w.end);
       if (week) { week.count += 1; week.amount += amount; }
     }
 
-    leadDays.sort((a, b) => a - b);
-    const medianLead = leadDays.length ? leadDays[Math.floor(leadDays.length / 2)] : 0;
+    leads.sort((a, b) => a.days - b.days);
+    const medianLead = leads.length ? leads[Math.floor(leads.length / 2)].days : 0;
+    const bucket = (min, max) => {
+      const hit = leads.filter((l) => l.days >= min && l.days <= max);
+      return [hit.length, hit.reduce((s2, l) => s2 + l.amount, 0)];
+    };
     const total = { count: monthEvents.length, amount: monthEvents.reduce((s, e) => s + parseAmount(e.customFields?.custom_excl_jc || e.customFields?.exclJc || ""), 0) };
 
     return {
@@ -162,10 +166,10 @@ export const monthDrilldown = query({
       medianLeadDays: medianLead,
       quality,
       leadBuckets: [
-        ["0–7 days", leadDays.filter((d) => d <= 7).length],
-        ["1–4 weeks", leadDays.filter((d) => d > 7 && d <= 28).length],
-        ["1–3 months", leadDays.filter((d) => d > 28 && d <= 91).length],
-        ["3+ months", leadDays.filter((d) => d > 91).length],
+        ["0–7 days", ...bucket(0, 7)],
+        ["1–4 weeks", ...bucket(8, 28)],
+        ["1–3 months", ...bucket(29, 91)],
+        ["3+ months", ...bucket(92, Infinity)],
       ],
     };
   },

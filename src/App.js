@@ -7024,7 +7024,7 @@ function BookingBuildupModal({ drill, region, regionLabel, onClose }) {
         <div className="webstats-section">
           <h4>How far in advance</h4>
           <div className="finx-ladder">
-            {data.leadBuckets.map(([label, n]) => <span className="finx-step" key={label}>{label}: {n}</span>)}
+            {data.leadBuckets.map(([label, n, amt]) => <span className="finx-step" key={label}>{label}: {n} · {R(amt)}</span>)}
           </div>
         </div>
         <p className="webstats-muted finx-note">Data quality: {data.quality.exact} exact · {data.quality.heuristic} estimated from old logs (last change assumed = Event Completed, the one before = In Progress) · {data.quality.created} added after the event (creation date used). Multi-day duplicate days legitimately carry R0.</p>
