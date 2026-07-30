@@ -7008,7 +7008,7 @@ function BookingBuildupModal({ drill, region, regionLabel, onClose }) {
           <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{data.baseline.count}</div><div className="webstats-kpi-label">Confirmed before 1 {data.month} · {R(data.baseline.amount)}</div></div>
           <div className="webstats-kpi"><div className="webstats-kpi-val">{data.total.count - data.baseline.count - data.after.count}</div><div className="webstats-kpi-label">Added during {data.month} · {R(data.total.amount - data.baseline.amount - data.after.amount)}</div></div>
           <div className="webstats-kpi"><div className="webstats-kpi-val">{data.total.count}</div><div className="webstats-kpi-label">Total bookings · {R(data.total.amount)}</div></div>
-          <div className="webstats-kpi"><div className="webstats-kpi-val">{data.medianLeadDays}d</div><div className="webstats-kpi-label">Median lead time</div></div>
+          <div className="webstats-kpi"><div className="webstats-kpi-val">{data.medianLeadDays}d</div><div className="webstats-kpi-label">Median lead time (advance bookings)</div></div>
         </div>
         <div className="webstats-section">
           <h4>Week by week</h4>
@@ -7024,10 +7024,10 @@ function BookingBuildupModal({ drill, region, regionLabel, onClose }) {
         <div className="webstats-section">
           <h4>How far in advance</h4>
           <div className="finx-ladder">
-            {data.leadBuckets.map(([label, n, amt]) => <span className="finx-step" key={label}>{label}: {n} · {R(amt)}</span>)}
+            {data.leadBuckets.map(([label, n, amt]) => <span className={`finx-step${label.startsWith('At/after') ? ' is-atafter' : ''}`} key={label}>{label}: {n} · {R(amt)}</span>)}
           </div>
         </div>
-        <p className="webstats-muted finx-note">Data quality: {data.quality.exact} exact · {data.quality.heuristic} estimated from old logs (last change assumed = Event Completed, the one before = In Progress) · {data.quality.created} added after the event (creation date used). Multi-day duplicate days legitimately carry R0.</p>
+        <p className="webstats-muted finx-note">Data quality: {data.quality.exact} exact · {data.quality.heuristic} estimated from old logs (last change assumed = Event Completed, the one before = In Progress) · {data.quality.created} added after the event (creation date used). Multi-day duplicate days legitimately carry R0. &ldquo;At/after the event&rdquo; = status only confirmed on/after the event date (admin catch-up or retro-added) — not real last-minute bookings.</p>
       </>}
     </div>
   </div>;

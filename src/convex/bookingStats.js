@@ -144,19 +144,22 @@ export const monthDrilldown = query({
       const amount = parseAmount(event.customFields?.custom_excl_jc || event.customFields?.exclJc || "");
       quality[q] += 1;
       const eventDate = new Date(`${event.date}T12:00:00`).getTime();
-      leads.push({ days: Math.max(0, Math.round((eventDate - at) / 86400000)), amount });
+      leads.push({ days: Math.round((eventDate - at) / 86400000), amount });
       if (at < monthStart) { baseline.count += 1; baseline.amount += amount; continue; }
       if (at >= monthEnd) { after.count += 1; after.amount += amount; continue; }
       const week = weeks.find((w) => at >= w.start && at < w.end);
       if (week) { week.count += 1; week.amount += amount; }
     }
 
-    leads.sort((a, b) => a.days - b.days);
-    const medianLead = leads.length ? leads[Math.floor(leads.length / 2)].days : 0;
+    // "in advance" = confirmed at least a day BEFORE the event; the rest were
+    // confirmed on/after the event date (admin catch-up, retro-added events).
+    const advance = leads.filter((l) => l.days >= 1).sort((a, b) => a.days - b.days);
+    const medianLead = advance.length ? advance[Math.floor(advance.length / 2)].days : 0;
     const bucket = (min, max) => {
-      const hit = leads.filter((l) => l.days >= min && l.days <= max);
+      const hit = advance.filter((l) => l.days >= min && l.days <= max);
       return [hit.length, hit.reduce((s2, l) => s2 + l.amount, 0)];
     };
+    const atAfter = leads.filter((l) => l.days < 1);
     const total = { count: monthEvents.length, amount: monthEvents.reduce((s, e) => s + parseAmount(e.customFields?.custom_excl_jc || e.customFields?.exclJc || ""), 0) };
 
     return {
@@ -166,10 +169,11 @@ export const monthDrilldown = query({
       medianLeadDays: medianLead,
       quality,
       leadBuckets: [
-        ["0–7 days", ...bucket(0, 7)],
+        ["1–7 days", ...bucket(1, 7)],
         ["1–4 weeks", ...bucket(8, 28)],
         ["1–3 months", ...bucket(29, 91)],
         ["3+ months", ...bucket(92, Infinity)],
+        ["At/after the event", atAfter.length, atAfter.reduce((s2, l) => s2 + l.amount, 0)],
       ],
     };
   },

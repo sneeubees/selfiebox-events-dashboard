@@ -2318,3 +2318,4 @@ button.report-th.is-sorted { color: var(--blue); }
 .bkdrill-head h3 { margin: 0; font-size: 1.05rem; color: var(--text); }
 .bkdrill-head p { margin: 3px 0 0; font-size: 0.75rem; color: var(--muted); }
 .bkdrill-kpis { grid-template-columns: repeat(2, 1fr); margin-bottom: 14px; }
+.finx-step.is-atafter { background: rgba(240, 180, 60, 0.12); border-color: rgba(240, 180, 60, 0.4); color: #ecc257; }
