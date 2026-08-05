@@ -7,14 +7,14 @@ import { internal } from "./_generated/api";
 // Endpoints are env-overridable because the ZA variant's docs are patchy:
 //   SAGE_AUTH_URL   (default https://www.sageone.com/oauth2/auth/central)
 //   SAGE_TOKEN_URL  (default https://oauth.accounting.sage.com/token)
-//   SAGE_API_BASE   (default https://accounting.sageone.co.za/api/2.0.0)
+//   SAGE_API_BASE   (default https://api.accounting.sage.com/v3.1 - per the portal OpenAPI spec)
 // NOTE: Sage refresh tokens ROTATE on every use - each refresh must persist the
 // newly issued refresh token or the connection dies.
 
 const DEFAULTS = {
   authUrl: "https://www.sageone.com/oauth2/auth/central",
   tokenUrl: "https://oauth.accounting.sage.com/token",
-  apiBase: "https://accounting.sageone.co.za/api/2.0.0",
+  apiBase: "https://api.accounting.sage.com/v3.1",
 };
 const cfg = () => ({
   authUrl: process.env.SAGE_AUTH_URL || DEFAULTS.authUrl,
@@ -34,8 +34,7 @@ export const getConnectUrl = query({
       redirect_uri: redirect,
       response_type: "code",
       scope: "full_access",
-      scopes: "full_access",
-      filter: "apiv2",
+      filter: "apiv3.1",
       state,
     });
     return `${cfg().authUrl}?${params.toString()}`;
@@ -85,14 +84,14 @@ async function refreshAccessToken(ctx, refreshToken) {
 }
 
 // CLI smoke test: `convex run sage:testFetch` after connecting.
-// Tries Company/Get on the ZA API to prove auth + list companies.
+// Tries /businesses on the v3.1 API to prove auth + list the businesses.
 export const testFetch = action({
   args: { path: v.optional(v.string()) },
   handler: async (ctx, { path }) => {
     const refreshToken = await ctx.runQuery(internal.sage.getTokenRaw, {});
     if (!refreshToken) return { ok: false, error: "Sage not connected yet - open the connect URL first." };
     const accessToken = await refreshAccessToken(ctx, refreshToken);
-    const url = `${cfg().apiBase}/${path || "Company/Get"}`;
+    const url = `${cfg().apiBase}/${path || "businesses"}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
     const text = await res.text();
     let body;
