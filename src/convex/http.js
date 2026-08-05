@@ -312,6 +312,43 @@ http.route({
   }),
 });
 
+// ---- Sage Accounting OAuth callback (one-time connect flow, staging test) ----
+http.route({
+  path: "/oauth/sage/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const err = url.searchParams.get("error");
+    if (err) return ga4Html(`Sage sign-in was cancelled (${err}).`, false);
+    if (!state || state !== process.env.SAGE_OAUTH_STATE) return ga4Html("Security check failed (bad state).", false);
+    if (!code) return ga4Html("Missing authorization code.", false);
+    try {
+      const tokenUrl = process.env.SAGE_TOKEN_URL || "https://oauth.accounting.sage.com/token";
+      const tokenRes = await fetch(tokenUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.SAGE_CLIENT_ID,
+          client_secret: process.env.SAGE_CLIENT_SECRET,
+          redirect_uri: process.env.SAGE_REDIRECT_URI,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tok = await tokenRes.json();
+      if (!tok.refresh_token) {
+        return ga4Html("Sage returned no refresh token: " + JSON.stringify(tok).slice(0, 200), false);
+      }
+      await ctx.runMutation(internal.sage.storeTokens, { refreshToken: tok.refresh_token, meta: "connected via staging" });
+      return ga4Html("Sage Accounting connected", true);
+    } catch (e) {
+      return ga4Html("Sage connection failed: " + String(e.message || e), false);
+    }
+  }),
+});
+
 // ---- Server-health + backup ingest (from the on-VPS collector/backup crons) ----
 // Secret-guarded: the collector sends `x-health-secret: $HEALTH_INGEST_SECRET`.
 http.route({
