@@ -99,3 +99,32 @@ export const testFetch = action({
     return { ok: res.ok, status: res.status, url, body: typeof body === "string" ? body : JSON.stringify(body).slice(0, 1200) };
   },
 });
+
+// ---- Sage One SOUTH AFRICA (API v2.0.0) - the platform that actually holds
+// SelfieBox's books. Basic auth (Sage username:password) + apikey query param.
+// Env: SAGE_ZA_API_KEY, SAGE_ZA_USERNAME, SAGE_ZA_PASSWORD, (SAGE_ZA_BASE opt).
+// CAUTION: 20 failed logins/hour = 24h username block. Test deliberately, once.
+// Smoke test: `convex run sage:zaTest` -> Company/Get (list companies).
+export const zaTest = action({
+  args: { path: v.optional(v.string()), companyId: v.optional(v.number()) },
+  handler: async (ctx, { path, companyId }) => {
+    const base = process.env.SAGE_ZA_BASE || "https://accounting.sageone.co.za/api/2.0.0";
+    const key = process.env.SAGE_ZA_API_KEY;
+    const user = process.env.SAGE_ZA_USERNAME;
+    const pass = process.env.SAGE_ZA_PASSWORD;
+    if (!key || !user || !pass) return { ok: false, error: "SAGE_ZA_API_KEY / SAGE_ZA_USERNAME / SAGE_ZA_PASSWORD not all set" };
+    const qs = new URLSearchParams({ apikey: key });
+    if (companyId) qs.set("CompanyId", String(companyId));
+    const url = `${base}/${path || "Company/Get"}?${qs.toString()}`;
+    const auth = "Basic " + btoa(`${user}:${pass}`);
+    const res = await fetch(url, { headers: { Authorization: auth, Accept: "application/json", "Content-Type": "application/json" } });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = text.slice(0, 600); }
+    return {
+      ok: res.ok, status: res.status,
+      url: url.replace(encodeURIComponent(key), "[apikey]").replace(key, "[apikey]"),
+      body: typeof body === "string" ? body : JSON.stringify(body).slice(0, 1500),
+    };
+  },
+});
