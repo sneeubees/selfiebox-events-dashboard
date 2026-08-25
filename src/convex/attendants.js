@@ -75,17 +75,29 @@ export const listFiles = query({
       .withIndex("by_attendant", (q) => q.eq("attendantId", args.attendantId))
       .collect();
     const ordered = rows.sort((left, right) => right.createdAt - left.createdAt);
-    return Promise.all(
-      ordered.map(async (row) => ({
+    const results = [];
+    for (const row of ordered) {
+      let url = "";
+      if (row.storageId) {
+        try {
+          url = (await ctx.storage.getUrl(row.storageId)) || "";
+        } catch {
+          // Storage object missing/inaccessible - list the row with a blank
+          // url rather than letting the rejection escape unhandled.
+          url = "";
+        }
+      }
+      results.push({
         id: String(row._id),
         fileCategory: row.fileCategory,
         name: row.name,
         type: inferTypeLabel(row.name, row.contentType),
         size: row.sizeLabel || "",
         uploadedAt: formatDateLabel(row.createdAt),
-        url: row.storageId ? ((await ctx.storage.getUrl(row.storageId)) || "") : "",
-      }))
-    );
+        url,
+      });
+    }
+    return results;
   },
 });
 
