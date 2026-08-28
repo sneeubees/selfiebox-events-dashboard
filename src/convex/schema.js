@@ -132,6 +132,24 @@ export default defineSchema({
     eventKey: v.string(),
     deletedAt: v.number(),
   }).index("by_event_key", ["eventKey"]),
+  // Precomputed cross-client history for the Clients report (clientRecency),
+  // covering every workspace year EXCEPT the currently-active one. The active
+  // year is scanned live (small, indexed, and constantly changing), while
+  // everything older is frozen and safe to cache - see clientRecencyCacheMeta
+  // for which year is currently excluded.
+  clientRecencyCache: defineTable({
+    key: v.string(),
+    name: v.string(),
+    lastDate: v.string(),
+    branches: v.array(v.string()),
+    corporate: v.boolean(),
+    priv: v.boolean(),
+    totalBookings: v.number(),
+  }).index("by_key", ["key"]),
+  clientRecencyCacheMeta: defineTable({
+    excludedYear: v.number(),
+    updatedAt: v.number(),
+  }),
   labelOptions: defineTable({
     columnKey: v.string(),
     optionKey: v.string(),

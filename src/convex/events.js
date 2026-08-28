@@ -326,6 +326,93 @@ export const listByWorkspaceYear = query({
 // All-time recency per client (by name), joined with booking Corporate/Private
 // class + branches. Powers the Clients report's "not booked recently" list, which
 // needs the full history (not just the 1-2 years the report otherwise loads).
+// Shared aggregation step used both by the live clientRecency query (current
+// year only) and by the cache rebuild (every other year) - keeps the two
+// paths from drifting apart.
+function mergeEventsIntoClientMap(byClient, events, typeByKey) {
+  for (const e of events) {
+    const name = (e.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    let rec = byClient.get(key);
+    if (!rec) {
+      rec = { name, lastDate: "", branches: new Set(), corporate: false, priv: false, totalBookings: 0 };
+      byClient.set(key, rec);
+    }
+    rec.totalBookings += 1;
+    if (e.date && e.date > rec.lastDate) rec.lastDate = e.date;
+    (e.branch || []).forEach((b) => rec.branches.add(b));
+    const ct = (typeByKey.get(e.eventKey) || "").toLowerCase();
+    if (ct.includes("corporate")) rec.corporate = true;
+    else if (ct.includes("private")) rec.priv = true;
+  }
+}
+
+async function getCurrentWorkspaceYear(ctx) {
+  const latest = await ctx.db.query("events").withIndex("by_workspace_year").order("desc").first();
+  return latest?.workspaceYear ?? new Date().getFullYear();
+}
+
+// Rebuilds clientRecencyCache from every event OLDER than the current
+// workspace year. Past years are frozen (the team only works one year at a
+// time), so this is safe to run occasionally rather than on every read -
+// unlike the current year, which clientRecency always scans live.
+async function rebuildClientRecencyCacheImpl(ctx) {
+  const currentYear = await getCurrentWorkspaceYear(ctx);
+  const events = await ctx.db
+    .query("events")
+    .withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear))
+    .collect();
+  const bookings = await ctx.db.query("eventBookings").collect();
+  const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
+
+  const byClient = new Map();
+  mergeEventsIntoClientMap(byClient, events, typeByKey);
+
+  const existingCacheRows = await ctx.db.query("clientRecencyCache").collect();
+  for (const row of existingCacheRows) {
+    await ctx.db.delete(row._id);
+  }
+  for (const [key, r] of byClient) {
+    await ctx.db.insert("clientRecencyCache", {
+      key,
+      name: r.name,
+      lastDate: r.lastDate,
+      branches: Array.from(r.branches),
+      corporate: r.corporate,
+      priv: r.priv,
+      totalBookings: r.totalBookings,
+    });
+  }
+
+  const existingMeta = await ctx.db.query("clientRecencyCacheMeta").collect();
+  for (const row of existingMeta) {
+    await ctx.db.delete(row._id);
+  }
+  await ctx.db.insert("clientRecencyCacheMeta", { excludedYear: currentYear, updatedAt: Date.now() });
+
+  return { cachedClients: byClient.size, excludedYear: currentYear, eventsCached: events.length };
+}
+
+// Called automatically whenever a new workspace year is created (see
+// workspaces.js) so the cache heals itself at each year rollover.
+export const rebuildClientRecencyCacheInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => rebuildClientRecencyCacheImpl(ctx),
+});
+
+// Manual trigger (admin-only) - useful right after deploying this feature,
+// since existing history only gets cached automatically on the NEXT year
+// rollover otherwise.
+export const rebuildClientRecencyCache = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireCurrentUser(ctx);
+    if (user.role !== "admin") throw new Error("Only admins can rebuild this cache.");
+    return await rebuildClientRecencyCacheImpl(ctx);
+  },
+});
+
 export const clientRecency = query({
   args: {},
   handler: async (ctx) => {
@@ -336,26 +423,42 @@ export const clientRecency = query({
       return [];
     }
     if (user.role !== "admin") return []; // Info & Reporting is admin-only
-    const events = await ctx.db.query("events").collect();
-    const bookings = await ctx.db.query("eventBookings").collect();
-    const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
+
+    const currentYear = await getCurrentWorkspaceYear(ctx);
+    const metaRows = await ctx.db.query("clientRecencyCacheMeta").collect();
+    const meta = metaRows[0];
     const byClient = new Map();
-    for (const e of events) {
-      const name = (e.name || "").trim();
-      if (!name) continue;
-      const key = name.toLowerCase();
-      let rec = byClient.get(key);
-      if (!rec) {
-        rec = { name, lastDate: "", branches: new Set(), corporate: false, priv: false, totalBookings: 0 };
-        byClient.set(key, rec);
+
+    if (meta && meta.excludedYear === currentYear) {
+      // Fast path: precomputed history + a live scan of just the active year.
+      const cachedRows = await ctx.db.query("clientRecencyCache").collect();
+      for (const row of cachedRows) {
+        byClient.set(row.key, {
+          name: row.name,
+          lastDate: row.lastDate,
+          branches: new Set(row.branches),
+          corporate: row.corporate,
+          priv: row.priv,
+          totalBookings: row.totalBookings,
+        });
       }
-      rec.totalBookings += 1;
-      if (e.date && e.date > rec.lastDate) rec.lastDate = e.date;
-      (e.branch || []).forEach((b) => rec.branches.add(b));
-      const ct = (typeByKey.get(e.eventKey) || "").toLowerCase();
-      if (ct.includes("corporate")) rec.corporate = true;
-      else if (ct.includes("private")) rec.priv = true;
+      const currentYearEvents = await ctx.db
+        .query("events")
+        .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", currentYear))
+        .collect();
+      const bookings = await ctx.db.query("eventBookings").collect();
+      const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
+      mergeEventsIntoClientMap(byClient, currentYearEvents, typeByKey);
+    } else {
+      // Rare fallback (no cache yet, or a year just rolled over and the
+      // cache hasn't caught up): same full scan as before, just not the
+      // common case anymore.
+      const events = await ctx.db.query("events").collect();
+      const bookings = await ctx.db.query("eventBookings").collect();
+      const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
+      mergeEventsIntoClientMap(byClient, events, typeByKey);
     }
+
     return Array.from(byClient.values()).map((r) => ({
       name: r.name,
       lastDate: r.lastDate,
