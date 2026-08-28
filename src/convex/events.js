@@ -348,21 +348,27 @@ function mergeEventsIntoClientMap(byClient, events, typeByKey) {
   }
 }
 
-async function getCurrentWorkspaceYear(ctx) {
-  const latest = await ctx.db.query("events").withIndex("by_workspace_year").order("desc").first();
-  return latest?.workspaceYear ?? new Date().getFullYear();
+// The team works one calendar year at a time, so that's the year that has to
+// stay live - NOT simply "the highest workspaceYear on record", since a
+// single far-future booking (e.g. a client booking a 2027 event while the
+// team is still fully active in 2026) would otherwise get mistaken for the
+// active year and cause the real active year to be cached instead.
+function getCurrentWorkspaceYear() {
+  return new Date().getFullYear();
 }
 
-// Rebuilds clientRecencyCache from every event OLDER than the current
-// workspace year. Past years are frozen (the team only works one year at a
-// time), so this is safe to run occasionally rather than on every read -
-// unlike the current year, which clientRecency always scans live.
+// Rebuilds clientRecencyCache from every event NOT in the current workspace
+// year (both past years and any stray future-dated bookings). Everything
+// else is frozen or rare enough to be safe to cache and rebuild
+// occasionally, unlike the current year, which clientRecency always scans
+// live.
 async function rebuildClientRecencyCacheImpl(ctx) {
-  const currentYear = await getCurrentWorkspaceYear(ctx);
-  const events = await ctx.db
-    .query("events")
-    .withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear))
-    .collect();
+  const currentYear = getCurrentWorkspaceYear();
+  const [pastEvents, futureEvents] = await Promise.all([
+    ctx.db.query("events").withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear)).collect(),
+    ctx.db.query("events").withIndex("by_workspace_year", (q) => q.gt("workspaceYear", currentYear)).collect(),
+  ]);
+  const events = [...pastEvents, ...futureEvents];
   const bookings = await ctx.db.query("eventBookings").collect();
   const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
 
@@ -424,7 +430,7 @@ export const clientRecency = query({
     }
     if (user.role !== "admin") return []; // Info & Reporting is admin-only
 
-    const currentYear = await getCurrentWorkspaceYear(ctx);
+    const currentYear = getCurrentWorkspaceYear();
     const metaRows = await ctx.db.query("clientRecencyCacheMeta").collect();
     const meta = metaRows[0];
     const byClient = new Map();
