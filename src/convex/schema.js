@@ -229,6 +229,23 @@ export default defineSchema({
     })
       .index("by_booking", ["bookingId"])
       .index("by_event", ["eventId"]),
+  bookingChangeLog: defineTable({
+      bookingId: v.id("eventBookings"),
+      eventId: v.id("events"),
+      source: v.string(),
+      actorName: v.optional(v.string()),
+      actorUserId: v.optional(v.id("users")),
+      sourceIp: v.optional(v.string()),
+      changes: v.array(v.object({
+        field: v.string(),
+        label: v.string(),
+        from: v.string(),
+        to: v.string(),
+      })),
+      createdAt: v.number(),
+    })
+      .index("by_booking", ["bookingId"])
+      .index("by_event", ["eventId"]),
   commissionSnapshots: defineTable({
       month: v.string(),
       year: v.number(),

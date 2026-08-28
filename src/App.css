@@ -550,6 +550,12 @@ button { cursor: pointer; }
 .booking-submission-list { display: grid; gap: 6px; }
 .booking-submission-link { color: var(--accent); font-size: 0.8rem; text-decoration: none; overflow-wrap: anywhere; }
 .booking-submission-link:hover { text-decoration: underline; }
+.booking-changelog-list { display: grid; gap: 10px; }
+.booking-changelog-entry { display: grid; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.booking-changelog-entry:last-child { border-bottom: none; padding-bottom: 0; }
+.booking-changelog-meta { font-size: 0.72rem; color: var(--muted); }
+.booking-changelog-fields { margin: 0; padding-left: 16px; font-size: 0.8rem; color: var(--text); line-height: 1.5; }
+.booking-changelog-fields li { overflow-wrap: anywhere; }
 .drawer-close { margin-right: 4px; flex-shrink: 0; position: relative; z-index: 3; }
 .activity-item, .file-card { display: flex; justify-content: space-between; gap: 8px; padding: 5px 7px; border-radius: 10px; background: #f8f9fb; border: 1px solid var(--line); }
 .activity-item { align-items: flex-start; }

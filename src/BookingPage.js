@@ -713,7 +713,7 @@ export default function BookingPage({ token }) {
         </div>
 
         {formNotice ? <div className="auth-error booking-form-notice">{formNotice}</div> : null}
-        {isLocked ? <div className="booking-lock-note">This booking form is locked on the day of the event and can no longer be edited.</div> : null}
+        {isLocked ? <div className="booking-lock-note">This booking form is locked from the day after the event and can no longer be edited.</div> : null}
 
         <div className="booking-form-actions">
           <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isLocked}>

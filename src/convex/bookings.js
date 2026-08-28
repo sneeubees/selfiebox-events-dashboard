@@ -297,6 +297,8 @@ async function buildMergedBookingFormData(ctx, eventRecord, formData) {
   };
 }
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 function getBookingDateTimestamp(eventRecord, bookingRecord) {
   const timestamp = parseIsoDateStart(bookingRecord?.formData?.eventDate || eventRecord?.date);
   return timestamp;
@@ -314,13 +316,64 @@ function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
     };
   }
 
+  // The form stays editable through the event day itself; it only locks from
+  // the day after the event onward.
+  const lockTimestamp = eventTimestamp + ONE_DAY_MS;
   return {
     mode: "public",
     anonymousAllowed: true,
     remainingPublicClicks: null,
-    cutoffTimestamp: null,
-    isLocked: now >= eventTimestamp,
+    cutoffTimestamp: lockTimestamp,
+    isLocked: now >= lockTimestamp,
   };
+}
+
+const BOOKING_FIELD_LABELS = {
+  product: "Product",
+  customerType: "Customer type",
+  eventName: "Event name",
+  companyName: "Company name",
+  contactPerson: "Contact person",
+  cell: "Cell number",
+  email: "Email",
+  eventDate: "Event date",
+  region: "Region",
+  address: "Address",
+  pointOfContactName: "Point of contact (on the day)",
+  pointOfContactNumber: "Point of contact number",
+  setupTime: "Setup time",
+  eventStartTime: "Event start time",
+  eventFinishTime: "Event finish time",
+  durationHours: "Duration (hours)",
+  optionalExtras: "Optional extras",
+  designYourself: "Design preference",
+  notes: "Notes",
+  acceptedTerms: "Accepted terms",
+};
+
+function formatBookingFieldValue(field, value) {
+  if (field === "optionalExtras") {
+    return Array.isArray(value) ? value.filter(Boolean).join(", ") : "";
+  }
+  if (field === "acceptedTerms") {
+    return value ? "Yes" : "No";
+  }
+  return normalizeString(value);
+}
+
+function diffBookingFormData(previousFormData, nextFormData) {
+  const previous = previousFormData || {};
+  const next = nextFormData || {};
+  const changes = [];
+  for (const field of Object.keys(BOOKING_FIELD_LABELS)) {
+    const from = formatBookingFieldValue(field, previous[field]);
+    const to = formatBookingFieldValue(field, next[field]);
+    if (from === to) {
+      continue;
+    }
+    changes.push({ field, label: BOOKING_FIELD_LABELS[field], from, to });
+  }
+  return changes;
 }
 
 async function buildDrawerBookingDto(ctx, eventRecord, bookingRecord) {
@@ -330,6 +383,7 @@ async function buildDrawerBookingDto(ctx, eventRecord, bookingRecord) {
 
   const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
   const snapshots = await getBookingSnapshots(ctx, bookingRecord._id);
+  const changeLog = await getBookingChangeLog(ctx, bookingRecord._id);
   const formData = await buildMergedBookingFormData(ctx, eventRecord, bookingRecord.formData);
   return {
     id: String(bookingRecord._id),
@@ -344,6 +398,7 @@ async function buildDrawerBookingDto(ctx, eventRecord, bookingRecord) {
     cutoffTimestamp: policy.cutoffTimestamp,
     isLocked: policy.isLocked,
     snapshots,
+    changeLog,
   };
 }
 
@@ -411,6 +466,24 @@ async function getBookingSnapshots(ctx, bookingId) {
       url: (await ctx.storage.getUrl(row.storageId)) || "",
     }))
   );
+}
+
+async function getBookingChangeLog(ctx, bookingId) {
+  const rows = await ctx.db
+    .query("bookingChangeLog")
+    .withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
+    .collect();
+  return rows
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((row) => ({
+      id: String(row._id),
+      source: row.source,
+      actorName: row.actorName || "",
+      sourceIp: row.sourceIp || "",
+      changes: row.changes,
+      createdAt: row.createdAt,
+      createdAtLabel: formatActivityTimestamp(row.createdAt),
+    }));
 }
 
 async function generateUniqueToken(ctx) {
@@ -694,7 +767,7 @@ export const submitPublicForm = mutation({
 
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
     if (policy.isLocked) {
-      throw new Error("This booking form is locked on the day of the event.");
+      throw new Error("This booking form is locked from the day after the event and can no longer be edited.");
     }
     const approvedUser = await getApprovedCurrentUser(ctx);
     const normalizedIp = normalizeString(args.clientIp);
@@ -706,6 +779,20 @@ export const submitPublicForm = mutation({
     }
 
     const now = Date.now();
+    const changes = diffBookingFormData(bookingRecord.formData, formData);
+    if (changes.length) {
+      await ctx.db.insert("bookingChangeLog", {
+        bookingId: bookingRecord._id,
+        eventId: eventRecord._id,
+        source: approvedUser ? "dashboard" : "external",
+        actorName: approvedUser?.fullName || approvedUser?.email || (normalizedIp ? `External (${normalizedIp})` : "External"),
+        actorUserId: approvedUser?._id,
+        sourceIp: normalizedIp || undefined,
+        changes,
+        createdAt: now,
+      });
+    }
+
     await ctx.db.patch(bookingRecord._id, {
       formData,
       submittedAt: now,
