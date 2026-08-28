@@ -364,10 +364,8 @@ function getCurrentWorkspaceYear() {
 // live.
 async function rebuildClientRecencyCacheImpl(ctx) {
   const currentYear = getCurrentWorkspaceYear();
-  const [pastEvents, futureEvents] = await Promise.all([
-    ctx.db.query("events").withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear)).collect(),
-    ctx.db.query("events").withIndex("by_workspace_year", (q) => q.gt("workspaceYear", currentYear)).collect(),
-  ]);
+  const pastEvents = await ctx.db.query("events").withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear)).collect();
+  const futureEvents = await ctx.db.query("events").withIndex("by_workspace_year", (q) => q.gt("workspaceYear", currentYear)).collect();
   const events = [...pastEvents, ...futureEvents];
   const bookings = await ctx.db.query("eventBookings").collect();
   const typeByKey = new Map(bookings.map((b) => [b.eventKey, b.formData?.customerType || ""]));
