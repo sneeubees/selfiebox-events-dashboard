@@ -7787,10 +7787,10 @@ function ClientsReportView({ reports }) {
 
   const stale = useMemo(() => {
     const d = new Date(); d.setMonth(d.getMonth() - staleMonths); const cutoff = reportIsoDate(d);
-    const list = (recency || [])
-      .filter((r) => r.customerType === 'Corporate' && (!regionSel.length || (r.branches || []).some((b) => regionSel.includes(b))) && (!r.lastDate || r.lastDate < cutoff))
+    const list = (recency?.corporate || [])
+      .filter((r) => (!regionSel.length || (r.branches || []).some((b) => regionSel.includes(b))) && (!r.lastDate || r.lastDate < cutoff))
       .sort((a, b) => String(a.lastDate || '').localeCompare(String(b.lastDate || '')));
-    const hidden = (recency || []).filter((r) => r.customerType === 'Unclassified').length;
+    const hidden = recency?.unclassifiedCount || 0;
     return { list, hidden, cutoff };
   }, [recency, staleMonths, regionSel]);
 

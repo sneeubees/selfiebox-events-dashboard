@@ -463,13 +463,27 @@ export const clientRecency = query({
       mergeEventsIntoClientMap(byClient, events, typeByKey);
     }
 
-    return Array.from(byClient.values()).map((r) => ({
-      name: r.name,
-      lastDate: r.lastDate,
-      branches: Array.from(r.branches),
-      customerType: r.corporate ? "Corporate" : r.priv ? "Private" : "Unclassified",
-      totalBookings: r.totalBookings,
-    }));
+    // The Clients report only ever reads Corporate rows in full (its
+    // "follow-up" list) and just counts Unclassified ones - returning every
+    // client (Private included) blew past Convex's 8192-element return-value
+    // limit on live (8,298 distinct client names). Shape the response to
+    // match what's actually consumed instead of shipping everything.
+    let unclassifiedCount = 0;
+    const corporate = [];
+    for (const r of byClient.values()) {
+      if (r.corporate) {
+        corporate.push({
+          name: r.name,
+          lastDate: r.lastDate,
+          branches: Array.from(r.branches),
+          customerType: "Corporate",
+          totalBookings: r.totalBookings,
+        });
+      } else if (!r.priv) {
+        unclassifiedCount += 1;
+      }
+    }
+    return { corporate, unclassifiedCount };
   },
 });
 
