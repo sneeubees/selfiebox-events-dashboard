@@ -7545,14 +7545,22 @@ function GeneralReportView({ reports }) {
   // "the 45 website quotes for August" means 45 events dated in August,
   // regardless of when they came in. Always the full year (ignores the
   // range picker above) since the whole point is comparing months.
+  // exVat (manually entered) wins over exVatAuto (auto-extracted from an
+  // uploaded quote/invoice PDF, see documentNumbers.js) - same "manual
+  // override, else auto-detected" precedence as the board's own document
+  // upload flow, which only ever fills exVatAuto and leaves exVat for staff.
+  const quoteValue = useCallback((e) => reportParseMoney(e.exVat) || reportParseMoney(e.exVatAuto), []);
+
   const webConvByMonth = useMemo(() => {
     const base = (curEvents || []).filter(inRegion).filter((e) => e.isWebsiteQuote && !e.duplicatedFromEventKey);
     return REPORT_MONTHS.map((label, i) => {
       const inMonth = base.filter((e) => e.date && new Date(e.date).getMonth() === i);
-      const completed = inMonth.filter((e) => e.status === 'Event Completed').length;
-      return { label, total: inMonth.length, completed, rate: inMonth.length ? (completed / inMonth.length) * 100 : null };
+      const completedEvents = inMonth.filter((e) => e.status === 'Event Completed');
+      const completed = completedEvents.length;
+      const completedValue = completedEvents.reduce((s, e) => s + quoteValue(e), 0);
+      return { label, total: inMonth.length, completed, rate: inMonth.length ? (completed / inMonth.length) * 100 : null, completedValue };
     });
-  }, [curEvents, inRegion]);
+  }, [curEvents, inRegion, quoteValue]);
 
   const units = useMemo(() => {
     const events = new Map(); const deployed = new Map();
@@ -7658,6 +7666,7 @@ function GeneralReportView({ reports }) {
             <span className="report-th">Website quotes</span>
             <span className="report-th">Completed</span>
             <span className="report-th">Success rate</span>
+            <span className="report-th">Value (completed)</span>
           </div>
           {webConvByMonth.map((m) => (
             <div className="report-tr" key={m.label}>
@@ -7665,10 +7674,11 @@ function GeneralReportView({ reports }) {
               <span className="report-td">{m.total}</span>
               <span className="report-td">{m.completed}</span>
               <span className="report-td">{m.rate == null ? '—' : `${m.rate.toFixed(0)}%`}</span>
+              <span className="report-td" title={reportFmtRand(m.completedValue)}>{reportFmtRand(m.completedValue)}</span>
             </div>
           ))}
         </div>
-        <div className="report-caption">Website quotes = the line item the website itself created (not day-2/day-3 duplicates), grouped by the event&apos;s own date. &ldquo;Completed&rdquo; is the current status, so recent months will keep rising as staff mark events complete after the fact.</div>
+        <div className="report-caption">Website quotes = the line item the website itself created (not day-2/day-3 duplicates), grouped by the event&apos;s own date. &ldquo;Completed&rdquo; is the current status, so recent months will keep rising as staff mark events complete after the fact. Value = quote/invoice amount (Excl VAT) on the completed ones — manually entered value if set, else the amount auto-read from an uploaded quote or invoice.</div>
       </div>
 
       <div className="webstats-cols">
