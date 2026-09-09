@@ -359,6 +359,19 @@ export default defineSchema({
     visits: v.number(),
     quotes: v.number(),
   }).index("by_date", ["date"]),
+  // Precomputed day-bucketed Website Quote Conversion counts for every
+  // workspace year EXCEPT the currently-active one (see the identical
+  // pattern on clientRecencyCache/clientRecencyCacheMeta in events.js - a
+  // plain events.collect() over 13k+ live rows times out as a reactive
+  // query, so history is cached and only the active year is scanned live).
+  quoteConversionCache: defineTable({
+    date: v.string(),
+    count: v.number(),
+  }).index("by_date", ["date"]),
+  quoteConversionCacheMeta: defineTable({
+    excludedYear: v.number(),
+    updatedAt: v.number(),
+  }),
   // VPS/service health snapshots, pushed by the on-server collector cron.
   serverHealth: defineTable({
     ts: v.number(),

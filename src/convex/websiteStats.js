@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 function zaDate(timestampMs) {
   return new Date(timestampMs ?? Date.now()).toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
@@ -80,6 +80,69 @@ export const getWebsiteStats = query({
 // getWebsiteStats buckets "Quote Requests", so the two can be compared
 // directly for the same period. Backdated for free: existing historical
 // events already carry everything needed (no migration required).
+//
+// A plain events.collect() timed out on live (13k+ rows) as a reactive
+// query, so - mirroring clientRecencyCache in events.js - history is
+// precomputed into quoteConversionCache and only the active calendar year
+// is scanned live at query time.
+function tallyConversions(counts, events) {
+  for (const event of events) {
+    if (event.status !== "Event Completed") continue;
+    if (event.duplicatedFromEventKey) continue;
+    if (!isWebsiteQuoteOrigin(event)) continue;
+    const date = zaDate(event.createdAt);
+    counts.set(date, (counts.get(date) || 0) + 1);
+  }
+}
+
+function getCurrentWorkspaceYear() {
+  return new Date().getFullYear();
+}
+
+async function rebuildQuoteConversionCacheImpl(ctx) {
+  const currentYear = getCurrentWorkspaceYear();
+  const pastEvents = await ctx.db.query("events").withIndex("by_workspace_year", (q) => q.lt("workspaceYear", currentYear)).collect();
+  const futureEvents = await ctx.db.query("events").withIndex("by_workspace_year", (q) => q.gt("workspaceYear", currentYear)).collect();
+
+  const counts = new Map();
+  tallyConversions(counts, pastEvents);
+  tallyConversions(counts, futureEvents);
+
+  const existingCacheRows = await ctx.db.query("quoteConversionCache").collect();
+  for (const row of existingCacheRows) {
+    await ctx.db.delete(row._id);
+  }
+  for (const [date, count] of counts) {
+    await ctx.db.insert("quoteConversionCache", { date, count });
+  }
+
+  const existingMeta = await ctx.db.query("quoteConversionCacheMeta").collect();
+  for (const row of existingMeta) {
+    await ctx.db.delete(row._id);
+  }
+  await ctx.db.insert("quoteConversionCacheMeta", { excludedYear: currentYear, updatedAt: Date.now() });
+
+  return { cachedDays: counts.size, excludedYear: currentYear, eventsCached: pastEvents.length + futureEvents.length };
+}
+
+// Called automatically whenever a new workspace year is created (see
+// workspaces.js) so the cache heals itself at each year rollover.
+export const rebuildQuoteConversionCacheInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => rebuildQuoteConversionCacheImpl(ctx),
+});
+
+// Manual trigger (admin-only) - for the initial backfill right after
+// deploying this feature, and for on-demand refresh.
+export const rebuildQuoteConversionCache = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireCurrentUser(ctx);
+    if (user.role !== "admin") throw new Error("Only admins can rebuild this cache.");
+    return await rebuildQuoteConversionCacheImpl(ctx);
+  },
+});
+
 export const getQuoteConversions = query({
   args: {},
   handler: async (ctx) => {
@@ -89,14 +152,25 @@ export const getQuoteConversions = query({
       return { days: [] };
     }
 
-    const events = await ctx.db.query("events").collect();
+    const currentYear = getCurrentWorkspaceYear();
+    const metaRows = await ctx.db.query("quoteConversionCacheMeta").collect();
+    const meta = metaRows[0];
     const counts = new Map();
-    for (const event of events) {
-      if (event.status !== "Event Completed") continue;
-      if (event.duplicatedFromEventKey) continue;
-      if (!isWebsiteQuoteOrigin(event)) continue;
-      const date = zaDate(event.createdAt);
-      counts.set(date, (counts.get(date) || 0) + 1);
+
+    if (meta && meta.excludedYear === currentYear) {
+      const cachedRows = await ctx.db.query("quoteConversionCache").collect();
+      for (const row of cachedRows) counts.set(row.date, row.count);
+      const currentYearEvents = await ctx.db
+        .query("events")
+        .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", currentYear))
+        .collect();
+      tallyConversions(counts, currentYearEvents);
+    } else {
+      // Rare fallback (no cache yet, or a year just rolled over and the
+      // cache hasn't caught up): same full scan as before this fix - not
+      // the common case anymore.
+      const events = await ctx.db.query("events").collect();
+      tallyConversions(counts, events);
     }
 
     const days = Array.from(counts.entries())

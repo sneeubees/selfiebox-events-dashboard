@@ -83,6 +83,7 @@ export const createNextYear = mutation({
     // A new year starting means the previous one is about to become frozen
     // history - fold it into the client-recency cache (see events.js).
     await ctx.scheduler.runAfter(0, internal.events.rebuildClientRecencyCacheInternal, {});
+    await ctx.scheduler.runAfter(0, internal.websiteStats.rebuildQuoteConversionCacheInternal, {});
 
     const created = await ctx.db.get(workspaceId);
     return { id: created._id, year: created.year, name: created.name };
@@ -111,6 +112,7 @@ export const ensureYear = mutation({
     });
 
     await ctx.scheduler.runAfter(0, internal.events.rebuildClientRecencyCacheInternal, {});
+    await ctx.scheduler.runAfter(0, internal.websiteStats.rebuildQuoteConversionCacheInternal, {});
 
     const created = await ctx.db.get(workspaceId);
     return { id: created._id, year: created.year, name: created.name, created: true };
