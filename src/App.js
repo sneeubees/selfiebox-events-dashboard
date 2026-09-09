@@ -7067,8 +7067,10 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
     return days.filter((d) => d.date >= start && d.date <= today).reduce((sum, d) => sum + (d.quotes || 0), 0);
   }, [websiteQuoteStats, period]);
   // Website-created quote line items (day-2/day-3 duplicates excluded) that
-  // reached Event Completed, bucketed by the quote's original submission day
-  // so it lines up with the same period window as Quote Requests above.
+  // reached Event Completed, bucketed by the day they were MARKED completed
+  // (not submitted, not the event date - completion is often logged days
+  // after the event itself). "Last 7 days" here means "closed in the last
+  // 7 days".
   const websiteQuoteConversions = useQuery(api.websiteStats.getQuoteConversions, {});
   const quoteConversions = useMemo(() => {
     const days = websiteQuoteConversions?.days || [];
@@ -7165,7 +7167,7 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
       ['Page views', cur.pageviews],
       ['Avg. time', fmtDur(cur.avgEngagementSec)],
       ['Quote Requests', quoteRequests, 'Actual quote forms submitted from the website — counted at submit time in your backend, before any status change. This is the true number.'],
-      ['Website Quote Conversions', quoteConversions, 'Website-submitted quotes (not day-2/day-3 duplicates) that reached Event Completed, grouped by their original submission day.'],
+      ['Website Quote Conversions', quoteConversions, 'Website-submitted quotes (not day-2/day-3 duplicates) that reached Event Completed, grouped by the day they were marked completed — not when submitted, and not the event date.'],
     ];
     inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
       <div className="webstats-kpis">
@@ -7538,6 +7540,20 @@ function GeneralReportView({ reports }) {
     return { cur, prev, max: Math.max(1, ...cur, ...prev) };
   }, [curEvents, prevEvents, inRegion]);
 
+  // Website quote success rate per month, grouped by the EVENT's own date
+  // (not when the quote was submitted, not when it was marked completed) -
+  // "the 45 website quotes for August" means 45 events dated in August,
+  // regardless of when they came in. Always the full year (ignores the
+  // range picker above) since the whole point is comparing months.
+  const webConvByMonth = useMemo(() => {
+    const base = (curEvents || []).filter(inRegion).filter((e) => e.isWebsiteQuote && !e.duplicatedFromEventKey);
+    return REPORT_MONTHS.map((label, i) => {
+      const inMonth = base.filter((e) => e.date && new Date(e.date).getMonth() === i);
+      const completed = inMonth.filter((e) => e.status === 'Event Completed').length;
+      return { label, total: inMonth.length, completed, rate: inMonth.length ? (completed / inMonth.length) * 100 : null };
+    });
+  }, [curEvents, inRegion]);
+
   const units = useMemo(() => {
     const events = new Map(); const deployed = new Map();
     curF.forEach((e) => {
@@ -7632,6 +7648,27 @@ function GeneralReportView({ reports }) {
           ))}
         </div>
         <div className="report-legend"><span className="report-legend-item"><i className="is-cur" />{year}</span><span className="report-legend-item"><i className="is-prev" />{year - 1}</span></div>
+      </div>
+
+      <div className="webstats-section">
+        <h4>Website quote success rate by month <span>{year} &middot; by event date, all regions{regionSel.length ? ' (filtered)' : ''}</span></h4>
+        <div className="report-table is-monthly">
+          <div className="report-tr report-thead">
+            <span className="report-th">Month</span>
+            <span className="report-th">Website quotes</span>
+            <span className="report-th">Completed</span>
+            <span className="report-th">Success rate</span>
+          </div>
+          {webConvByMonth.map((m) => (
+            <div className="report-tr" key={m.label}>
+              <span className="report-td report-td-name">{m.label}</span>
+              <span className="report-td">{m.total}</span>
+              <span className="report-td">{m.completed}</span>
+              <span className="report-td">{m.rate == null ? '—' : `${m.rate.toFixed(0)}%`}</span>
+            </div>
+          ))}
+        </div>
+        <div className="report-caption">Website quotes = the line item the website itself created (not day-2/day-3 duplicates), grouped by the event&apos;s own date. &ldquo;Completed&rdquo; is the current status, so recent months will keep rising as staff mark events complete after the fact.</div>
       </div>
 
       <div className="webstats-cols">

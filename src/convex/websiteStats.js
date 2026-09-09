@@ -75,13 +75,31 @@ export const getWebsiteStats = query({
   },
 });
 
+// When an event's status LAST became "Event Completed" - not when the
+// event happened, and not when the quote was submitted. Completion is
+// routinely marked days after the event itself (e.g. a Friday event only
+// gets marked complete the following Monday/Tuesday), so this is what
+// "conversions in the last 7 days" actually needs to bucket by. Sourced
+// from statusTimeline (appended by events.js:upsert on every real status
+// change - see the comment there), falling back to updatedAt for the rare
+// event with no timeline entry for it (e.g. status set some other way).
+function resolveCompletedAt(event) {
+  const timeline = Array.isArray(event.statusTimeline) ? event.statusTimeline : [];
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    if (timeline[i].status === "Event Completed") {
+      return timeline[i].at;
+    }
+  }
+  return event.updatedAt;
+}
+
 // Website quotes that actually converted into a completed event - i.e. the
 // event line item the website itself created (not a day-2/day-3 duplicate
 // of a multi-day booking) whose status is currently Event Completed.
-// Bucketed by the quote's original submission day (createdAt), the same way
-// getWebsiteStats buckets "Quote Requests", so the two can be compared
-// directly for the same period. Backdated for free: existing historical
-// events already carry everything needed (no migration required).
+// Bucketed by the day it was MARKED completed (see resolveCompletedAt), so
+// "last 7 days" means "closed in the last 7 days" - not "submitted in the
+// last 7 days" (that's what Quote Requests already measures) and not "the
+// event happened in the last 7 days" (completion lags the event itself).
 //
 // A plain events.collect() timed out on live (13k+ rows) as a reactive
 // query, so - mirroring clientRecencyCache in events.js - history is
@@ -92,7 +110,7 @@ function tallyConversions(counts, events) {
     if (event.status !== "Event Completed") continue;
     if (event.duplicatedFromEventKey) continue;
     if (!isWebsiteQuoteOrigin(event)) continue;
-    const date = zaDate(event.createdAt);
+    const date = zaDate(resolveCompletedAt(event));
     counts.set(date, (counts.get(date) || 0) + 1);
   }
 }
