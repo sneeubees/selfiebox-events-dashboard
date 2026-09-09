@@ -7066,6 +7066,17 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
     const start = period === 'today' ? today : period === 'last30' ? zaDay(29) : period === 'launch' ? SITE_LAUNCH_DATE : zaDay(6);
     return days.filter((d) => d.date >= start && d.date <= today).reduce((sum, d) => sum + (d.quotes || 0), 0);
   }, [websiteQuoteStats, period]);
+  // Website-created quote line items (day-2/day-3 duplicates excluded) that
+  // reached Event Completed, bucketed by the quote's original submission day
+  // so it lines up with the same period window as Quote Requests above.
+  const websiteQuoteConversions = useQuery(api.websiteStats.getQuoteConversions, {});
+  const quoteConversions = useMemo(() => {
+    const days = websiteQuoteConversions?.days || [];
+    const zaDay = (n) => new Date(Date.now() - n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Johannesburg' });
+    const today = zaDay(0);
+    const start = period === 'today' ? today : period === 'last30' ? zaDay(29) : period === 'launch' ? SITE_LAUNCH_DATE : zaDay(6);
+    return days.filter((d) => d.date >= start && d.date <= today).reduce((sum, d) => sum + (d.count || 0), 0);
+  }, [websiteQuoteConversions, period]);
 
   // One block per day in the selected period (incl. zero-count days), oldest -> newest,
   // for the "Quote requests per day" popup. today=1 block, 7d=7, 30d=30, launch=since new site.
@@ -7153,8 +7164,8 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
       ['Visitors', cur.users],
       ['Page views', cur.pageviews],
       ['Avg. time', fmtDur(cur.avgEngagementSec)],
-      ['Leads', cur.conversions, 'GA4-tracked lead events (quote_submit / contact_submit / generate_lead). Relies on browser tracking, so it under-counts vs real submissions.'],
       ['Quote Requests', quoteRequests, 'Actual quote forms submitted from the website — counted at submit time in your backend, before any status change. This is the true number.'],
+      ['Website Quote Conversions', quoteConversions, 'Website-submitted quotes (not day-2/day-3 duplicates) that reached Event Completed, grouped by their original submission day.'],
     ];
     inner = <div className={`webstats${loading ? ' is-refetching' : ''}`}>
       <div className="webstats-kpis">
@@ -7493,12 +7504,16 @@ function GeneralReportView({ reports }) {
 
   const kpi = useMemo(() => {
     const isReal = (e) => !['Cancelled', 'Rejected', 'No response'].includes(e.status);
+    // The website-created line item for a booking, not a day-2/day-3 duplicate
+    // of it, that made it all the way to Event Completed.
+    const isWebConversion = (e) => e.isWebsiteQuote && !e.duplicatedFromEventKey && e.status === 'Event Completed';
     const build = (arr) => ({
       quotes: arr.filter((e) => e.status === 'Quote Sent').length,
       inProgress: arr.filter((e) => e.status === 'In Progress').length,
       completed: arr.filter((e) => e.status === 'Event Completed').length,
       total: arr.filter(isReal).length,
       revenue: arr.filter((e) => e.status === 'Event Completed' || e.status === 'In Progress').reduce((s, e) => s + money(e), 0),
+      webConversions: arr.filter(isWebConversion).length,
     });
     const cur = build(curF), prev = build(prevF);
     const conv = (b) => (b.quotes ? (b.completed / b.quotes) * 100 : 0);
@@ -7590,6 +7605,7 @@ function GeneralReportView({ reports }) {
         <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kc.total.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.total, kp.total)} suffix="%" /></div><span>Total events</span></div>
         <div className="webseo-kpi"><div className="webseo-kpi-top"><strong title={reportFmtRand(kc.revenue)}>{reportFmtRand(kc.revenue)}</strong><DeltaBadge value={reportPctChange(kc.revenue, kp.revenue)} suffix="%" /></div><span>Revenue (Excl JC)</span></div>
         <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{kpi.convCur.toFixed(0)}%</strong><DeltaBadge value={kpi.convCur - kpi.convPrev} digits={1} suffix="pp" /></div><span>Quote &rarr; done</span></div>
+        <div className="webseo-kpi" title="Website-created line items (not duplicated multi-day copies) that reached Event Completed"><div className="webseo-kpi-top"><strong>{kc.webConversions.toLocaleString()}</strong><DeltaBadge value={reportPctChange(kc.webConversions, kp.webConversions)} suffix="%" /></div><span>Website quote conversions</span></div>
       </div>
       <div className="report-caption">vs the same period last year ({prevRange.start.slice(0, 4)}) &middot; {range.label}{regionSel.length ? ` · ${regionSel.length} region${regionSel.length > 1 ? 's' : ''}` : ' · all regions'}</div>
 

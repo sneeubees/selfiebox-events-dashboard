@@ -169,9 +169,19 @@ function toEventDto(record, creator = null, statusChanger = null) {
   };
 }
 
+// Website-submitted quotes stamp this exact activity entry at creation time
+// (see websiteQuotes.js:submitWebsiteQuote) - it's the only reliable, durable
+// signal that a given event line item originated from the website (there is
+// no dedicated "source" field). Wording changed once historically ("...
+// submitted on staging." -> "... submitted."), hence the prefix match.
+function isWebsiteQuoteOrigin(record) {
+  return (record.activity || []).some((entry) => String(entry?.text || "").startsWith("Website quote submitted"));
+}
+
 function toEventListDto(record, creator = null, statusChanger = null) {
   return {
     id: record.eventKey,
+    isWebsiteQuote: isWebsiteQuoteOrigin(record),
     workspaceYear: record.workspaceYear,
     name: record.name,
     eventTitle: record.eventTitle || "",
