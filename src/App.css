@@ -2287,6 +2287,12 @@ button.report-th.is-sorted { color: var(--blue); }
 .finx-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.78rem; color: var(--muted); padding: 3px 0; border-bottom: 1px dashed rgba(140, 170, 220, 0.08); }
 .finx-row:last-child { border-bottom: 0; }
 .finx-row span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+.finx-row.is-negative { background: rgba(235, 90, 90, 0.1); border-radius: 6px; padding-left: 6px; padding-right: 6px; }
+.finx-row.is-negative span:last-child { color: #f08080; font-weight: 700; }
+.finx-row.is-edit.is-negative .finx-input-amount { color: #f08080; font-weight: 700; border-color: rgba(235, 90, 90, 0.45); }
+.finx-benefits-head { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(140, 170, 220, 0.16); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.finx-benefits-head strong { color: var(--muted); font-weight: 700; }
+.finx-benefits-head span { color: #6fb2ff; }
 .finx-note { margin-top: 14px; font-size: 0.75rem; }
 .finx-table td strong { color: #58d98f; }
 .finx-ladder { display: flex; flex-wrap: wrap; gap: 8px; }

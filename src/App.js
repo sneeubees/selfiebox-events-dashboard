@@ -6734,9 +6734,22 @@ function ExpensesView() {
 
 // ---- Finances: Directors remuneration ----
 const DIRECTORS_SEED = {
-  johan: { label: 'Johan Coetzee', items: [['Salary', 80000]] },
-  stephan: { label: 'Stephan Swart', items: [['Salary', 80000]] },
+  johan: { label: 'Johan Coetzee', items: [['Salary', 80000]], benefits: [] },
+  stephan: { label: 'Stephan Swart', items: [['Salary', 80000]], benefits: [] },
 };
+const DIRECTORS_KEYS = ['johan', 'stephan'];
+const directorFirstName = (label) => String(label || '').trim().split(/\s+/)[0] || label;
+// Older saved data predates the "benefits" list - default it in rather than
+// crash, without touching anything the director already has recorded.
+function normalizeDirectorsData(raw) {
+  const data = structuredClone(raw || DIRECTORS_SEED);
+  DIRECTORS_KEYS.forEach((dk) => {
+    if (!data[dk]) data[dk] = structuredClone(DIRECTORS_SEED[dk]);
+    if (!Array.isArray(data[dk].items)) data[dk].items = [];
+    if (!Array.isArray(data[dk].benefits)) data[dk].benefits = [];
+  });
+  return data;
+}
 
 function DirectorsView() {
   const current = useQuery(api.expenses.getDirectors, {});
@@ -6748,19 +6761,22 @@ function DirectorsView() {
 
   useEffect(() => {
     if (current === undefined || draft !== null) return;
-    setDraft(structuredClone(current?.data || DIRECTORS_SEED));
+    setDraft(normalizeDirectorsData(current?.data));
     // eslint-disable-next-line
   }, [current]);
 
   const mutate = (fn) => setDraft((cur) => { const next = structuredClone(cur); fn(next); setDirty(true); return next; });
-  const setItem = (dk, ii, field, value) => mutate((d) => {
-    const item = d[dk].items[ii];
+  // Amounts can go negative on purpose (e.g. a deduction) - rows highlight
+  // red when they do, so no clamping here.
+  const setItem = (dk, listKey, ii, field, value) => mutate((d) => {
+    const item = d[dk][listKey][ii];
     if (field === 'name') item[0] = value;
-    else item[1] = Math.max(0, reportParseMoney(value));
+    else item[1] = reportParseMoney(value);
   });
-  const addItem = (dk) => mutate((d) => { d[dk].items.push(['New amount', 0]); });
-  const removeItem = (dk, ii) => mutate((d) => { d[dk].items.splice(ii, 1); });
-  const totalFor = (dk) => draft ? draft[dk].items.reduce((a, it) => a + (Number(it[1]) || 0), 0) : 0;
+  const addItem = (dk, listKey) => mutate((d) => { d[dk][listKey].push(['New amount', 0]); });
+  const removeItem = (dk, listKey, ii) => mutate((d) => { d[dk][listKey].splice(ii, 1); });
+  const totalForList = (dk, listKey) => draft ? draft[dk][listKey].reduce((a, it) => a + (Number(it[1]) || 0), 0) : 0;
+  const totalFor = (dk) => totalForList(dk, 'items') + totalForList(dk, 'benefits');
 
   const saveChanges = async () => {
     setBusy(true);
@@ -6768,9 +6784,23 @@ function DirectorsView() {
     catch (e) { window.alert('Could not save: ' + (e?.message || e)); }
     setBusy(false);
   };
-  const discardChanges = () => { setDraft(structuredClone(current?.data || DIRECTORS_SEED)); setDirty(false); setEditing(false); };
+  const discardChanges = () => { setDraft(normalizeDirectorsData(current?.data)); setDirty(false); setEditing(false); };
 
-  const keys = ['johan', 'stephan'];
+  const renderRows = (dk, listKey) => {
+    const rows = draft[dk][listKey];
+    if (!rows.length) return !editing ? <div className="finx-row"><span className="webstats-muted">None recorded.</span></div> : null;
+    return rows.map((it, ii) => {
+      const isNegative = Number(it[1]) < 0;
+      return editing
+        ? <div className={`finx-row is-edit${isNegative ? ' is-negative' : ''}`} key={ii}>
+            <input className="finx-input" value={it[0]} onChange={(e) => setItem(dk, listKey, ii, 'name', e.target.value)} />
+            <input className="finx-input finx-input-amount" inputMode="numeric" value={it[1]} onChange={(e) => setItem(dk, listKey, ii, 'amount', e.target.value)} />
+            <button className="finx-del" type="button" aria-label="Remove" onClick={() => removeItem(dk, listKey, ii)}>&times;</button>
+          </div>
+        : <div className={`finx-row${isNegative ? ' is-negative' : ''}`} key={ii}><span>{it[0]}</span><span>{Number(it[1]) ? finR(it[1]) : '—'}</span></div>;
+    });
+  };
+
   return <div className="statspage-view">
     <header className="statspage-viewhead">
       <div><h2>Directors</h2><p>Remuneration per director — monthly amounts.</p></div>
@@ -6785,7 +6815,7 @@ function DirectorsView() {
     </header>
     {!draft ? <div className="webstats-empty">Loading&hellip;</div> : <>
       <div className="webstats-kpis finx-kpis">
-        {keys.map((dk) => (
+        {DIRECTORS_KEYS.map((dk) => (
           <div className="webstats-kpi is-highlight" key={dk}>
             <div className="webstats-kpi-val">{finR(totalFor(dk))}</div>
             <div className="webstats-kpi-label">{draft[dk].label} — total</div>
@@ -6793,19 +6823,15 @@ function DirectorsView() {
         ))}
       </div>
       <div className="finx-directors">
-        {keys.map((dk) => (
+        {DIRECTORS_KEYS.map((dk) => (
           <div className="finx-card" key={dk}>
-            <div className="finx-card-head"><strong>{draft[dk].label}</strong><span>{finR(totalFor(dk))}</span></div>
-            {draft[dk].items.map((it, ii) => (
-              editing
-                ? <div className="finx-row is-edit" key={ii}>
-                    <input className="finx-input" value={it[0]} onChange={(e) => setItem(dk, ii, 'name', e.target.value)} />
-                    <input className="finx-input finx-input-amount" inputMode="numeric" value={it[1]} onChange={(e) => setItem(dk, ii, 'amount', e.target.value)} />
-                    <button className="finx-del" type="button" aria-label="Remove" onClick={() => removeItem(dk, ii)}>&times;</button>
-                  </div>
-                : <div className="finx-row" key={ii}><span>{it[0]}</span><span>{Number(it[1]) ? finR(it[1]) : '—'}</span></div>
-            ))}
-            {editing ? <button className="finx-add-item" type="button" onClick={() => addItem(dk)}>+ Add amount</button> : null}
+            <div className="finx-card-head"><strong>{draft[dk].label}</strong><span>{finR(totalForList(dk, 'items'))}</span></div>
+            {renderRows(dk, 'items')}
+            {editing ? <button className="finx-add-item" type="button" onClick={() => addItem(dk, 'items')}>+ Add amount</button> : null}
+
+            <div className="finx-card-head finx-benefits-head"><strong>{directorFirstName(draft[dk].label)} additional benefits</strong><span>{finR(totalForList(dk, 'benefits'))}</span></div>
+            {renderRows(dk, 'benefits')}
+            {editing ? <button className="finx-add-item" type="button" onClick={() => addItem(dk, 'benefits')}>+ Add benefit</button> : null}
           </div>
         ))}
       </div>
