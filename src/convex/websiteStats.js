@@ -1,4 +1,6 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 function zaDate(timestampMs) {
   return new Date(timestampMs ?? Date.now()).toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
@@ -26,13 +28,13 @@ async function requireCurrentUser(ctx) {
   return user;
 }
 
-// Website-submitted quotes stamp this exact activity entry at creation time
-// (see websiteQuotes.js:submitWebsiteQuote) - it's the only durable signal
-// that an event line item originated from the website (no dedicated
-// "source" field exists). Wording changed once historically ("... submitted
-// on staging." -> "... submitted."), hence the prefix match.
+// See schema.js's comment on events.websiteOrigin: this field is stamped
+// once at creation by websiteQuotes.js:submitWebsiteQuote and survives every
+// later board save (unlike event.activity[], which events.js:upsert
+// wholesale-replaces - discovered 2026-09-09 auditing why almost no August
+// website-origin events still carried their activity marker).
 function isWebsiteQuoteOrigin(record) {
-  return (record.activity || []).some((entry) => String(entry?.text || "").startsWith("Website quote submitted"));
+  return Boolean(record.websiteOrigin);
 }
 
 // increments today's counter for the given field ("visits" | "quotes")
@@ -177,5 +179,73 @@ export const getQuoteConversions = query({
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => (a.date < b.date ? 1 : -1));
     return { days };
+  },
+});
+
+// One-time backfill for events.websiteOrigin on events created BEFORE that
+// field existed (see schema.js). Source of truth: the append-only
+// activityLog table (indexed by_event) - unlike event.activity[], upsert
+// never touches it, so it still has the "Website quote submitted" marker
+// for events whose embedded activity array was later wiped by a board save.
+// A full activityLog collect times out even scoped to one workspaceYear (a
+// huge table), so this looks it up per-candidate-event via the indexed
+// query instead, batched through an action since that can involve
+// thousands of small lookups (mutations cap out around 15s; actions don't).
+// Scoped to `workspaceYear` (pass the year(s) the website was actually live
+// in - no true website-origin event can predate the site launch).
+export const listBackfillCandidates = internalQuery({
+  args: { workspaceYear: v.number() },
+  handler: async (ctx, args) => {
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", args.workspaceYear))
+      .collect();
+    return events.filter((e) => !e.websiteOrigin).map((e) => e._id);
+  },
+});
+
+export const backfillWebsiteOriginBatch = internalMutation({
+  args: { eventIds: v.array(v.id("events")) },
+  handler: async (ctx, args) => {
+    let updated = 0;
+    for (const eventId of args.eventIds) {
+      const logs = await ctx.db
+        .query("activityLog")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId))
+        .collect();
+      const hasMarker = logs.some((l) => String(l.text || "").startsWith("Website quote submitted"));
+      if (hasMarker) {
+        await ctx.db.patch(eventId, { websiteOrigin: true });
+        updated += 1;
+      }
+    }
+    return updated;
+  },
+});
+
+export const backfillWebsiteOriginAction = internalAction({
+  args: { workspaceYear: v.number() },
+  handler: async (ctx, args) => {
+    const eventIds = await ctx.runQuery(internal.websiteStats.listBackfillCandidates, { workspaceYear: args.workspaceYear });
+    let totalUpdated = 0;
+    const batchSize = 100;
+    for (let i = 0; i < eventIds.length; i += batchSize) {
+      const batch = eventIds.slice(i, i + batchSize);
+      totalUpdated += await ctx.runMutation(internal.websiteStats.backfillWebsiteOriginBatch, { eventIds: batch });
+    }
+    return { scanned: eventIds.length, updated: totalUpdated };
+  },
+});
+
+// Manual trigger (admin-only). Kicks off the action above in the
+// background - check the Convex dashboard/logs for its result, or just
+// re-run getQuoteConversions afterward to see the corrected numbers.
+export const backfillWebsiteOrigin = mutation({
+  args: { workspaceYear: v.number() },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    if (user.role !== "admin") throw new Error("Only admins can run this backfill.");
+    await ctx.scheduler.runAfter(0, internal.websiteStats.backfillWebsiteOriginAction, { workspaceYear: args.workspaceYear });
+    return { scheduled: true };
   },
 });

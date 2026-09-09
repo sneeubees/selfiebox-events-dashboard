@@ -122,6 +122,19 @@ export default defineSchema({
     // (from Jul 2026). Booking build-up stats read this first, falling back to
     // activity-log text for older events.
     statusTimeline: v.optional(v.array(v.object({ status: v.string(), at: v.number() }))),
+    // True only for the event line item the website's own quote form created
+    // (websiteQuotes.js:submitWebsiteQuote), stamped once at insert. NOT part
+    // of events.js:upsert's payload, so - like firstStatusChangeByUserId
+    // above - Convex's shallow patch() merge leaves it untouched on every
+    // later board save. Deliberately NOT derived from event.activity[]: that
+    // array gets wholesale-replaced by upsert (its payload always includes
+    // `activity`, defaulting to [] when the frontend's local event object
+    // doesn't carry it, which listByWorkspaceYear's DTO never does) - so it
+    // silently loses this signal the first time anyone edits the event.
+    // Backfilled for pre-existing rows via websiteStats.js's one-time
+    // backfillWebsiteOrigin action (source: the append-only activityLog
+    // table, keyed by event, which upsert never touches).
+    websiteOrigin: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
