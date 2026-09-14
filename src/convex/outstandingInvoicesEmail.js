@@ -1,8 +1,8 @@
-// Monthly mailer (fires 1st of the month) listing completed events whose
-// invoice number is still blank, scoped to the 3 full calendar months before
-// the current one (by event date). Mirrors aiAnalysis.js's cron pattern: a
-// gated internalMutation cron entry point + an admin-only public mutation for
-// manual testing, both scheduling the same internalAction.
+// Monthly mailer (fires 1st of the month) listing completed/in-progress
+// events whose invoice number is still blank, scoped to the 3 full calendar
+// months before the current one (by event date). Mirrors aiAnalysis.js's
+// cron pattern: a gated internalMutation cron entry point + an admin-only
+// public mutation for manual testing, both scheduling the same internalAction.
 
 import { mutation, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -63,6 +63,13 @@ function formatRand(n) {
 function normalizeStatus(status) {
   return String(status || "").trim().toLowerCase();
 }
+// Completed events are the main case, but a Friday event often only gets
+// marked completed the following Mon/Tue - In Progress events already inside
+// the 3-month window would otherwise be missed for a month.
+function isIncludedStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized === "event completed" || normalized === "in progress";
+}
 
 function saNowParts() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -120,7 +127,7 @@ export const gatherOutstandingInvoices = internalQuery({
       for (const event of events) {
         const date = String(event.date || "");
         if (!date || date < startDate || date >= endDate) continue;
-        if (normalizeStatus(event.status) !== "event completed") continue;
+        if (!isIncludedStatus(event.status)) continue;
         if (String(event.invoiceNumber || "").trim()) continue;
         rows.push({
           name: event.name || event.eventTitle || "(unnamed)",
@@ -190,7 +197,7 @@ function buildOutstandingInvoicesEmail({ label, rows, windowLabel }) {
       <span style="font-size:12px;color:#7a869c;">&nbsp;&middot; Outstanding invoices${label ? ` &middot; ${esc(label)}` : ""}</span>
     </div>
     <div style="font-size:14px;color:#33415e;line-height:1.6;margin:0 0 16px;">
-      Completed events from ${esc(windowLabel)} that still don't have an invoice number in the dashboard.
+      Completed / in-progress events from ${esc(windowLabel)} that still don't have an invoice number in the dashboard.
     </div>
     <div style="padding:16px 14px;background:#ffffff;border:1px solid #e3e9f4;border-radius:12px;">
       ${buildRowsTable(rows)}
@@ -201,7 +208,7 @@ function buildOutstandingInvoicesEmail({ label, rows, windowLabel }) {
   </div></body></html>`;
   const text = [
     `Outstanding invoices${label ? ` - ${label}` : ""} (${rows.length})`,
-    `Completed events from ${windowLabel} that still don't have an invoice number.`,
+    `Completed / in-progress events from ${windowLabel} that still don't have an invoice number.`,
     "",
     ...rows.map((r) => `- ${r.name} | ${r.date} | ${r.branch.join(", ")} | Quote ${r.quoteNumber || "-"} | ${formatRand(r.amount)}`),
     "",
