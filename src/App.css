@@ -868,6 +868,10 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-difference-cell.is-negative { color: #e12525; font-weight: 700; }
 .turnover-value-cell.is-row-best-month { color: #149b46; font-weight: 700; }
 .turnover-value-cell.is-best-ever-month { background: #efe5ff; color: #6a3db8; font-weight: 700; }
+.turnover-linechart-section { margin-top: 14px; flex-shrink: 0; }
+.turnover-linechart-svg { width: 100%; height: auto; }
+.turnover-linechart-grid { stroke: var(--line); stroke-width: 1; }
+.turnover-linechart-month { fill: var(--muted); font-size: 9px; }
 .commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {
   display: grid;

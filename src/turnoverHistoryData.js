@@ -245,19 +245,19 @@ export const TURNOVER_HISTORY_DATA = {
             "Mar": 397572,
             "Apr": 296260,
             "May": 477493,
-            "Jun": 427200,
+            "Jun": 424680,
             "Jul": 394900,
-            "Aug": 600000,
-            "Sep": 513000,
+            "Aug": 606750,
+            "Sep": 515500,
             "Oct": 688700,
             "Nov": 887000,
             "Dec": 620468
           },
-          "total": 5862114,
-          "growthPct": -0.027566348809911663,
-          "growthRand": -166178,
+          "total": 5868844,
+          "growthPct": -0.02644994635296366,
+          "growthRand": -159448,
           "noEvents": null,
-          "notes": ""
+          "notes": "Jun/Aug/Sep levelled 2026-09-14: GP+CT didn't sum to Combined for those months (diff -5040/+13500/+5000) - split evenly between GP and CT, Combined left untouched."
         }
       ]
     },
@@ -448,19 +448,19 @@ export const TURNOVER_HISTORY_DATA = {
             "Mar": 234387,
             "Apr": 229199,
             "May": 252025,
-            "Jun": 230440,
+            "Jun": 227920,
             "Jul": 125800,
-            "Aug": 259500,
-            "Sep": 242000,
+            "Aug": 266250,
+            "Sep": 244500,
             "Oct": 445500,
             "Nov": 381000,
             "Dec": 504600
           },
-          "total": 3158491,
-          "growthPct": 0.0027257964922751637,
-          "growthRand": 8586,
+          "total": 3165221,
+          "growthPct": 0.004862368865092757,
+          "growthRand": 15316,
           "noEvents": null,
-          "notes": ""
+          "notes": "Jun/Aug/Sep levelled 2026-09-14: GP+CT didn't sum to Combined for those months (diff -5040/+13500/+5000) - split evenly between GP and CT, Combined left untouched."
         }
       ]
     },

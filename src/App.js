@@ -7020,7 +7020,79 @@ function TurnoverView({ isAdmin, turnover }) {
           )}
         </div>
       </div>
+      <TurnoverMonthlyLineChart rows={rows} regionLabel={regionLabel} />
       {drill ? <BookingBuildupModal drill={drill} region={region} regionLabel={regionLabel} onClose={() => setDrill(null)} /> : null}
+    </div>
+  );
+}
+
+// Last-2-years monthly turnover, as a line graph. `rows` is the SAME
+// region-filtered array the table above renders, so it automatically honors
+// whichever region is selected - no separate data fetch. The array also
+// carries trailing summary rows (Difference/diffPct/Totals), so pick the
+// actual year rows first before taking the last two.
+const TURNOVER_LINECHART_COLORS = ['#2f73e6', '#a9b7d1'];
+function TurnoverMonthlyLineChart({ rows, regionLabel }) {
+  const yearRows = (rows || []).filter((row) => row.rowType === 'year');
+  const lastTwo = yearRows.slice(-2);
+  const months = TURNOVER_HISTORY_DATA.months;
+
+  if (lastTwo.length < 2) {
+    return (
+      <div className="webstats-section turnover-linechart-section">
+        <h4>Monthly turnover <span>last 2 years{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
+        <div className="webstats-muted">Not enough year history yet for this region.</div>
+      </div>
+    );
+  }
+
+  const series = lastTwo.map((row) => ({
+    label: row.label,
+    values: months.map((month) => Number(row.months?.[month]) || 0),
+  }));
+  const maxValue = Math.max(1, ...series.flatMap((s) => s.values));
+  const width = 760;
+  const height = 220;
+  const padLeft = 14;
+  const padRight = 14;
+  const padTop = 14;
+  const padBottom = 26;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const xFor = (i) => padLeft + (months.length > 1 ? (i / (months.length - 1)) * plotWidth : plotWidth / 2);
+  const yFor = (value) => padTop + plotHeight - (value / maxValue) * plotHeight;
+
+  return (
+    <div className="webstats-section turnover-linechart-section">
+      <h4>Monthly turnover <span>last 2 years{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
+      <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label="Monthly turnover, last 2 years">
+        {[0.25, 0.5, 0.75, 1].map((fraction) => {
+          const y = padTop + plotHeight * (1 - fraction);
+          return <line key={fraction} x1={padLeft} x2={width - padRight} y1={y} y2={y} className="turnover-linechart-grid" />;
+        })}
+        {series.map((s, si) => (
+          <polyline
+            key={s.label}
+            points={s.values.map((value, i) => `${xFor(i)},${yFor(value)}`).join(' ')}
+            fill="none"
+            stroke={TURNOVER_LINECHART_COLORS[si] || '#888'}
+            strokeWidth="2.5"
+          />
+        ))}
+        {series.map((s, si) => s.values.map((value, i) => (
+          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="3" fill={TURNOVER_LINECHART_COLORS[si] || '#888'}>
+            <title>{`${TURNOVER_MONTH_LABELS[months[i]] || months[i]} ${s.label}: ${formatTurnoverCurrency(value)}`}</title>
+          </circle>
+        )))}
+        {months.map((month, i) => (
+          <text key={month} x={xFor(i)} y={height - 6} textAnchor="middle" className="turnover-linechart-month">{TURNOVER_MONTH_LABELS[month] || month}</text>
+        ))}
+      </svg>
+      <div className="report-legend">
+        {series.map((s, si) => (
+          <span className="report-legend-item" key={s.label}><i style={{ background: TURNOVER_LINECHART_COLORS[si] || '#888' }} />{s.label}</span>
+        ))}
+      </div>
     </div>
   );
 }
