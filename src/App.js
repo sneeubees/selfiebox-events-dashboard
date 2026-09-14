@@ -7021,21 +7021,65 @@ function TurnoverView({ isAdmin, turnover }) {
         </div>
       </div>
       <TurnoverMonthlyLineChart rows={rows} regionLabel={regionLabel} />
+      <TurnoverYearProgressionChart rows={rows} regionLabel={regionLabel} netProfitPct={netProfitPct} />
       {drill ? <BookingBuildupModal drill={drill} region={region} regionLabel={regionLabel} onClose={() => setDrill(null)} /> : null}
     </div>
   );
+}
+
+// Shared geometry/axis helpers for the turnover line charts below. Fixed
+// pixel size (not width:100%) so they don't blow up on a wide/27" screen -
+// see App.css .turnover-linechart-svg.
+const TURNOVER_CHART_WIDTH = 760;
+const TURNOVER_CHART_HEIGHT = 220;
+const TURNOVER_CHART_PAD = { left: 52, right: 14, top: 14, bottom: 26 };
+const TURNOVER_LINECHART_COLORS = ['#2f73e6', '#a9b7d1']; // [current year, previous year]
+
+function formatTurnoverAxisK(value) {
+  return `${Math.round(value / 1000).toLocaleString('en-ZA')}k`;
+}
+// Round gridlines up to a whole number of `step`, e.g. 50k steps so a
+// combined-region chart with Jan around 320k shows lines at 300k/350k.
+function turnoverAxisTicks(maxValue, step) {
+  const top = Math.max(step, Math.ceil(maxValue / step) * step);
+  const ticks = [];
+  for (let v = 0; v <= top; v += step) ticks.push(v);
+  return ticks;
+}
+// A per-month chart and a cumulative (much larger) one need different
+// gridline spacing - pick a "nice" round step so neither ends up with 2
+// lines or 60 of them.
+function chooseTurnoverAxisStep(maxValue) {
+  const niceSteps = [50000, 100000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 5000000, 10000000];
+  const target = Math.max(1, maxValue) / 6;
+  return niceSteps.find((step) => step >= target) || niceSteps[niceSteps.length - 1];
+}
+function TurnoverAxisGrid({ ticks, yFor, padLeft, chartWidth, padRight }) {
+  return ticks.map((tick) => {
+    const y = yFor(tick);
+    return (
+      <g key={tick}>
+        <line x1={padLeft} x2={chartWidth - padRight} y1={y} y2={y} className="turnover-linechart-grid" />
+        <text x={padLeft - 6} y={y + 3} textAnchor="end" className="turnover-linechart-axislabel">{formatTurnoverAxisK(tick)}</text>
+      </g>
+    );
+  });
 }
 
 // Last-2-years monthly turnover, as a line graph. `rows` is the SAME
 // region-filtered array the table above renders, so it automatically honors
 // whichever region is selected - no separate data fetch. The array also
 // carries trailing summary rows (Difference/diffPct/Totals), so pick the
-// actual year rows first before taking the last two.
-const TURNOVER_LINECHART_COLORS = ['#2f73e6', '#a9b7d1'];
+// actual year rows first before taking the last two. The current year's
+// line stops at the current month (whatever year that actually is); any
+// other year shown (i.e. the previous year) runs its full 12 months - so
+// e.g. 2025 goes to Dec while 2026 stops at Sep.
 function TurnoverMonthlyLineChart({ rows, regionLabel }) {
   const yearRows = (rows || []).filter((row) => row.rowType === 'year');
   const lastTwo = yearRows.slice(-2);
   const months = TURNOVER_HISTORY_DATA.months;
+  const currentYear = new Date().getFullYear();
+  const currentMonthIndex = new Date().getMonth();
 
   if (lastTwo.length < 2) {
     return (
@@ -7046,41 +7090,44 @@ function TurnoverMonthlyLineChart({ rows, regionLabel }) {
     );
   }
 
-  const series = lastTwo.map((row) => ({
-    label: row.label,
-    values: months.map((month) => Number(row.months?.[month]) || 0),
-  }));
+  const series = lastTwo.map((row) => {
+    const isCurrent = Number(row.label) === currentYear;
+    const monthCount = isCurrent ? currentMonthIndex + 1 : months.length;
+    return {
+      label: row.label,
+      isCurrent,
+      values: months.slice(0, monthCount).map((month) => Number(row.months?.[month]) || 0),
+    };
+  });
   const maxValue = Math.max(1, ...series.flatMap((s) => s.values));
-  const width = 760;
-  const height = 220;
-  const padLeft = 14;
-  const padRight = 14;
-  const padTop = 14;
-  const padBottom = 26;
+  const ticks = turnoverAxisTicks(maxValue, 50000);
+  const axisMax = ticks[ticks.length - 1];
+
+  const width = TURNOVER_CHART_WIDTH;
+  const height = TURNOVER_CHART_HEIGHT;
+  const { left: padLeft, right: padRight, top: padTop, bottom: padBottom } = TURNOVER_CHART_PAD;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
   const xFor = (i) => padLeft + (months.length > 1 ? (i / (months.length - 1)) * plotWidth : plotWidth / 2);
-  const yFor = (value) => padTop + plotHeight - (value / maxValue) * plotHeight;
+  const yFor = (value) => padTop + plotHeight - (value / axisMax) * plotHeight;
+  const colorFor = (s) => (s.isCurrent ? TURNOVER_LINECHART_COLORS[0] : TURNOVER_LINECHART_COLORS[1]);
 
   return (
     <div className="webstats-section turnover-linechart-section">
       <h4>Monthly turnover <span>last 2 years{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
       <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label="Monthly turnover, last 2 years">
-        {[0.25, 0.5, 0.75, 1].map((fraction) => {
-          const y = padTop + plotHeight * (1 - fraction);
-          return <line key={fraction} x1={padLeft} x2={width - padRight} y1={y} y2={y} className="turnover-linechart-grid" />;
-        })}
-        {series.map((s, si) => (
+        <TurnoverAxisGrid ticks={ticks} yFor={yFor} padLeft={padLeft} chartWidth={width} padRight={padRight} />
+        {series.map((s) => (
           <polyline
             key={s.label}
             points={s.values.map((value, i) => `${xFor(i)},${yFor(value)}`).join(' ')}
             fill="none"
-            stroke={TURNOVER_LINECHART_COLORS[si] || '#888'}
-            strokeWidth="2.5"
+            stroke={colorFor(s)}
+            strokeWidth="2"
           />
         ))}
-        {series.map((s, si) => s.values.map((value, i) => (
-          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="3" fill={TURNOVER_LINECHART_COLORS[si] || '#888'}>
+        {series.map((s) => s.values.map((value, i) => (
+          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="2.5" fill={colorFor(s)}>
             <title>{`${TURNOVER_MONTH_LABELS[months[i]] || months[i]} ${s.label}: ${formatTurnoverCurrency(value)}`}</title>
           </circle>
         )))}
@@ -7089,8 +7136,86 @@ function TurnoverMonthlyLineChart({ rows, regionLabel }) {
         ))}
       </svg>
       <div className="report-legend">
-        {series.map((s, si) => (
-          <span className="report-legend-item" key={s.label}><i style={{ background: TURNOVER_LINECHART_COLORS[si] || '#888' }} />{s.label}</span>
+        {series.map((s) => (
+          <span className="report-legend-item" key={s.label}><i style={{ background: colorFor(s) }} />{s.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Cumulative (running-total) nett profit for the year so far, last 2 years
+// overlaid, BOTH stopped at the current month - a pace comparison ("were we
+// ahead of last year's trajectory at this same point"), not a full-year
+// shape like the chart above. Uses the full width for just the months
+// shown (doesn't reserve blank space for the rest of the year).
+function TurnoverYearProgressionChart({ rows, regionLabel, netProfitPct }) {
+  const yearRows = (rows || []).filter((row) => row.rowType === 'year');
+  const lastTwo = yearRows.slice(-2);
+  const months = TURNOVER_HISTORY_DATA.months;
+  const currentYear = new Date().getFullYear();
+  const currentMonthIndex = new Date().getMonth();
+  const monthsShown = months.slice(0, currentMonthIndex + 1);
+  const netProfitRatio = parseTurnoverNetProfitPct(netProfitPct);
+  const upToLabel = TURNOVER_MONTH_LABELS[monthsShown[monthsShown.length - 1]] || monthsShown[monthsShown.length - 1];
+
+  if (lastTwo.length < 2) {
+    return (
+      <div className="webstats-section turnover-linechart-section">
+        <h4>Year progression (nett profit) <span>up to {upToLabel}{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
+        <div className="webstats-muted">Not enough year history yet for this region.</div>
+      </div>
+    );
+  }
+
+  const series = lastTwo.map((row) => {
+    let running = 0;
+    const values = monthsShown.map((month) => {
+      running += Number(row.months?.[month] || 0) * netProfitRatio;
+      return running;
+    });
+    return { label: row.label, isCurrent: Number(row.label) === currentYear, values };
+  });
+  const maxValue = Math.max(1, ...series.flatMap((s) => s.values));
+  const step = chooseTurnoverAxisStep(maxValue);
+  const ticks = turnoverAxisTicks(maxValue, step);
+  const axisMax = ticks[ticks.length - 1];
+
+  const width = TURNOVER_CHART_WIDTH;
+  const height = TURNOVER_CHART_HEIGHT;
+  const { left: padLeft, right: padRight, top: padTop, bottom: padBottom } = TURNOVER_CHART_PAD;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const xFor = (i) => padLeft + (monthsShown.length > 1 ? (i / (monthsShown.length - 1)) * plotWidth : plotWidth / 2);
+  const yFor = (value) => padTop + plotHeight - (value / axisMax) * plotHeight;
+  const colorFor = (s) => (s.isCurrent ? TURNOVER_LINECHART_COLORS[0] : TURNOVER_LINECHART_COLORS[1]);
+
+  return (
+    <div className="webstats-section turnover-linechart-section">
+      <h4>Year progression (nett profit) <span>up to {upToLabel}{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
+      <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label="Cumulative nett profit progression, last 2 years, up to the current month">
+        <TurnoverAxisGrid ticks={ticks} yFor={yFor} padLeft={padLeft} chartWidth={width} padRight={padRight} />
+        {series.map((s) => (
+          <polyline
+            key={s.label}
+            points={s.values.map((value, i) => `${xFor(i)},${yFor(value)}`).join(' ')}
+            fill="none"
+            stroke={colorFor(s)}
+            strokeWidth="2"
+          />
+        ))}
+        {series.map((s) => s.values.map((value, i) => (
+          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="2.5" fill={colorFor(s)}>
+            <title>{`${TURNOVER_MONTH_LABELS[monthsShown[i]] || monthsShown[i]} ${s.label} (cumulative): ${formatTurnoverCurrency(value)}`}</title>
+          </circle>
+        )))}
+        {monthsShown.map((month, i) => (
+          <text key={month} x={xFor(i)} y={height - 6} textAnchor="middle" className="turnover-linechart-month">{TURNOVER_MONTH_LABELS[month] || month}</text>
+        ))}
+      </svg>
+      <div className="report-legend">
+        {series.map((s) => (
+          <span className="report-legend-item" key={s.label}><i style={{ background: colorFor(s) }} />{s.label}</span>
         ))}
       </div>
     </div>

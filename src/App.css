@@ -869,9 +869,13 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-value-cell.is-row-best-month { color: #149b46; font-weight: 700; }
 .turnover-value-cell.is-best-ever-month { background: #efe5ff; color: #6a3db8; font-weight: 700; }
 .turnover-linechart-section { margin-top: 14px; flex-shrink: 0; }
-.turnover-linechart-svg { width: 100%; height: auto; }
+/* Fixed size, not width:100% - on a wide/27" screen that stretched the
+   viewBox's coordinate space so far past its native 760px that the text,
+   dots and strokes (all defined in viewBox units) rendered oversized. */
+.turnover-linechart-svg { display: block; width: 760px; max-width: 100%; height: auto; }
 .turnover-linechart-grid { stroke: var(--line); stroke-width: 1; }
 .turnover-linechart-month { fill: var(--muted); font-size: 9px; }
+.turnover-linechart-axislabel { fill: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
 .commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {
   display: grid;
