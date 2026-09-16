@@ -393,6 +393,15 @@ export default defineSchema({
     overallOk: v.boolean(),
     payload: v.string(), // full snapshot JSON (host + apps + containers)
   }).index("by_ts", ["ts"]),
+  // Singleton row tracking whether we're currently in an alerted "issue"
+  // state, so /health/ingest only emails on a state change (or once/day
+  // while it stays unresolved) instead of every 5-minute snapshot.
+  serverHealthAlertState: defineTable({
+    state: v.string(), // "ok" | "issue"
+    startedAt: v.number(), // when the current issue began (0 while "ok")
+    lastSentAt: v.number(),
+    lastReason: v.string(),
+  }),
   // Automated backup runs (one row per run), pushed by the backup cron.
   serverBackups: defineTable({
     ts: v.number(),
