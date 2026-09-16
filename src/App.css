@@ -2154,6 +2154,8 @@ button.report-th.is-sorted { color: var(--blue); }
 .health-bar span.is-crit { background: linear-gradient(90deg, #ef4444, #f97316); }
 .health-warn-note { margin-top: 10px; font-size: 0.74rem; color: #b45309; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.4); border-radius: 8px; padding: 7px 10px; }
 :root[data-theme="dark"] .health-warn-note { color: #fbbf24; }
+.health-summary { background: var(--panel-alt); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 4px; margin-bottom: 20px; }
+.health-summary h4 span { margin-left: 8px; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .health-backup { font-size: 0.82rem; }
 .health-backup-status { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #22c55e; margin-bottom: 6px; }
 .health-backup.is-bad .health-backup-status { color: #ef4444; }

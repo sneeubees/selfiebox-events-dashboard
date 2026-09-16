@@ -8441,13 +8441,71 @@ function healthBytes(n) {
 function healthLevel(pct, warn, crit) { return pct >= crit ? 'is-crit' : pct >= warn ? 'is-warn' : 'is-ok'; }
 
 // VPS + per-app health, restart history and last-backup status.
+function healthFmtDays(days) {
+  if (days == null) return null;
+  if (days < 1) return `${Math.round(days * 24)}h`;
+  return `${days.toFixed(1)} days`;
+}
+
+function HealthWeeklySummary({ summary }) {
+  if (summary === undefined) return <div className="webstats-section"><div className="webstats-empty">Crunching the last 7 days&hellip;</div></div>;
+  if (!summary) return <div className="webstats-section"><div className="webstats-empty">Not enough health history yet — check back after the collector has run a while.</div></div>;
+
+  const row = (title, verdict, text) => (
+    <div className="webstats-section">
+      <h4>{title} <span className={verdict === 'fine' ? 'health-ok-txt' : 'health-bad-txt'}>{verdict === 'fine' ? 'coping fine' : 'worth a look'}</span></h4>
+      <p className="webstats-muted">{text}</p>
+    </div>
+  );
+
+  const diskLine = summary.disk.trend === 'growing'
+    ? `That's a steady climb of about +${summary.disk.pctPerDay.toFixed(1)} percentage points/day (~${summary.disk.gbPerDay.toFixed(1)}GB/day).${summary.disk.daysUntilFull != null ? ` At that rate, with ${summary.disk.diskFreeGb}GB free right now, the disk fills in roughly ${healthFmtDays(summary.disk.daysUntilFull)} if nothing changes.` : ''}`
+    : summary.disk.trend === 'shrinking'
+      ? `Disk usage is trending down (about ${summary.disk.pctPerDay.toFixed(1)} pts/day) — space was freed up this week.`
+      : `Disk usage has been flat this week.`;
+
+  return (
+    <div className="health-summary">
+      {row('CPU', summary.cpu.verdict, `Averages ${summary.cpu.avg}% all week, peak ${summary.cpu.max}%.${summary.cpu.sustainedHours ? ` ${summary.cpu.sustainedHours} hour(s) had a sustained (hourly-average) load over 70%.` : ' No sustained load — any spikes were brief.'}`)}
+      {row('Memory', summary.mem.verdict, `Steady ${summary.mem.avg}% average, peaked at ${summary.mem.max}% (currently ${summary.mem.liveUsedMb}/${summary.mem.liveTotalMb}MB).`)}
+      {row('App stability', summary.apps.verdict, summary.apps.downApps.length ? `${summary.apps.downHours} hour(s) had an app down: ${summary.apps.downApps.join(', ')}.` : 'Zero downtime — no monitored app went down and no container restarted all week.')}
+      <div className="webstats-section">
+        <h4>Disk — the one to watch <span className={summary.disk.verdict === 'fine' ? 'health-ok-txt' : 'health-bad-txt'}>{summary.disk.verdict === 'fine' ? 'coping fine' : 'worth a look'}</span></h4>
+        <div className="report-att-table">
+          <div className="report-att-tr health-bk-head" style={{ gridTemplateColumns: '1fr 1fr', minWidth: 260 }}><span>Date</span><span>Peak disk usage</span></div>
+          {summary.disk.dailyPeaks.map((d) => (
+            <div className="report-att-tr health-bk-row" style={{ gridTemplateColumns: '1fr 1fr', minWidth: 260 }} key={d.date}>
+              <span>{d.date}</span>
+              <span className={d.peakPct >= 93 ? 'health-bad-txt' : ''}>{d.peakPct}%{d.peakPct >= 93 ? ' ← issue threshold' : ''}</span>
+            </div>
+          ))}
+        </div>
+        <p className="webstats-muted" style={{ marginTop: 8 }}>Currently {summary.disk.currentPct}% full ({summary.disk.diskFreeGb}GB free of {summary.disk.diskTotalGb}GB). {diskLine}</p>
+      </div>
+    </div>
+  );
+}
+
 function ServerHealthView({ reports }) {
   const canAccess = reports?.canAccess;
   const latest = useQuery(api.serverHealth.getLatest, canAccess ? {} : 'skip');
   const backups = useQuery(api.serverHealth.getBackups, canAccess ? { limit: 20 } : 'skip');
   const snap = useMemo(() => { if (!latest?.payload) return null; try { return JSON.parse(latest.payload); } catch { return null; } }, [latest]);
+  const [showSummary, setShowSummary] = useState(false);
+  const summary = useQuery(api.serverHealthSummary.getWeeklySummary, canAccess && showSummary ? {} : 'skip');
 
-  const head = <header className="statspage-viewhead report-head"><div><h2>Server Health</h2><p>Live status of the VPS and every app it hosts.</p></div></header>;
+  const head = (
+    <header className="statspage-viewhead report-head">
+      <div><h2>Server Health</h2><p>Live status of the VPS and every app it hosts.</p></div>
+      {canAccess ? (
+        <div className="webstats-controls">
+          <button className="primary-button" type="button" onClick={() => setShowSummary((v) => !v)}>
+            {showSummary ? 'Hide 7 Day Summary' : '7 Day Summary'}
+          </button>
+        </div>
+      ) : null}
+    </header>
+  );
   if (latest === undefined) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading server health&hellip;</div></div>;
   if (!latest || !snap) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">No health data yet — the collector runs every 5 minutes, check back shortly.</div></div>;
 
@@ -8476,6 +8534,8 @@ function ServerHealthView({ reports }) {
         <strong>{stale ? 'Collector offline — data may be out of date' : snap.overallOk ? 'All systems operational' : 'Issues detected'}</strong>
         <span className="health-banner-meta">updated {healthAgo(ageMs)} · uptime {healthUptime(host.uptimeSec)} · load {host.load}</span>
       </div>
+
+      {showSummary ? <HealthWeeklySummary summary={summary} /> : null}
 
       <div className="webstats-cols health-gauges">
         <div className="webstats-section">
