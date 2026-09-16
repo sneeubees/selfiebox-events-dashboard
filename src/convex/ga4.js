@@ -15,6 +15,23 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const DATA_API = "https://analyticsdata.googleapis.com/v1beta";
 const GSC_API = "https://www.googleapis.com/webmasters/v3";
 
+// City landing pages on the live site (/photo-booth-hire-<slug>/), confirmed
+// against /var/www/selfiebox-website-new 2026-09-16. Update this list if a
+// city page is added/removed/renamed.
+const BRANCH_PAGES = [
+  { slug: "johannesburg", label: "Johannesburg" },
+  { slug: "pretoria", label: "Pretoria" },
+  { slug: "cape-town", label: "Cape Town" },
+  { slug: "durban", label: "Durban" },
+  { slug: "port-elizabeth", label: "Port Elizabeth" },
+  { slug: "east-london", label: "East London" },
+  { slug: "bloemfontein", label: "Bloemfontein" },
+  { slug: "nelspruit", label: "Nelspruit" },
+  { slug: "polokwane", label: "Polokwane" },
+  { slug: "kimberley", label: "Kimberley" },
+  { slug: "potchefstroom", label: "Potchefstroom" },
+];
+
 // ---------- auth helpers ----------
 async function findUser(ctx, clerkId, email) {
   let user = clerkId
@@ -279,7 +296,21 @@ export const fetchStats = internalAction({
         orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
         limit: 10,
       };
-      const [totals, convTotal, trend, pages, sources, convByEvent, countries] = await Promise.all([
+      const branchPagesReq = {
+        dateRanges: dr,
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "sessions" }],
+        dimensionFilter: {
+          orGroup: {
+            expressions: BRANCH_PAGES.map((b) => ({
+              filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: `/photo-booth-hire-${b.slug}` } },
+            })),
+          },
+        },
+        limit: 50,
+      };
+
+      const [totals, convTotal, trend, pages, sources, convByEvent, countries, branchPages] = await Promise.all([
         runReport(accessToken, propertyId, wc({ dateRanges: dr, metrics: TOTAL_METRICS.map((name) => ({ name })) })),
         runReport(accessToken, propertyId, wc(convRequest(startDate, endDate, CONV_EVENTS))),
         runReport(accessToken, propertyId, wc(trendReq)),
@@ -305,6 +336,7 @@ export const fetchStats = internalAction({
           orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
         })),
         countriesReq ? runReport(accessToken, propertyId, countriesReq) : Promise.resolve(null),
+        runReport(accessToken, propertyId, wc(branchPagesReq)),
       ]);
 
       const kpi = parseTotals(totals);
@@ -338,6 +370,12 @@ export const fetchStats = internalAction({
           country: r.dimensionValues[0].value || "(unknown)",
           sessions: num(r.metricValues[0].value),
         })),
+        branchPages: BRANCH_PAGES.map((b) => {
+          const sessions = (branchPages.rows || [])
+            .filter((r) => r.dimensionValues[0].value.includes(`/photo-booth-hire-${b.slug}`))
+            .reduce((sum, r) => sum + num(r.metricValues[0].value), 0);
+          return { slug: b.slug, label: b.label, sessions };
+        }).sort((a, c) => c.sessions - a.sessions),
       };
     } catch (e) {
       return { connected: true, canManage: true, error: "report_failed", detail: String(e.message || e) };

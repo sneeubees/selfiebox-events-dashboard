@@ -7346,6 +7346,7 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
   const maxPage = data?.topPages?.length ? Math.max(...data.topPages.map((p) => p.views), 1) : 1;
   const maxSrc = data?.sources?.length ? Math.max(...data.sources.map((s) => s.sessions), 1) : 1;
   const maxCountry = data?.countries?.length ? Math.max(...data.countries.map((c) => c.sessions), 1) : 1;
+  const maxBranch = data?.branchPages?.length ? Math.max(...data.branchPages.map((b) => b.sessions), 1) : 1;
 
   const head = (
     <header className="statspage-viewhead">
@@ -7438,9 +7439,15 @@ function WebsiteStatsView({ isAdmin, connectUrl, openConnect }) {
           {data.sources.length ? data.sources.map((s) => <div className="webstats-row" key={s.channel}><div className="webstats-row-head"><span className="webstats-row-label">{s.channel}</span><span className="webstats-row-val">{s.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-src" style={{ width: `${(s.sessions / maxSrc) * 100}%` }} /></div></div>) : <div className="webstats-muted">No data yet.</div>}
         </div>
       </div>
-      {data.countries?.length ? <div className="webstats-section">
-        <h4>By country <span>{periodLabel}</span></h4>
-        {data.countries.map((c) => <div className="webstats-row" key={c.country}><div className="webstats-row-head"><span className="webstats-row-label">{c.country}</span><span className="webstats-row-val">{c.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-country" style={{ width: `${(c.sessions / maxCountry) * 100}%` }} /></div></div>)}
+      {data.countries?.length || data.branchPages?.length ? <div className="webstats-cols">
+        {data.countries?.length ? <div className="webstats-section">
+          <h4>By country <span>{periodLabel}</span></h4>
+          {data.countries.map((c) => <div className="webstats-row" key={c.country}><div className="webstats-row-head"><span className="webstats-row-label">{c.country}</span><span className="webstats-row-val">{c.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-country" style={{ width: `${(c.sessions / maxCountry) * 100}%` }} /></div></div>)}
+        </div> : null}
+        {data.branchPages?.length ? <div className="webstats-section">
+          <h4>By branch page <span>{periodLabel}</span></h4>
+          {data.branchPages.map((b) => <div className="webstats-row" key={b.slug}><div className="webstats-row-head"><span className="webstats-row-label">{b.label}</span><span className="webstats-row-val">{b.sessions.toLocaleString()}</span></div><div className="webstats-track"><span className="is-country" style={{ width: `${(b.sessions / maxBranch) * 100}%` }} /></div></div>)}
+        </div> : null}
       </div> : null}
       {data.conversionsByEvent?.length ? <div className="webstats-section">
         <h4>Conversions <span>{periodLabel}</span></h4>
