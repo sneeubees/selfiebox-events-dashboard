@@ -11,4 +11,8 @@ crons.cron("weekly AI analysis", "0 5 * * 1", internal.aiAnalysis.cronRun, {});
 // OUTSTANDING_INVOICES_CRON_ENABLED=1 is set on the backend.
 crons.cron("outstanding invoices mailer", "0 5 1 * *", internal.outstandingInvoicesEmail.cronRun, {});
 
+// Monday 07:00 UTC = 09:00 South Africa. No-ops unless
+// SERVER_HEALTH_SUMMARY_CRON_ENABLED=1 is set on the backend.
+crons.cron("weekly server health summary", "0 7 * * 1", internal.serverHealthSummary.cronRun, {});
+
 export default crons;
