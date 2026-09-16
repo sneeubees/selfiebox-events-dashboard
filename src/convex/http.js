@@ -403,4 +403,24 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/oauth/google-reviews/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const params = new URL(request.url).searchParams;
+    let message = "Google Reviews connected. Return to the dashboard and load your profiles.";
+    let status = 200;
+    try {
+      await ctx.runAction(internal.googleReviewsActions.callback, {
+        state: params.get("state") || "", code: params.get("code") || "", denied: params.has("error"),
+      });
+    } catch {
+      message = "Google Reviews could not connect. Return to the dashboard and try again. Check the callback URL and grant Business Profile access.";
+      status = 400;
+    }
+    return new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" } });
+  }),
+});
+
 export default http;

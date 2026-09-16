@@ -6,6 +6,7 @@ import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
+import GoogleReviewsView from './GoogleReviewsView';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
 import {
   BOARD_COLUMNS,
@@ -6443,6 +6444,7 @@ const INFO_NAV = [
   { type: 'group', key: 'web', label: 'Website', icon: NAV_ICON.website, children: [
     { key: 'website', label: 'Website Stats' },
     { key: 'seo', label: 'SEO Stats' },
+    { key: 'google-reviews', label: 'Google Reviews' },
     { key: 'ads', label: 'Google Ads' },
     { key: 'ai', label: 'AI Analytics' },
   ] },
@@ -6533,6 +6535,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'directors' ? <DirectorsView /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
+        {tab === 'google-reviews' ? <GoogleReviewsView isAdmin={isAdmin} /> : null}
         {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ai' ? <AIAnalysisView isAdmin={isAdmin} /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
@@ -6939,6 +6942,7 @@ function CommissionView({ reports }) {
 }
 
 function TurnoverView({ isAdmin, turnover }) {
+  const [drill, setDrill] = useState(null); // {year, monthIndex, monthLabel}
   if (!isAdmin || !turnover) {
     return (
       <div className="statspage-view">
@@ -6948,7 +6952,6 @@ function TurnoverView({ isAdmin, turnover }) {
     );
   }
   const { region, setRegion, regionOptions, netProfitPct, setNetProfitPct, rows, exportToExcel } = turnover;
-  const [drill, setDrill] = useState(null); // {year, monthIndex, monthLabel}
   const regionLabel = (regionOptions.find((o) => o.value === region) || {}).label || region;
   return (
     <div className="statspage-view statspage-view-wide">
@@ -9881,8 +9884,6 @@ async function exportCommissionSummaryPdf({ month, year, period, rows }) {
   };
 }
 export default App;
-
-
 
 
 
