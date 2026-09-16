@@ -361,13 +361,21 @@ http.route({
     }
     let body;
     try { body = await request.json(); } catch { return new Response("bad json", { status: 400 }); }
+    const ts = Number(body.ts) || Date.now();
+    const overallOk = Boolean(body.overallOk);
     await ctx.runMutation(internal.serverHealth.ingest, {
-      ts: Number(body.ts) || Date.now(),
+      ts,
       diskPct: Number(body.diskPct) || 0,
       memPct: Number(body.memPct) || 0,
-      overallOk: Boolean(body.overallOk),
+      overallOk,
       payload: JSON.stringify(body),
     });
+    // Alert emails must never block/break ingestion (e.g. Resend hiccup).
+    try {
+      await ctx.runAction(internal.serverHealthAlert.checkAndAlert, { ts, overallOk, payload: body });
+    } catch (err) {
+      console.error("[serverHealthAlert] checkAndAlert failed", err);
+    }
     return new Response("ok", { status: 200 });
   }),
 });
