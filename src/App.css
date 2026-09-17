@@ -876,6 +876,13 @@ textarea { resize: vertical; min-height: 110px; }
 .turnover-linechart-grid { stroke: var(--line); stroke-width: 1; }
 .turnover-linechart-month { fill: var(--muted); font-size: 9px; }
 .turnover-linechart-axislabel { fill: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.turnover-linechart-hit { fill: transparent; cursor: crosshair; }
+.turnover-linechart-guide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.55; }
+.turnover-linechart-dot-hover { stroke: var(--panel); stroke-width: 1.5; }
+.turnover-linechart-tip-bg { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+.turnover-linechart-tip-title { fill: var(--text); font-size: 10px; font-weight: 700; }
+.turnover-linechart-tip-row { fill: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; }
+.turnover-linechart-tip-diff { font-size: 9.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .commission-summary-periods { margin-bottom: 12px; }
 .commission-rates-grid {
   display: grid;
