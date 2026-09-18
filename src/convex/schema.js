@@ -451,6 +451,12 @@ export default defineSchema({
   }).index("by_created", ["createdAt"]),
   // Long-lived OAuth refresh tokens for external analytics integrations
   // (currently "ga4"). One row per integration key.
+  googleReviewOAuthStates: defineTable({
+    digest: v.string(),
+    verifier: v.string(),
+    userId: v.id("users"),
+    expiresAt: v.number(),
+  }).index("by_digest", ["digest"]).index("by_user", ["userId"]),
   integrations: defineTable({
     key: v.string(),
     refreshToken: v.string(),
