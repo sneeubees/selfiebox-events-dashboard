@@ -624,6 +624,10 @@ function DashboardApp() {
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const applyExtractedPdfDataMutation = useMutation(api.events.applyExtractedPdfDataFromAction);
+  // PDFs whose quote/invoice number could not be read (shown with a Retry in
+  // the drawer's Files tab instead of failing silently).
+  const [pdfReadFailures, setPdfReadFailures] = useState([]);
+  const pdfExtractionQueueRef = useRef(Promise.resolve());
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
@@ -2280,6 +2284,45 @@ function DashboardApp() {
     attendantFileInputRef.current?.click();
   };
 
+  // Reads the quote/invoice number out of an uploaded PDF and saves it on the
+  // event. Runs ONE at a time per browser tab: parallel calls hitting a cold
+  // Convex Node helper wedged it (2026-09-18) and numbers silently stopped
+  // pulling through. A failure is surfaced in the Files tab with a Retry.
+  const runPdfNumberExtraction = (job) => {
+    const markFailed = () => setPdfReadFailures((current) => [
+      ...current.filter((item) => item.storageId !== job.storageId),
+      { ...job, retrying: false },
+    ]);
+    const task = pdfExtractionQueueRef.current.then(async () => {
+      setPdfReadFailures((current) => current.map((item) => (item.storageId === job.storageId ? { ...item, retrying: true } : item)));
+      try {
+        const result = await extractUploadedDocumentNumber({ eventKey: job.eventKey, storageId: job.storageId, name: job.name, contentType: job.contentType, fileUrl: job.fileUrl });
+        if (!result?.processed) {
+          if (result?.reason === 'storage_fetch_failed' || result?.reason === 'missing_storage_url') {
+            markFailed();
+            return;
+          }
+          // Read fine, just not a quote/invoice (or no number in it) - not an error.
+          setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
+          return;
+        }
+        const patch = { eventKey: job.eventKey };
+        if (result.documentType) patch.documentType = result.documentType;
+        if (result.documentNumber) patch.documentNumber = result.documentNumber;
+        if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') patch.exVatAuto = result.exVatAuto;
+        if (patch.documentType || patch.documentNumber || patch.exVatAuto !== undefined) {
+          await applyExtractedPdfDataMutation(patch);
+        }
+        setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
+      } catch (error) {
+        console.error('Failed to extract document number', error);
+        markFailed();
+      }
+    });
+    pdfExtractionQueueRef.current = task;
+    return task;
+  };
+
   const uploadEventFile = async (file) => {
     if (!selectedEvent || !file) {
       return;
@@ -2306,34 +2349,12 @@ function DashboardApp() {
         sizeLabel: formatFileSize(file.size),
       });
       if ((file.type || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(file.name)) {
-        void extractUploadedDocumentNumber({
+        void runPdfNumberExtraction({
           eventKey: selectedEvent.id,
           storageId,
           name: file.name,
           contentType: file.type || '',
           fileUrl: savedFile?.url || '',
-        }).then((result) => {
-          if (!result?.processed) {
-            return;
-          }
-          const patch = {
-            eventKey: selectedEvent.id,
-          };
-          if (result.documentType) {
-            patch.documentType = result.documentType;
-          }
-          if (result.documentNumber) {
-            patch.documentNumber = result.documentNumber;
-          }
-          if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') {
-            patch.exVatAuto = result.exVatAuto;
-          }
-          if (!patch.documentType && !patch.documentNumber && patch.exVatAuto === undefined) {
-            return;
-          }
-          return applyExtractedPdfDataMutation(patch);
-        }).catch((error) => {
-          console.error('Failed to extract document number', error);
         });
       }
     } catch (error) {
@@ -2343,9 +2364,11 @@ function DashboardApp() {
   };
 
   const handleEventFileSelection = async (changeEvent) => {
-    const file = changeEvent.target.files?.[0];
+    const files = Array.from(changeEvent.target.files || []);
     try {
-      await uploadEventFile(file);
+      for (const file of files) {
+        await uploadEventFile(file);
+      }
     } finally {
       changeEvent.target.value = '';
     }
@@ -2354,11 +2377,10 @@ function DashboardApp() {
   const handleFileDrop = async (dropEvent) => {
     dropEvent.preventDefault();
     setIsFileDropActive(false);
-    const file = dropEvent.dataTransfer?.files?.[0];
-    if (!file) {
-      return;
+    const files = Array.from(dropEvent.dataTransfer?.files || []);
+    for (const file of files) {
+      await uploadEventFile(file);
     }
-    await uploadEventFile(file);
   };
 
   const deleteEventFile = async (fileId) => {
@@ -4663,7 +4685,7 @@ function DashboardApp() {
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} eventKey={entry.eventKey} onEventClick={openEventById} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
         <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop a file here</p><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop files here</p><input ref={eventFileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section>{pdfReadFailures.filter((item) => item.eventKey === selectedEvent.id).map((item) => <div className="pdf-read-failure" role="alert" key={item.storageId}><span><strong title={item.name}>{item.name}</strong> uploaded, but the quote/invoice number couldn&rsquo;t be read.</span><button className="ghost-button" type="button" disabled={item.retrying} onClick={() => void runPdfNumberExtraction(item)}>{item.retrying ? 'Retrying…' : 'Retry'}</button><button className="pdf-read-failure-dismiss" type="button" aria-label="Dismiss" onClick={() => setPdfReadFailures((current) => current.filter((entry) => entry.storageId !== item.storageId))}>x</button></div>)}<section className="drawer-card"><h4>Files</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
         </aside>
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={`${previewFile.url.split('#')[0]}#zoom=100&pagemode=none`} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
@@ -7024,7 +7046,8 @@ function TurnoverView({ isAdmin, turnover }) {
         </div>
       </div>
       <TurnoverMonthlyLineChart rows={rows} regionLabel={regionLabel} />
-      <TurnoverYearProgressionChart rows={rows} regionLabel={regionLabel} netProfitPct={netProfitPct} />
+      <TurnoverProgressionChart rows={rows} regionLabel={regionLabel} />
+      <TurnoverNettProgressionChart rows={rows} regionLabel={regionLabel} netProfitPct={netProfitPct} />
       {drill ? <BookingBuildupModal drill={drill} region={region} regionLabel={regionLabel} onClose={() => setDrill(null)} /> : null}
     </div>
   );
@@ -7039,10 +7062,16 @@ const TURNOVER_CHART_PAD = { left: 52, right: 14, top: 14, bottom: 26 };
 const TURNOVER_LINECHART_COLORS = ['#2f73e6', '#a9b7d1']; // [current year, previous year]
 
 function formatTurnoverAxisK(value) {
+  if (!value) return '0';
   return `${Math.round(value / 1000).toLocaleString('en-ZA')}k`;
 }
-// Round gridlines up to a whole number of `step`, e.g. 50k steps so a
-// combined-region chart with Jan around 320k shows lines at 300k/350k.
+// Running-total charts reach the millions, where "10 000k" is hard to read.
+function formatTurnoverAxisM(value) {
+  if (!value) return '0';
+  return `${Number((value / 1000000).toFixed(2))}M`;
+}
+// Round gridlines up to a whole number of `step`, e.g. 100k steps so a
+// combined-region chart peaking around 870k shows lines at 0/100k/.../900k.
 function turnoverAxisTicks(maxValue, step) {
   const top = Math.max(step, Math.ceil(maxValue / step) * step);
   const ticks = [];
@@ -7057,53 +7086,65 @@ function chooseTurnoverAxisStep(maxValue) {
   const target = Math.max(1, maxValue) / 6;
   return niceSteps.find((step) => step >= target) || niceSteps[niceSteps.length - 1];
 }
-function TurnoverAxisGrid({ ticks, yFor, padLeft, chartWidth, padRight }) {
+function TurnoverAxisGrid({ ticks, yFor, padLeft, chartWidth, padRight, formatTick = formatTurnoverAxisK }) {
   return ticks.map((tick) => {
     const y = yFor(tick);
     return (
       <g key={tick}>
         <line x1={padLeft} x2={chartWidth - padRight} y1={y} y2={y} className="turnover-linechart-grid" />
-        <text x={padLeft - 6} y={y + 3} textAnchor="end" className="turnover-linechart-axislabel">{formatTurnoverAxisK(tick)}</text>
+        <text x={padLeft - 6} y={y + 3} textAnchor="end" className="turnover-linechart-axislabel">{formatTick(tick)}</text>
       </g>
     );
   });
 }
 
-// Last-2-years monthly turnover, as a line graph. `rows` is the SAME
-// region-filtered array the table above renders, so it automatically honors
-// whichever region is selected - no separate data fetch. The array also
-// carries trailing summary rows (Difference/diffPct/Totals), so pick the
-// actual year rows first before taking the last two. The current year's
-// line stops at the current month (whatever year that actually is); any
-// other year shown (i.e. the previous year) runs its full 12 months - so
-// e.g. 2025 goes to Dec while 2026 stops at Sep.
-function TurnoverMonthlyLineChart({ rows, regionLabel }) {
+// The two series every turnover chart below shares: the last two year rows
+// of the SAME region-filtered `rows` the table above renders (so the region
+// picker applies automatically - no separate fetch). `rows` also carries
+// trailing summary rows (Difference/diffPct/Totals), so pick the year rows
+// first. The previous year always runs Jan-Dec; the current year stops at
+// the current month. `cumulative` = running total for the year; `ratio`
+// scales every month (used for nett profit).
+function buildTurnoverChartSeries(rows, { cumulative = false, ratio = 1 } = {}) {
   const yearRows = (rows || []).filter((row) => row.rowType === 'year');
   const lastTwo = yearRows.slice(-2);
+  if (lastTwo.length < 2) return null;
   const months = TURNOVER_HISTORY_DATA.months;
   const currentYear = new Date().getFullYear();
   const currentMonthIndex = new Date().getMonth();
+  return lastTwo.map((row) => {
+    const isCurrent = Number(row.label) === currentYear;
+    const monthCount = isCurrent ? currentMonthIndex + 1 : months.length;
+    let running = 0;
+    const values = months.slice(0, monthCount).map((month) => {
+      const value = (Number(row.months?.[month]) || 0) * ratio;
+      running += value;
+      return cumulative ? running : value;
+    });
+    return { label: row.label, isCurrent, values };
+  });
+}
 
-  if (lastTwo.length < 2) {
+// One two-year line chart (inline SVG, no library). Hovering anywhere in a
+// month's column - including on a dot - shows both years' figures for that
+// month plus the difference. `axisStep` fixes the gridline spacing; omit it
+// to auto-pick a round step for the data's size.
+function TurnoverTwoYearLineChart({ title, subtitle, ariaLabel, series, axisStep, formatTick }) {
+  const [hoverIndex, setHoverIndex] = useState(null);
+  const months = TURNOVER_HISTORY_DATA.months;
+  const heading = <h4>{title} <span>{subtitle}</span></h4>;
+
+  if (!series) {
     return (
       <div className="webstats-section turnover-linechart-section">
-        <h4>Monthly turnover <span>last 2 years{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
+        {heading}
         <div className="webstats-muted">Not enough year history yet for this region.</div>
       </div>
     );
   }
 
-  const series = lastTwo.map((row) => {
-    const isCurrent = Number(row.label) === currentYear;
-    const monthCount = isCurrent ? currentMonthIndex + 1 : months.length;
-    return {
-      label: row.label,
-      isCurrent,
-      values: months.slice(0, monthCount).map((month) => Number(row.months?.[month]) || 0),
-    };
-  });
   const maxValue = Math.max(1, ...series.flatMap((s) => s.values));
-  const ticks = turnoverAxisTicks(maxValue, 50000);
+  const ticks = turnoverAxisTicks(maxValue, axisStep || chooseTurnoverAxisStep(maxValue));
   const axisMax = ticks[ticks.length - 1];
 
   const width = TURNOVER_CHART_WIDTH;
@@ -7111,15 +7152,61 @@ function TurnoverMonthlyLineChart({ rows, regionLabel }) {
   const { left: padLeft, right: padRight, top: padTop, bottom: padBottom } = TURNOVER_CHART_PAD;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
-  const xFor = (i) => padLeft + (months.length > 1 ? (i / (months.length - 1)) * plotWidth : plotWidth / 2);
+  const band = plotWidth / (months.length - 1);
+  const xFor = (i) => padLeft + i * band;
   const yFor = (value) => padTop + plotHeight - (value / axisMax) * plotHeight;
   const colorFor = (s) => (s.isCurrent ? TURNOVER_LINECHART_COLORS[0] : TURNOVER_LINECHART_COLORS[1]);
+  const money = (value) => `R ${formatTurnoverCurrency(value)}`;
+
+  let tip = null;
+  if (hoverIndex !== null) {
+    const current = series.find((s) => s.isCurrent) || series[series.length - 1];
+    const previous = series.find((s) => s !== current);
+    const tipRows = [current, previous].filter(Boolean);
+    const curValue = current?.values[hoverIndex];
+    const prevValue = previous?.values[hoverIndex];
+    const hasBoth = curValue !== undefined && prevValue !== undefined;
+    const diff = hasBoth ? curValue - prevValue : null;
+    const diffPct = hasBoth && prevValue ? (diff / prevValue) * 100 : null;
+    const tipWidth = 164;
+    const lineHeight = 14;
+    const tipHeight = 22 + lineHeight * tipRows.length + (hasBoth ? lineHeight + 2 : 0);
+    const x = xFor(hoverIndex);
+    const tipX = x + 10 + tipWidth > width - padRight ? x - 10 - tipWidth : x + 10;
+    const tipY = padTop + 2;
+    tip = (
+      <g pointerEvents="none">
+        <line x1={x} x2={x} y1={padTop} y2={padTop + plotHeight} className="turnover-linechart-guide" />
+        {series.map((s) => (s.values[hoverIndex] === undefined ? null : (
+          <circle key={s.label} cx={x} cy={yFor(s.values[hoverIndex])} r="4.5" fill={colorFor(s)} className="turnover-linechart-dot-hover" />
+        )))}
+        <rect x={tipX} y={tipY} width={tipWidth} height={tipHeight} rx="6" className="turnover-linechart-tip-bg" />
+        <text x={tipX + 10} y={tipY + 15} className="turnover-linechart-tip-title">{months[hoverIndex]}</text>
+        {tipRows.map((s, row) => {
+          const value = s.values[hoverIndex];
+          const y = tipY + 30 + row * lineHeight;
+          return (
+            <g key={s.label}>
+              <circle cx={tipX + 13} cy={y - 3.5} r="3" fill={colorFor(s)} />
+              <text x={tipX + 22} y={y} className="turnover-linechart-tip-row">{s.label}</text>
+              <text x={tipX + tipWidth - 10} y={y} textAnchor="end" className="turnover-linechart-tip-row">{value === undefined ? '—' : money(value)}</text>
+            </g>
+          );
+        })}
+        {hasBoth ? (
+          <text x={tipX + tipWidth - 10} y={tipY + 32 + tipRows.length * lineHeight} textAnchor="end" className="turnover-linechart-tip-diff" fill={diff >= 0 ? '#16a34a' : '#ef4444'}>
+            {`${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}${diffPct === null ? '' : ` (${diff >= 0 ? '+' : '−'}${Math.abs(diffPct).toFixed(1)}%)`}`}
+          </text>
+        ) : null}
+      </g>
+    );
+  }
 
   return (
     <div className="webstats-section turnover-linechart-section">
-      <h4>Monthly turnover <span>last 2 years{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
-      <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label="Monthly turnover, last 2 years">
-        <TurnoverAxisGrid ticks={ticks} yFor={yFor} padLeft={padLeft} chartWidth={width} padRight={padRight} />
+      {heading}
+      <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label={ariaLabel} onMouseLeave={() => setHoverIndex(null)}>
+        <TurnoverAxisGrid ticks={ticks} yFor={yFor} padLeft={padLeft} chartWidth={width} padRight={padRight} formatTick={formatTick} />
         {series.map((s) => (
           <polyline
             key={s.label}
@@ -7130,13 +7217,24 @@ function TurnoverMonthlyLineChart({ rows, regionLabel }) {
           />
         ))}
         {series.map((s) => s.values.map((value, i) => (
-          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="2.5" fill={colorFor(s)}>
-            <title>{`${TURNOVER_MONTH_LABELS[months[i]] || months[i]} ${s.label}: ${formatTurnoverCurrency(value)}`}</title>
-          </circle>
+          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="2.5" fill={colorFor(s)} />
         )))}
         {months.map((month, i) => (
-          <text key={month} x={xFor(i)} y={height - 6} textAnchor="middle" className="turnover-linechart-month">{TURNOVER_MONTH_LABELS[month] || month}</text>
+          <text key={month} x={xFor(i)} y={height - 6} textAnchor="middle" className="turnover-linechart-month">{month}</text>
         ))}
+        {months.map((month, i) => (
+          <rect
+            key={`hit-${month}`}
+            x={xFor(i) - band / 2}
+            y={padTop}
+            width={band}
+            height={plotHeight}
+            className="turnover-linechart-hit"
+            onMouseEnter={() => setHoverIndex(i)}
+            onClick={() => setHoverIndex((cur) => (cur === i ? null : i))}
+          />
+        ))}
+        {tip}
       </svg>
       <div className="report-legend">
         {series.map((s) => (
@@ -7147,81 +7245,42 @@ function TurnoverMonthlyLineChart({ rows, regionLabel }) {
   );
 }
 
-// Cumulative (running-total) nett profit for the year so far, last 2 years
-// overlaid, BOTH stopped at the current month - a pace comparison ("were we
-// ahead of last year's trajectory at this same point"), not a full-year
-// shape like the chart above. Uses the full width for just the months
-// shown (doesn't reserve blank space for the rest of the year).
-function TurnoverYearProgressionChart({ rows, regionLabel, netProfitPct }) {
-  const yearRows = (rows || []).filter((row) => row.rowType === 'year');
-  const lastTwo = yearRows.slice(-2);
-  const months = TURNOVER_HISTORY_DATA.months;
-  const currentYear = new Date().getFullYear();
-  const currentMonthIndex = new Date().getMonth();
-  const monthsShown = months.slice(0, currentMonthIndex + 1);
-  const netProfitRatio = parseTurnoverNetProfitPct(netProfitPct);
-  const upToLabel = TURNOVER_MONTH_LABELS[monthsShown[monthsShown.length - 1]] || monthsShown[monthsShown.length - 1];
-
-  if (lastTwo.length < 2) {
-    return (
-      <div className="webstats-section turnover-linechart-section">
-        <h4>Year progression (nett profit) <span>up to {upToLabel}{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
-        <div className="webstats-muted">Not enough year history yet for this region.</div>
-      </div>
-    );
-  }
-
-  const series = lastTwo.map((row) => {
-    let running = 0;
-    const values = monthsShown.map((month) => {
-      running += Number(row.months?.[month] || 0) * netProfitRatio;
-      return running;
-    });
-    return { label: row.label, isCurrent: Number(row.label) === currentYear, values };
-  });
-  const maxValue = Math.max(1, ...series.flatMap((s) => s.values));
-  const step = chooseTurnoverAxisStep(maxValue);
-  const ticks = turnoverAxisTicks(maxValue, step);
-  const axisMax = ticks[ticks.length - 1];
-
-  const width = TURNOVER_CHART_WIDTH;
-  const height = TURNOVER_CHART_HEIGHT;
-  const { left: padLeft, right: padRight, top: padTop, bottom: padBottom } = TURNOVER_CHART_PAD;
-  const plotWidth = width - padLeft - padRight;
-  const plotHeight = height - padTop - padBottom;
-  const xFor = (i) => padLeft + (monthsShown.length > 1 ? (i / (monthsShown.length - 1)) * plotWidth : plotWidth / 2);
-  const yFor = (value) => padTop + plotHeight - (value / axisMax) * plotHeight;
-  const colorFor = (s) => (s.isCurrent ? TURNOVER_LINECHART_COLORS[0] : TURNOVER_LINECHART_COLORS[1]);
-
+function TurnoverMonthlyLineChart({ rows, regionLabel }) {
   return (
-    <div className="webstats-section turnover-linechart-section">
-      <h4>Year progression (nett profit) <span>up to {upToLabel}{regionLabel ? ` · ${regionLabel}` : ''}</span></h4>
-      <svg viewBox={`0 0 ${width} ${height}`} className="turnover-linechart-svg" role="img" aria-label="Cumulative nett profit progression, last 2 years, up to the current month">
-        <TurnoverAxisGrid ticks={ticks} yFor={yFor} padLeft={padLeft} chartWidth={width} padRight={padRight} />
-        {series.map((s) => (
-          <polyline
-            key={s.label}
-            points={s.values.map((value, i) => `${xFor(i)},${yFor(value)}`).join(' ')}
-            fill="none"
-            stroke={colorFor(s)}
-            strokeWidth="2"
-          />
-        ))}
-        {series.map((s) => s.values.map((value, i) => (
-          <circle key={`${s.label}-${i}`} cx={xFor(i)} cy={yFor(value)} r="2.5" fill={colorFor(s)}>
-            <title>{`${TURNOVER_MONTH_LABELS[monthsShown[i]] || monthsShown[i]} ${s.label} (cumulative): ${formatTurnoverCurrency(value)}`}</title>
-          </circle>
-        )))}
-        {monthsShown.map((month, i) => (
-          <text key={month} x={xFor(i)} y={height - 6} textAnchor="middle" className="turnover-linechart-month">{TURNOVER_MONTH_LABELS[month] || month}</text>
-        ))}
-      </svg>
-      <div className="report-legend">
-        {series.map((s) => (
-          <span className="report-legend-item" key={s.label}><i style={{ background: colorFor(s) }} />{s.label}</span>
-        ))}
-      </div>
-    </div>
+    <TurnoverTwoYearLineChart
+      title="Monthly turnover"
+      subtitle={`last 2 years${regionLabel ? ` · ${regionLabel}` : ''}`}
+      ariaLabel="Monthly turnover, last 2 years"
+      series={buildTurnoverChartSeries(rows)}
+      axisStep={100000}
+    />
+  );
+}
+
+function TurnoverProgressionChart({ rows, regionLabel }) {
+  return (
+    <TurnoverTwoYearLineChart
+      title="Year progression (turnover)"
+      subtitle={`running total, last 2 years${regionLabel ? ` · ${regionLabel}` : ''}`}
+      ariaLabel="Cumulative turnover progression, last 2 years"
+      series={buildTurnoverChartSeries(rows, { cumulative: true })}
+      formatTick={formatTurnoverAxisM}
+    />
+  );
+}
+
+// Running total of each month's turnover x the Nett profit % set at the top
+// of this page - no other fields (expenses etc.) go into it.
+function TurnoverNettProgressionChart({ rows, regionLabel, netProfitPct }) {
+  const ratio = parseTurnoverNetProfitPct(netProfitPct);
+  return (
+    <TurnoverTwoYearLineChart
+      title="Year progression (nett profit)"
+      subtitle={`running total of turnover × ${Math.round(ratio * 100)}% nett profit${regionLabel ? ` · ${regionLabel}` : ''}`}
+      ariaLabel="Cumulative nett profit progression, last 2 years"
+      series={buildTurnoverChartSeries(rows, { cumulative: true, ratio })}
+      formatTick={formatTurnoverAxisM}
+    />
   );
 }
 

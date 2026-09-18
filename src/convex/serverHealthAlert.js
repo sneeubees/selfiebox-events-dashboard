@@ -22,7 +22,12 @@ function reasonsFromPayload(payload) {
     reasons.push(`Disk ${diskPct}% full${free != null ? ` (${free} GB free)` : ""}`);
   }
   for (const app of payload?.apps || []) {
-    if (!app.ok) reasons.push(`${app.name} is down (http ${app.httpCode})`);
+    if (app.ok) continue;
+    if (app.key === "pdf-extraction") {
+      reasons.push("Quote/invoice PDF reader is failing - numbers won't pull through from uploads (automatic restart of the helper was attempted)");
+    } else {
+      reasons.push(`${app.name} is down (http ${app.httpCode})`);
+    }
   }
   const nginx = payload?.host?.nginx;
   if (nginx && nginx !== "active") reasons.push(`nginx is ${nginx}`);
