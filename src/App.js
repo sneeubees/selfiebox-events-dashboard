@@ -6,7 +6,6 @@ import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
-import GoogleReviewsView from './GoogleReviewsView';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
 import {
   BOARD_COLUMNS,
@@ -18,6 +17,10 @@ import {
   STATUS_OPTIONS,
   STATUS_STYLES,
 } from './seedData';
+
+// Admin-only tab and the app's only user of Ant Design - loaded on demand so
+// antd (~100 kB gzipped) stays out of the main bundle every user downloads.
+const GoogleReviewsView = React.lazy(() => import('./GoogleReviewsView'));
 
 const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
 
@@ -6557,7 +6560,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'directors' ? <DirectorsView /> : null}
         {tab === 'website' ? <WebsiteStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'seo' ? <SeoStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
-        {tab === 'google-reviews' ? <GoogleReviewsView isAdmin={isAdmin} /> : null}
+        {tab === 'google-reviews' ? <React.Suspense fallback={<div className="webstats-empty">Loading Google Reviews&hellip;</div>}><GoogleReviewsView isAdmin={isAdmin} /></React.Suspense> : null}
         {tab === 'ads' ? <AdsStatsView isAdmin={isAdmin} connectUrl={connectUrl} openConnect={openConnect} /> : null}
         {tab === 'ai' ? <AIAnalysisView isAdmin={isAdmin} /> : null}
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
