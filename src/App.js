@@ -623,6 +623,10 @@ function DashboardApp() {
   const saveUploadedEventFile = useMutation(api.files.saveUploadedFile);
   const extractUploadedDocumentNumber = useAction(api.documentNumbers.extractUploadedDocumentNumber);
   const applyExtractedPdfDataMutation = useMutation(api.events.applyExtractedPdfDataFromAction);
+  // PDFs whose quote/invoice number could not be read (shown with a Retry in
+  // the drawer's Files tab instead of failing silently).
+  const [pdfReadFailures, setPdfReadFailures] = useState([]);
+  const pdfExtractionQueueRef = useRef(Promise.resolve());
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
   const removeAttendantFileMutation = useMutation(api.attendants.removeFile);
@@ -2279,6 +2283,45 @@ function DashboardApp() {
     attendantFileInputRef.current?.click();
   };
 
+  // Reads the quote/invoice number out of an uploaded PDF and saves it on the
+  // event. Runs ONE at a time per browser tab: parallel calls hitting a cold
+  // Convex Node helper wedged it (2026-09-18) and numbers silently stopped
+  // pulling through. A failure is surfaced in the Files tab with a Retry.
+  const runPdfNumberExtraction = (job) => {
+    const markFailed = () => setPdfReadFailures((current) => [
+      ...current.filter((item) => item.storageId !== job.storageId),
+      { ...job, retrying: false },
+    ]);
+    const task = pdfExtractionQueueRef.current.then(async () => {
+      setPdfReadFailures((current) => current.map((item) => (item.storageId === job.storageId ? { ...item, retrying: true } : item)));
+      try {
+        const result = await extractUploadedDocumentNumber({ eventKey: job.eventKey, storageId: job.storageId, name: job.name, contentType: job.contentType, fileUrl: job.fileUrl });
+        if (!result?.processed) {
+          if (result?.reason === 'storage_fetch_failed' || result?.reason === 'missing_storage_url') {
+            markFailed();
+            return;
+          }
+          // Read fine, just not a quote/invoice (or no number in it) - not an error.
+          setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
+          return;
+        }
+        const patch = { eventKey: job.eventKey };
+        if (result.documentType) patch.documentType = result.documentType;
+        if (result.documentNumber) patch.documentNumber = result.documentNumber;
+        if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') patch.exVatAuto = result.exVatAuto;
+        if (patch.documentType || patch.documentNumber || patch.exVatAuto !== undefined) {
+          await applyExtractedPdfDataMutation(patch);
+        }
+        setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
+      } catch (error) {
+        console.error('Failed to extract document number', error);
+        markFailed();
+      }
+    });
+    pdfExtractionQueueRef.current = task;
+    return task;
+  };
+
   const uploadEventFile = async (file) => {
     if (!selectedEvent || !file) {
       return;
@@ -2305,34 +2348,12 @@ function DashboardApp() {
         sizeLabel: formatFileSize(file.size),
       });
       if ((file.type || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(file.name)) {
-        void extractUploadedDocumentNumber({
+        void runPdfNumberExtraction({
           eventKey: selectedEvent.id,
           storageId,
           name: file.name,
           contentType: file.type || '',
           fileUrl: savedFile?.url || '',
-        }).then((result) => {
-          if (!result?.processed) {
-            return;
-          }
-          const patch = {
-            eventKey: selectedEvent.id,
-          };
-          if (result.documentType) {
-            patch.documentType = result.documentType;
-          }
-          if (result.documentNumber) {
-            patch.documentNumber = result.documentNumber;
-          }
-          if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') {
-            patch.exVatAuto = result.exVatAuto;
-          }
-          if (!patch.documentType && !patch.documentNumber && patch.exVatAuto === undefined) {
-            return;
-          }
-          return applyExtractedPdfDataMutation(patch);
-        }).catch((error) => {
-          console.error('Failed to extract document number', error);
         });
       }
     } catch (error) {
@@ -2342,9 +2363,11 @@ function DashboardApp() {
   };
 
   const handleEventFileSelection = async (changeEvent) => {
-    const file = changeEvent.target.files?.[0];
+    const files = Array.from(changeEvent.target.files || []);
     try {
-      await uploadEventFile(file);
+      for (const file of files) {
+        await uploadEventFile(file);
+      }
     } finally {
       changeEvent.target.value = '';
     }
@@ -2353,11 +2376,10 @@ function DashboardApp() {
   const handleFileDrop = async (dropEvent) => {
     dropEvent.preventDefault();
     setIsFileDropActive(false);
-    const file = dropEvent.dataTransfer?.files?.[0];
-    if (!file) {
-      return;
+    const files = Array.from(dropEvent.dataTransfer?.files || []);
+    for (const file of files) {
+      await uploadEventFile(file);
     }
-    await uploadEventFile(file);
   };
 
   const deleteEventFile = async (fileId) => {
@@ -4662,7 +4684,7 @@ function DashboardApp() {
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} eventKey={entry.eventKey} onEventClick={openEventById} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
         <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop a file here</p><input ref={eventFileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section><section className="drawer-card"><h4>Files</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop files here</p><input ref={eventFileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section>{pdfReadFailures.filter((item) => item.eventKey === selectedEvent.id).map((item) => <div className="pdf-read-failure" role="alert" key={item.storageId}><span><strong title={item.name}>{item.name}</strong> uploaded, but the quote/invoice number couldn&rsquo;t be read.</span><button className="ghost-button" type="button" disabled={item.retrying} onClick={() => void runPdfNumberExtraction(item)}>{item.retrying ? 'Retrying…' : 'Retry'}</button><button className="pdf-read-failure-dismiss" type="button" aria-label="Dismiss" onClick={() => setPdfReadFailures((current) => current.filter((entry) => entry.storageId !== item.storageId))}>x</button></div>)}<section className="drawer-card"><h4>Files</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
         </aside>
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={`${previewFile.url.split('#')[0]}#zoom=100&pagemode=none`} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}

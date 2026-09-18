@@ -22,4 +22,13 @@ docker run --rm --network host \
   -v /opt/selfiebox-staging-deploy/node_modules:/app/node_modules \
   -w /app node:20 node node_modules/.bin/convex deploy --yes
 
+# Same cold-start guard as deploy/live-convex.sh: warm the Node helper with
+# single calls right after the deploy swaps its code bundle.
+echo ">> warming the Node action helper"
+for i in 1 2; do
+  docker run --rm --network host -e CONVEX_TMPDIR=/app/.tmp \
+    -v "$REPO":/app -v /opt/selfiebox-staging-deploy/node_modules:/app/node_modules \
+    -w /app node:20 node node_modules/.bin/convex run documentNumbers:warmup '{}' >/dev/null 2>&1 || true
+done
+
 echo ">> done. staging Convex now == git $(git rev-parse --short HEAD)"

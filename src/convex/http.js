@@ -350,6 +350,27 @@ http.route({
 });
 
 // ---- Server-health + backup ingest (from the on-VPS collector/backup crons) ----
+// Health probe for Convex Node actions (the PDF quote/invoice number reader).
+// 200 = a Node action ran; 500 = the Node helper is failing (e.g. wedged after
+// a restart) - the VPS collector restarts the helper and reports it as an app.
+http.route({
+  path: "/health/node-probe",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const secret = request.headers.get("x-health-secret") || "";
+    if (!process.env.HEALTH_INGEST_SECRET || secret !== process.env.HEALTH_INGEST_SECRET) {
+      return new Response("forbidden", { status: 403 });
+    }
+    const started = Date.now();
+    try {
+      await ctx.runAction(internal.documentNumbers.warmup, {});
+      return new Response(JSON.stringify({ ok: true, ms: Date.now() - started }), { status: 200, headers: { "content-type": "application/json" } });
+    } catch (err) {
+      return new Response(JSON.stringify({ ok: false, ms: Date.now() - started, error: String(err?.message || err).slice(0, 200) }), { status: 500, headers: { "content-type": "application/json" } });
+    }
+  }),
+});
+
 // Secret-guarded: the collector sends `x-health-secret: $HEALTH_INGEST_SECRET`.
 http.route({
   path: "/health/ingest",

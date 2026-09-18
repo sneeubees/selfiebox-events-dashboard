@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
@@ -266,4 +266,14 @@ export const backfillLatestPdfDocumentNumbers = action({
 
     return { updated, skipped, scanned: candidates.length };
   },
+});
+
+// Cheapest possible Node action. Used to (a) warm the backend's Node helper
+// with ONE call after a boot/deploy - parallel calls on a cold helper wedged
+// it on 2026-09-18 and numbers silently stopped pulling through - and (b) as
+// the 5-minute health probe (/health/node-probe). Importing this module
+// already proves the pdf-parse bundle unpacked and loads.
+export const warmup = internalAction({
+  args: {},
+  handler: async () => ({ ok: true, at: Date.now(), pdfParseLoaded: typeof pdfParse === "function" }),
 });
