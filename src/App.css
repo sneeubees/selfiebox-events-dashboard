@@ -261,6 +261,9 @@ button { cursor: pointer; }
    focus ring, which fades/relocates as you click elsewhere and can look like
    the toggle is still on when it isn't. */
 .new-requests-button.is-active { background: #a52f2f; border-color: #5b9dff; box-shadow: 0 0 0 2px rgba(91, 157, 255, 0.35); }
+/* Search + filters are kept but ignored while "New" is pressed - dim them so it reads as paused, not cleared. */
+.search-input-wrap.is-paused, .filter-button-wrap.is-paused, .saved-filter-chip-stack.is-paused { opacity: 0.45; cursor: not-allowed; }
+.search-input-wrap.is-paused .search-input, .filter-button-wrap.is-paused button, .saved-filter-chip-stack.is-paused button { cursor: not-allowed; }
 .filter-open-button { position: relative; }
 /* Filter button turns solid green while any filter is applied. */
 .filter-open-button.is-active { border-color: #2f8f49; background: #2f8f49; color: #fff; }

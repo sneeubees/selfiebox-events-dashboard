@@ -1230,6 +1230,16 @@ function DashboardApp() {
   }, [newOnlyMode, hasNewRequests]);
 
   const filteredEvents = useMemo(() => {
+    // "New" is a temporary override: while it is pressed, search and every
+    // filter are ignored (the badge counts ALL new web requests, so a filter
+    // could otherwise leave "New 3" showing an empty board). Their state is
+    // left untouched, so they apply again the moment New is released.
+    if (newOnlyMode) {
+      return yearEvents
+        .filter((event) => event.status === 'Web Request')
+        .sort((left, right) => sortEvents(left, right));
+    }
+
     return [...yearEvents]
       .filter((event) => {
         if (!search.trim()) {
@@ -1238,7 +1248,6 @@ function DashboardApp() {
         const query = search.trim().toLowerCase();
         return event.name.toLowerCase().includes(query) || String(event.eventTitle || '').toLowerCase().includes(query);
       })
-      .filter((event) => (newOnlyMode ? event.status === 'Web Request' : true))
       .filter((event) => (selectedBranches.length ? event.branch.some((item) => selectedBranches.includes(item)) : true))
         .filter((event) => (selectedProducts.length ? event.products.some((item) => selectedProducts.includes(item)) : true))
         .filter((event) => (selectedStatuses.length ? selectedStatuses.includes(event.status) : true))
@@ -4560,23 +4569,23 @@ function DashboardApp() {
         <section className="board-shell">
         <div className="board-toolbar compact-toolbar">
           <div className="filters-grid compact-filters single-row-tools">
-            <div className="search-input-wrap">
-              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" />
-              {search ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
+            <div className={["search-input-wrap", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Search is paused while New is on' : undefined}>
+              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" disabled={newOnlyMode} />
+              {search && !newOnlyMode ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
             {hasNewRequests ? (
               <button
                 className={["new-requests-button", newOnlyMode ? "is-active" : ""].join(" ").trim()}
                 type="button"
-                title="Show only new web requests"
+                title={newOnlyMode ? 'Showing all new web requests - search and filters are paused. Click to go back.' : 'Show all new web requests (pauses search and filters)'}
                 aria-pressed={newOnlyMode}
-                onClick={() => setNewOnlyMode((current) => !current)}
+                onClick={() => { setFiltersOpen(false); setNewOnlyMode((current) => !current); }}
               >
                 New
                 <span className="new-requests-count">{newRequestCount}</span>
               </button>
             ) : null}
-            <div className="filter-button-wrap">
+            <div className={["filter-button-wrap", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Filters are paused while New is on' : undefined}>
               <button
                 className={[
                   "ghost-button",
@@ -4585,14 +4594,15 @@ function DashboardApp() {
                   hasActiveFilters ? "is-active" : ""
                 ].join(" ").trim()}
                 type="button"
+                disabled={newOnlyMode}
                 onClick={() => setFiltersOpen(true)}
               >
                 Filter
               </button>
-              {hasActiveFilters ? <button className="filter-clear-mini-button" type="button" aria-label="Clear filters" onClick={(event) => { event.stopPropagation(); clearFilters(); }}>x</button> : null}
+              {hasActiveFilters && !newOnlyMode ? <button className="filter-clear-mini-button" type="button" aria-label="Clear filters" onClick={(event) => { event.stopPropagation(); clearFilters(); }}>x</button> : null}
             </div>
             {savedFilterViews.length ? (
-              <div className="saved-filter-chip-stack">
+              <div className={["saved-filter-chip-stack", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Filters are paused while New is on' : undefined}>
                 <div className="saved-filter-chip-label">Saved Filters</div>
                 <div className="saved-filter-chip-row">
                   {savedFilterViews.map((view) => (
@@ -4601,11 +4611,12 @@ function DashboardApp() {
                       key={view.id}
                       onContextMenu={(event) => {
                         event.preventDefault();
+                        if (newOnlyMode) return;
                         void requestDeleteSavedFilterView(view);
                       }}
                       title="Right-click to delete"
                     >
-                      <button className="saved-filter-chip-button" type="button" onClick={() => (activeSavedFilterViewId === view.id ? clearFilters() : applySavedFilterView(view))}>{view.name}</button>
+                      <button className="saved-filter-chip-button" type="button" disabled={newOnlyMode} onClick={() => (activeSavedFilterViewId === view.id ? clearFilters() : applySavedFilterView(view))}>{view.name}</button>
                     </div>
                   ))}
                 </div>
