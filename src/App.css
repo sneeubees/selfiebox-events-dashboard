@@ -580,6 +580,11 @@ button { cursor: pointer; }
 .pdf-read-failure-dismiss { flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; opacity: 0.7; }
 .pdf-read-failure-dismiss:hover { opacity: 1; }
 :root[data-theme="dark"] .pdf-read-failure { color: #fbbf24; }
+.save-failure-stack { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1200; display: flex; flex-direction: column; gap: 8px; width: min(720px, calc(100vw - 32px)); }
+.save-failure { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; line-height: 1.35; color: #7f1d1d; background: #fee2e2; border: 1px solid #f87171; border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15,23,42,0.22); }
+.save-failure span { flex: 1; min-width: 0; }
+.save-failure .ghost-button { flex: none; padding: 5px 10px; font-size: 0.76rem; }
+:root[data-theme="dark"] .save-failure { color: #fecaca; background: #3f1518; border-color: #b91c1c; }
 .file-upload-types { margin: 0 0 8px; font-size: 0.66rem; color: var(--muted); }
 .file-name, .file-name-link, .file-name-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-name-link, .file-name-button { color: inherit; text-decoration: none; }

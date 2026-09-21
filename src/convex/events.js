@@ -162,10 +162,13 @@ function toEventDto(record, creator = null, statusChanger = null) {
     activity: record.activity || [],
     createdByUserId: record.createdByUserId || null,
     createdByName: creator?.fullName || "",
-    createdByProfilePic: creator?.profilePic || "",
+    createdByProfilePic: "",
     firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
     firstStatusChangeByName: statusChanger?.fullName || "",
-    firstStatusChangeByProfilePic: statusChanger?.profilePic || "",
+    // Avatars are NOT sent per row any more: the same few base64 pictures were
+    // repeated on every event (1.47 MB of a 3.58 MB board). The browser resolves
+    // them from users.listCreatorProfiles by firstStatusChangeByUserId.
+    firstStatusChangeByProfilePic: "",
   };
 }
 
@@ -207,7 +210,10 @@ function toEventListDto(record, creator = null, statusChanger = null) {
     createdByName: creator?.fullName || "",
     firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
     firstStatusChangeByName: statusChanger?.fullName || "",
-    firstStatusChangeByProfilePic: statusChanger?.profilePic || "",
+    // Avatars are NOT sent per row any more: the same few base64 pictures were
+    // repeated on every event (1.47 MB of a 3.58 MB board). The browser resolves
+    // them from users.listCreatorProfiles by firstStatusChangeByUserId.
+    firstStatusChangeByProfilePic: "",
     duplicatedFromEventKey: record.duplicatedFromEventKey || "",
     duplicatedFromEventName: record.duplicatedFromEventName || "",
   };
@@ -243,10 +249,12 @@ async function attachCreatorDetails(ctx, events, dtoMapper) {
       userIdsByKey.set(String(record.firstStatusChangeByUserId), record.firstStatusChangeByUserId);
     }
   });
-  const userEntries = await Promise.all(
-    Array.from(userIdsByKey.entries()).map(async ([userKey, userId]) => [userKey, await ctx.db.get(userId)])
-  );
-  const userById = new Map(userEntries);
+  // Sequential on purpose: Promise.all over ctx.db calls has crashed the
+  // self-hosted backend's isolate twice. It is only a handful of users.
+  const userById = new Map();
+  for (const [userKey, userId] of userIdsByKey.entries()) {
+    userById.set(userKey, await ctx.db.get(userId));
+  }
   return events.map((record) =>
     dtoMapper(
       record,
@@ -599,15 +607,12 @@ export const upsert = mutation({
       workspaceYear: args.event.workspaceYear,
       name: args.event.name,
       eventTitle: args.event.eventTitle || "",
-      duplicatedFromEventKey: args.event.duplicatedFromEventKey || "",
-      duplicatedFromEventName: args.event.duplicatedFromEventName || "",
       date: args.event.date || "",
       draftMonth: args.event.draftMonth || "",
       hours: args.event.hours || "",
       time: args.event.time || "",
       branch: args.event.branch || [],
       products: args.event.products || [],
-      productQuantities: args.event.productQuantities || {},
       status: args.event.status || "",
       digitalOnly: Boolean(args.event.digitalOnly),
       location: args.event.location || "",
@@ -633,6 +638,17 @@ export const upsert = mutation({
       activity: args.event.activity || [],
       updatedAt: Date.now(),
     };
+
+    // Fields the browser may not send at all (older tabs, or state that never
+    // carried them). patch() only touches keys that are present, so leaving
+    // them out preserves the stored value instead of wiping it - this is what
+    // silently reset productQuantities and the duplicated-from link on every
+    // save. They are only defaulted when the event is first created.
+    for (const key of ["productQuantities", "duplicatedFromEventKey", "duplicatedFromEventName"]) {
+      if (args.event[key] !== undefined) {
+        payload[key] = args.event[key];
+      }
+    }
 
     if (existing) {
       // Stamp who moved this off "Web Request" - the FIRST time only. Convex
@@ -987,5 +1003,8 @@ export const applyExtractedPdfDataFromAction = mutation({
     documentNumber: v.optional(v.string()),
     exVatAuto: v.optional(v.union(v.number(), v.string())),
   },
-  handler: async (ctx, args) => applyExtractedPdfDataPatch(ctx, args),
+  handler: async (ctx, args) => {
+    await requireCurrentUser(ctx);
+    return applyExtractedPdfDataPatch(ctx, args);
+  },
 });

@@ -13,6 +13,16 @@ async function requireIdentity(ctx) {
   return identity;
 }
 
+// The browser shrinks avatars to a 128px JPEG (~5-15 KB as base64). The server
+// never checked, so one upload from a stale tab could store a 400 KB avatar
+// again - the cause of the July 2026 slowdown. 100 KB is a generous ceiling.
+const MAX_PROFILE_PIC_CHARS = 100 * 1024;
+function assertProfilePicSize(profilePic) {
+  if (typeof profilePic === "string" && profilePic.length > MAX_PROFILE_PIC_CHARS) {
+    throw new Error("Profile picture is too large. Please reload the page and upload it again.");
+  }
+}
+
 async function getCurrentUserRecord(ctx) {
   const identity = await requireIdentity(ctx);
   const clerkId = identity.subject ?? identity.tokenIdentifier;
@@ -192,8 +202,22 @@ export const syncCurrentUser = mutation({
   },
   handler: async (ctx, args) => {
     const { identity, clerkId, user } = await getCurrentUserRecord(ctx);
-    const email = args.email.trim().toLowerCase();
+    // SECURITY: the email comes ONLY from the verified login token. It used to
+    // be read from args, so any signed-in stranger could send the primary admin
+    // email and be made admin, or send a colleague's email and take over their
+    // record. args.email stays in the validator for older browser tabs but is
+    // ignored. A token with no email claim may only refresh its existing record.
+    if (identity.emailVerified === false) {
+      throw new Error("Please verify your email address before signing in.");
+    }
+    const email = String(identity.email || user?.email || "").trim().toLowerCase();
+    if (!email) {
+      throw new Error("Your login has no email address.");
+    }
     const isPrimaryAdmin = email === PRIMARY_ADMIN_EMAIL;
+    // Never let an oversized avatar in through login (see assertProfilePicSize);
+    // dropping it here keeps sign-in working instead of throwing.
+    const syncProfilePic = typeof args.profilePic === "string" && args.profilePic.length <= MAX_PROFILE_PIC_CHARS ? args.profilePic : "";
     const firstName = args.firstName.trim() || identity.givenName || "User";
     const surname = args.surname.trim() || identity.familyName || "";
     const designation = args.designation?.trim() || "";
@@ -211,7 +235,7 @@ export const syncCurrentUser = mutation({
         surname: nextSurname,
         fullName: `${nextFirstName} ${nextSurname}`.trim(),
         designation: isPrimaryAdmin ? "Operations Admin" : (user.designation || designation),
-        profilePic: user.profilePic || args.profilePic || "",
+        profilePic: user.profilePic || syncProfilePic || "",
         theme: user.theme === "dark" ? "dark" : theme,
         assignedBranches: Array.isArray(user.assignedBranches) ? user.assignedBranches : [],
         monthOrder: Array.isArray(user.monthOrder) && user.monthOrder.length === monthNames.length ? user.monthOrder : monthNames,
@@ -241,7 +265,7 @@ export const syncCurrentUser = mutation({
         surname: existingByEmail.surname || surname,
         fullName: `${existingByEmail.firstName || firstName} ${existingByEmail.surname || surname}`.trim(),
         designation: isPrimaryAdmin ? "Operations Admin" : (existingByEmail.designation || designation),
-        profilePic: existingByEmail.profilePic || args.profilePic || "",
+        profilePic: existingByEmail.profilePic || syncProfilePic || "",
         theme: existingByEmail.theme === "dark" ? "dark" : theme,
         assignedBranches: Array.isArray(existingByEmail.assignedBranches) ? existingByEmail.assignedBranches : [],
         monthOrder: Array.isArray(existingByEmail.monthOrder) && existingByEmail.monthOrder.length === monthNames.length ? existingByEmail.monthOrder : monthNames,
@@ -274,7 +298,7 @@ export const syncCurrentUser = mutation({
       fullName: `${firstName} ${surname}`.trim(),
       designation: shouldBootstrapAdmin ? "Operations Admin" : (designation || "Coordinator"),
       role: shouldBootstrapAdmin ? "admin" : "user",
-      profilePic: args.profilePic || "",
+      profilePic: syncProfilePic || "",
       theme,
       assignedBranches: [],
       monthOrder: monthNames,
@@ -331,7 +355,7 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    if (!user || user.role !== "admin") {
+    if (!user || user.role !== "admin" || !user.isApproved || !user.isActive) {
       return [];
     }
 
@@ -346,7 +370,10 @@ export const listCreatorProfiles = query({
   args: {},
   handler: async (ctx) => {
     try {
-      await getCurrentUserRecord(ctx);
+      const { user: currentUser } = await getCurrentUserRecord(ctx);
+      if (!currentUser || !currentUser.isApproved || !currentUser.isActive) {
+        return [];
+      }
     } catch {
       return [];
     }
@@ -370,9 +397,10 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await getCurrentUserRecord(ctx);
-    if (!user || user.role !== "admin") {
+    if (!user || user.role !== "admin" || !user.isApproved || !user.isActive) {
       throw new Error("Only admins can update users.");
     }
+    assertProfilePicSize(args.profilePic);
 
     const target = await ctx.db.get(args.userId);
     if (!target) {
@@ -410,6 +438,7 @@ export const updateMyProfile = mutation({
     if (!user) {
       throw new Error("User not found.");
     }
+    assertProfilePicSize(args.profilePic);
 
     await ctx.db.patch(user._id, {
       firstName: args.firstName.trim() || user.firstName,
@@ -453,7 +482,7 @@ export const remove = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const { user } = await getCurrentUserRecord(ctx);
-    if (!user || user.role !== "admin") {
+    if (!user || user.role !== "admin" || !user.isApproved || !user.isActive) {
       throw new Error("Only admins can delete users.");
     }
 
@@ -571,7 +600,9 @@ export const removeLocalUser = internalMutation({
   },
 });
 
-export const bootstrapPrimaryAdmin = mutation({
+// Internal (admin key / CLI only): it re-points the primary admin record to
+// whatever Clerk id it is given and had no auth check at all.
+export const bootstrapPrimaryAdmin = internalMutation({
   args: {
     clerkId: v.string(),
     email: v.string(),
@@ -687,7 +718,7 @@ export const cleanupDuplicateEmails = mutation({
   args: {},
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    if (!user || user.role !== "admin") {
+    if (!user || user.role !== "admin" || !user.isApproved || !user.isActive) {
       throw new Error("Only admins can clean up duplicate users.");
     }
 

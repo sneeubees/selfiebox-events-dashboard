@@ -1,6 +1,6 @@
 import { bumpStat } from "./websiteStats";
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
 function createUniqueEventKey() {
   return `evt-${crypto.randomUUID()}`;
@@ -352,7 +352,10 @@ function validateSubmission(formData) {
   return "";
 }
 
-export const submitWebsiteQuote = mutation({
+// Internal: only the /website-quote HTTP route (which runs Turnstile first)
+// may create events. As a public mutation it bypassed Turnstile and handed the
+// booking token back to anonymous callers.
+export const submitWebsiteQuote = internalMutation({
   args: {
     formData: v.object({
       primarySelection: v.string(),

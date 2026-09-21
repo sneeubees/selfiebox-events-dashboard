@@ -10,7 +10,7 @@ export const removeWithClerk = action({
   },
   handler: async (ctx, args) => {
     const currentUser = await ctx.runQuery(api.users.current, {});
-    if (!currentUser || currentUser.role !== "admin") {
+    if (!currentUser || currentUser.role !== "admin" || !currentUser.isApproved || !currentUser.isActive) {
       throw new Error("Only admins can delete users.");
     }
 

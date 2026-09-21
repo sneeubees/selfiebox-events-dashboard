@@ -84,7 +84,7 @@ http.route({
         : (body?.formData ? [body.formData] : []);
       const refs = [];
       for (const formData of submissions) {
-        const result = await ctx.runMutation(api.websiteQuotes.submitWebsiteQuote, { formData });
+        const result = await ctx.runMutation(internal.websiteQuotes.submitWebsiteQuote, { formData });
         if (result && result.ok) {
           try {
             const mailOut = await sendQuoteEmails(formData, result);
@@ -252,7 +252,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const origin = request.headers.get("origin") || "*";
-    try { await ctx.runMutation(api.websiteStats.recordVisit, {}); } catch (e) {}
+    try { await ctx.runMutation(internal.websiteStats.recordVisit, {}); } catch (e) {}
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }),
 });

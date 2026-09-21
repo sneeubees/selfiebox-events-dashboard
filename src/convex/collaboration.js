@@ -158,10 +158,11 @@ export const listWorkspaceActivity = query({
       .take(safeLimit);
 
     const eventIds = Array.from(new Set(activity.map((entry) => entry.eventId).filter(Boolean)));
-    const eventPairs = await Promise.all(
-      eventIds.map(async (eventId) => [String(eventId), await ctx.db.get(eventId)])
-    );
-    const eventMap = new Map(eventPairs);
+    // Sequential on purpose - see convex Promise.all isolate crashes.
+    const eventMap = new Map();
+    for (const eventId of eventIds) {
+      eventMap.set(String(eventId), await ctx.db.get(eventId));
+    }
 
     return activity.map((entry) => ({
       id: String(entry._id),

@@ -530,6 +530,18 @@ export default function BookingPage({ token }) {
     );
   }
 
+  if (pageState.status === "expired") {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card booking-status-card">
+          <div className="auth-brand">SelfieBox Events Platform</div>
+          <h1>This booking link has expired</h1>
+          <p>Booking links close once the event is complete. If you need a copy of your booking, quote or invoice, or something needs to change, please contact us at <a href="mailto:selfie@selfiebox.co.za">selfie@selfiebox.co.za</a> and we will gladly help.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (pageState.status === "requires_auth" || pageState.status === "public_limit_reached") {
     return (
       <div className="auth-shell">
@@ -713,7 +725,7 @@ export default function BookingPage({ token }) {
         </div>
 
         {formNotice ? <div className="auth-error booking-form-notice">{formNotice}</div> : null}
-        {isLocked ? <div className="booking-lock-note">This booking form is locked from the day after the event and can no longer be edited.</div> : null}
+        {isLocked ? <div className="booking-lock-note">This booking link has expired (the event is complete) and can no longer be edited.</div> : null}
 
         <div className="booking-form-actions">
           <button className="primary-button" type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isLocked}>

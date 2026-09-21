@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 function isPdfUpload(name, contentType) {
@@ -154,8 +154,9 @@ export const extractUploadedDocumentNumber = action({
 
 async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}) {
   if (!skipUserCheck) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    // Approved + active staff only - a bare login is not enough.
+    const currentUser = await ctx.runQuery(internal.bookings.getApprovedCurrentUserInternal, {});
+    if (!currentUser) {
       throw new Error("Not authenticated");
     }
   }
@@ -164,7 +165,10 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     return { processed: false, reason: "not_pdf" };
   }
 
-  const fileUrl = String(args.fileUrl || "").trim();
+  // Always resolve the URL from our own storage id. The caller-supplied fileUrl
+  // is ignored on purpose: fetching it let a caller point this server at any
+  // address (SSRF). The arg stays in the validator for older browser tabs.
+  const fileUrl = String((await ctx.storage.getUrl(args.storageId)) || "").trim();
   if (!fileUrl) {
     console.log("Document extraction skipped: storage URL missing", {
       eventKey: args.eventKey,
@@ -241,10 +245,10 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
   return { processed: true, documentType, documentNumber, exVatAuto: exVatAuto || "" };
 }
 
-export const backfillLatestPdfDocumentNumbers = action({
+export const backfillLatestPdfDocumentNumbers = internalAction({
   args: {},
   handler: async (ctx) => {
-    const candidates = await ctx.runQuery(api.files.listPdfCandidatesForDocumentNumbers, {});
+    const candidates = await ctx.runQuery(internal.files.listPdfCandidatesForDocumentNumbers, {});
     const seen = new Set();
     let updated = 0;
     let skipped = 0;

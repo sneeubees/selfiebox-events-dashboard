@@ -1,4 +1,7 @@
-import { mutation } from "./_generated/server";
+// Internal only: these create/overwrite events with no user context, so they
+// must never be callable from the internet. Run them with the admin key:
+//   npx convex run imports:importMonthWorkbook '{...}'
+import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const PALETTE = ["#d7e5f5", "#ffe1b8", "#c8ddf7", "#dfe7f6", "#f7d3e3", "#cfead6", "#f9d9b8", "#e1dcfa"];
@@ -197,7 +200,7 @@ function makeLegacyUpdateKey(itemId, createdAt, actorName, body) {
   return `${itemId}|${createdAt}|${normalizeText(actorName)}|${normalizeText(body).slice(0, 80)}`;
 }
 
-export const importMonthWorkbook = mutation({
+export const importMonthWorkbook = internalMutation({
   args: {
     workspaceYear: v.number(),
     monthNumber: v.number(),
@@ -394,7 +397,7 @@ export const importMonthWorkbook = mutation({
   },
 });
 
-export const normalizeImportedStatuses = mutation({
+export const normalizeImportedStatuses = internalMutation({
   args: {},
   handler: async (ctx) => {
     const typo = "In Progres";
@@ -440,7 +443,7 @@ export const normalizeImportedStatuses = mutation({
   },
 });
 
-export const importHistoricMonthWorkbook = mutation({
+export const importHistoricMonthWorkbook = internalMutation({
   args: {
     workspaceYear: v.number(),
     monthNumber: v.number(),

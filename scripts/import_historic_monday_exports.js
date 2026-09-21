@@ -1,3 +1,7 @@
+// NOTE 2026-09-21: the imports:* functions are now INTERNAL (they used to be callable by
+// anyone on the internet). This script's unauthenticated client call no longer works;
+// run the import with the deployment admin key instead, e.g.
+//   npx convex run imports:importMonthWorkbook '{...}'
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");

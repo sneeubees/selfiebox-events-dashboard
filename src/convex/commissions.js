@@ -160,14 +160,18 @@ export const listSnapshots = query({
     const users = await ctx.db.query("users").collect();
     const userById = new Map(users.map((record) => [String(record._id), record]));
 
-    const enriched = await Promise.all(rows.map(async (row) => ({
+    // Sequential on purpose - Promise.all over ctx.storage calls has crashed the backend.
+    const enriched = [];
+    for (const row of rows) {
+      enriched.push({
       id: row._id,
       fileName: row.fileName,
       period: row.period,
       createdAt: row.createdAt,
       url: (await ctx.storage.getUrl(row.storageId)) || "",
       createdByLabel: row.createdByUserId ? (userById.get(String(row.createdByUserId))?.fullName || "") : "",
-    })));
+      });
+    }
 
     return enriched.sort((left, right) => right.createdAt - left.createdAt);
   },
@@ -211,13 +215,17 @@ export const listSummarySnapshots = query({
       .collect();
     const users = await ctx.db.query("users").collect();
     const userById = new Map(users.map((record) => [String(record._id), record]));
-    const enriched = await Promise.all(rows.map(async (row) => ({
+    // Sequential on purpose - Promise.all over ctx.storage calls has crashed the backend.
+    const enriched = [];
+    for (const row of rows) {
+      enriched.push({
       id: row._id,
       fileName: row.fileName,
       createdAt: row.createdAt,
       url: (await ctx.storage.getUrl(row.storageId)) || "",
       createdByLabel: row.createdByUserId ? (userById.get(String(row.createdByUserId))?.fullName || "") : "",
-    })));
+      });
+    }
     return enriched.sort((left, right) => right.createdAt - left.createdAt);
   },
 });

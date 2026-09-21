@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 function formatRegistrantName(firstName, surname, userEmail) {
@@ -79,7 +79,7 @@ export const sendAdminNewUserNotification = internalAction({
   },
 });
 
-export const sendTestAdminNotification = action({
+export const sendTestAdminNotification = internalAction({
   args: {
     recipient: v.string(),
   },
@@ -93,7 +93,7 @@ export const sendTestAdminNotification = action({
   },
 });
 
-export const debugNotificationConfig = action({
+export const debugNotificationConfig = internalAction({
   args: {},
   handler: async () => ({
     hasResendApiKey: Boolean(process.env.RESEND_API_KEY),
@@ -102,7 +102,7 @@ export const debugNotificationConfig = action({
   }),
 });
 
-export const sendInfoAdminTestNotification = action({
+export const sendInfoAdminTestNotification = internalAction({
   args: {},
   handler: async (ctx) => {
     return await ctx.runAction(internal.notifications.sendAdminNewUserNotification, {

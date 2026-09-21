@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, internalMutation, internalQuery, action } from "./_generated/server";
+import { internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // Sage Accounting (ZA) integration - OAuth app on developerselfservice.sageone.com.
@@ -22,7 +22,7 @@ const cfg = () => ({
   apiBase: process.env.SAGE_API_BASE || DEFAULTS.apiBase,
 });
 
-export const getConnectUrl = query({
+export const getConnectUrl = internalQuery({
   args: {},
   handler: async () => {
     const clientId = process.env.SAGE_CLIENT_ID;
@@ -85,7 +85,7 @@ async function refreshAccessToken(ctx, refreshToken) {
 
 // CLI smoke test: `convex run sage:testFetch` after connecting.
 // Tries /businesses on the v3.1 API to prove auth + list the businesses.
-export const testFetch = action({
+export const testFetch = internalAction({
   args: { path: v.optional(v.string()) },
   handler: async (ctx, { path }) => {
     const refreshToken = await ctx.runQuery(internal.sage.getTokenRaw, {});
@@ -105,7 +105,7 @@ export const testFetch = action({
 // Env: SAGE_ZA_API_KEY, SAGE_ZA_USERNAME, SAGE_ZA_PASSWORD, (SAGE_ZA_BASE opt).
 // CAUTION: 20 failed logins/hour = 24h username block. Test deliberately, once.
 // Smoke test: `convex run sage:zaTest` -> Company/Get (list companies).
-export const zaTest = action({
+export const zaTest = internalAction({
   args: { path: v.optional(v.string()), companyId: v.optional(v.number()) },
   handler: async (ctx, { path, companyId }) => {
     const base = process.env.SAGE_ZA_BASE || "https://accounting.sageone.co.za/api/2.0.0";

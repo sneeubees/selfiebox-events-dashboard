@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -132,7 +132,7 @@ export const listEventFiles = query({
   },
 });
 
-export const listPdfCandidatesForDocumentNumbers = query({
+export const listPdfCandidatesForDocumentNumbers = internalQuery({
   args: {},
   handler: async (ctx) => {
     const events = await ctx.db.query("events").collect();

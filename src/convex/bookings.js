@@ -299,12 +299,25 @@ async function buildMergedBookingFormData(ctx, eventRecord, formData) {
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+// The dashboard's date is authoritative. The date typed into the form is only a
+// fallback for an event that has none: it used to come first, which let anyone
+// holding the link move the date forward and keep the link open indefinitely.
 function getBookingDateTimestamp(eventRecord, bookingRecord) {
-  const timestamp = parseIsoDateStart(bookingRecord?.formData?.eventDate || eventRecord?.date);
-  return timestamp;
+  return parseIsoDateStart(eventRecord?.date) ?? parseIsoDateStart(bookingRecord?.formData?.eventDate);
+}
+
+// Statuses after which the customer link is finished, whatever the date says.
+const LINK_EXPIRED_STATUSES = new Set(["event completed", "cancelled"]);
+
+function isLinkExpiredByStatus(eventRecord) {
+  return LINK_EXPIRED_STATUSES.has(normalizeString(eventRecord?.status).toLowerCase());
 }
 
 function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
+  // The link EXPIRES (no data shown to the public, no edits) once the event is
+  // marked Event Completed / Cancelled, or from the day after the event date -
+  // whichever comes first. Signed-in staff can still open it read-only.
+  const expiredByStatus = isLinkExpiredByStatus(eventRecord);
   const eventTimestamp = getBookingDateTimestamp(eventRecord, bookingRecord);
   if (!eventTimestamp) {
     return {
@@ -312,7 +325,8 @@ function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
       anonymousAllowed: true,
       remainingPublicClicks: null,
       cutoffTimestamp: null,
-      isLocked: false,
+      isLocked: expiredByStatus,
+      isExpired: expiredByStatus,
     };
   }
 
@@ -324,7 +338,8 @@ function getPublicAccessPolicy(eventRecord, bookingRecord, now = Date.now()) {
     anonymousAllowed: true,
     remainingPublicClicks: null,
     cutoffTimestamp: lockTimestamp,
-    isLocked: now >= lockTimestamp,
+    isLocked: expiredByStatus || now >= lockTimestamp,
+    isExpired: expiredByStatus || now >= lockTimestamp,
   };
 }
 
@@ -456,16 +471,19 @@ async function getBookingSnapshots(ctx, bookingId) {
     .withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
     .collect();
   const ordered = rows.sort((a, b) => b.submittedAt - a.submittedAt);
-  return Promise.all(
-    ordered.map(async (row) => ({
+  // Sequential on purpose - Promise.all over ctx.storage calls has crashed the backend.
+  const results = [];
+  for (const row of ordered) {
+    results.push({
       id: String(row._id),
       fileName: row.fileName,
       sourceIp: row.sourceIp || "",
       submittedAt: row.submittedAt,
       createdByLabel: row.createdByLabel || "",
       url: (await ctx.storage.getUrl(row.storageId)) || "",
-    }))
-  );
+    });
+  }
+  return results;
 }
 
 async function getBookingChangeLog(ctx, bookingId) {
@@ -582,8 +600,33 @@ async function buildPublicBookingDto(ctx, eventRecord, bookingRecord, access, vi
   };
 }
 
+// The "Open booking link" button in our emails is built from this. It used to
+// take the browser-supplied value first, so anyone with a valid link could make
+// us send a SelfieBox-branded email whose button pointed at their own site.
+const TRUSTED_APP_ORIGINS = new Set([
+  "https://events.selfiebox.co.za",
+  "https://staging.events.selfiebox.co.za",
+  "http://localhost:3000",
+]);
+
+function resolveTrustedBaseUrl(clientBaseUrl) {
+  const configured = normalizeString(process.env.APP_BASE_URL);
+  if (configured) {
+    return configured;
+  }
+  try {
+    const origin = new URL(normalizeString(clientBaseUrl)).origin;
+    if (TRUSTED_APP_ORIGINS.has(origin)) {
+      return origin;
+    }
+  } catch (error) {
+    // fall through to the default
+  }
+  return "https://events.selfiebox.co.za";
+}
+
 async function buildSubmissionPayload(ctx, bookingRecord, eventRecord, baseUrl) {
-  const rawBaseUrl = normalizeString(baseUrl) || process.env.APP_BASE_URL || "";
+  const rawBaseUrl = resolveTrustedBaseUrl(baseUrl);
   const trimmedBaseUrl = rawBaseUrl.replace(/\/+$/, "");
   const submittedBy = bookingRecord.submittedByUserId
     ? await ctx.db.get(bookingRecord.submittedByUserId)
@@ -715,6 +758,11 @@ export const openPublicLink = mutation({
     }
 
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
+    if (policy.isExpired) {
+      // Nothing about the customer or the event leaves the server any more:
+      // no contact details, no address, no quote/invoice links.
+      return { status: "expired", isLocked: true };
+    }
     return await buildPublicBookingDto(ctx, eventRecord, bookingRecord, "public");
   },
 });
@@ -767,7 +815,7 @@ export const submitPublicForm = mutation({
 
     const policy = getPublicAccessPolicy(eventRecord, bookingRecord);
     if (policy.isLocked) {
-      throw new Error("This booking form is locked from the day after the event and can no longer be edited.");
+      throw new Error("This booking link has expired and can no longer be edited. Please contact SelfieBox if something needs to change.");
     }
     const approvedUser = await getApprovedCurrentUser(ctx);
     const normalizedIp = normalizeString(args.clientIp);
@@ -800,16 +848,23 @@ export const submitPublicForm = mutation({
       lastSubmittedIp: normalizedIp || undefined,
       updatedAt: now,
     });
+    // A blank in the form must never wipe a value staff already captured: a
+    // submission with empty times used to clear `hours`, which zeroed commission.
+    const addressChanged = Boolean(formData.address) && formData.address !== eventRecord.location;
     await ctx.db.patch(eventRecord._id, {
-      eventTitle: formData.eventName,
-      location: formData.address,
-      locationPlaceId: formData.addressPlaceId || "",
-      locationLat: typeof formData.addressLat === "number" ? formData.addressLat : undefined,
-      locationLng: typeof formData.addressLng === "number" ? formData.addressLng : undefined,
+      eventTitle: formData.eventName || eventRecord.eventTitle || "",
+      location: formData.address || eventRecord.location || "",
+      ...(formData.address
+        ? {
+            locationPlaceId: formData.addressPlaceId || (addressChanged ? "" : eventRecord.locationPlaceId || ""),
+            locationLat: typeof formData.addressLat === "number" ? formData.addressLat : (addressChanged ? undefined : eventRecord.locationLat),
+            locationLng: typeof formData.addressLng === "number" ? formData.addressLng : (addressChanged ? undefined : eventRecord.locationLng),
+          }
+        : {}),
       hours:
         formData.eventStartTime && formData.eventFinishTime
           ? `${formData.eventStartTime} - ${formData.eventFinishTime}`
-          : "",
+          : (eventRecord.hours || ""),
       activity: [
         ...(eventRecord.activity || []),
         createActivityEntry(

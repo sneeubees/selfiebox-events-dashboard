@@ -41,12 +41,23 @@ function buildBookingSummaryLines(payload) {
   ];
 }
 
+// Everything in the summary is typed by the customer (or anyone holding the
+// link), so it must be escaped before it goes into our branded HTML email.
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildSummaryHtml(payload) {
   const rows = buildBookingSummaryLines(payload)
     .map(([label, value]) => `
       <tr>
-        <td style="padding:1px 14px 1px 0;color:#1f2a44;font-weight:700;vertical-align:top;white-space:nowrap;">${label}</td>
-        <td style="padding:1px 0;color:#7a8598;vertical-align:top;">${value}</td>
+        <td style="padding:1px 14px 1px 0;color:#1f2a44;font-weight:700;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+        <td style="padding:1px 0;color:#7a8598;vertical-align:top;">${escapeHtml(value)}</td>
       </tr>
     `)
     .join("");
@@ -116,9 +127,9 @@ export const sendBookingSubmissionEmail = internalAction({
         <p>Thanks for completing or updating your booking form online. You can use the link below to make any changes, and to view updates about your booking as they become available, so be sure to keep it safe.</p>
         <p><strong style="color: #1f2a44;">Summary of your booking:</strong></p>
         ${summaryHtml}
-        <p><a href="${payload.linkUrl}" style="display:inline-block;padding:10px 16px;background:#2e65ff;color:#ffffff;text-decoration:none;border-radius:8px;">Open booking link</a></p>
+        <p><a href="${escapeHtml(payload.linkUrl)}" style="display:inline-block;padding:10px 16px;background:#2e65ff;color:#ffffff;text-decoration:none;border-radius:8px;">Open booking link</a></p>
         <p>Your booking form is attached for easy reference. If you have any questions, just reply to this message, we're happy to help!</p>
-        <p style="margin-top:20px;font-size:12px;color:#9aa4b5;">${sentFooter}</p>
+        <p style="margin-top:20px;font-size:12px;color:#9aa4b5;">${escapeHtml(sentFooter)}</p>
       </div>
     `;
     const text = [

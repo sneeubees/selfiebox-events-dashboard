@@ -546,6 +546,9 @@ function serializeEventForConvex(event) {
     time: event.time || '',
     branch: event.branch || [],
     products: event.products || [],
+    // Missing until 2026-09-21: the server defaulted it to {} on every save, so
+    // product quantities (x2, x3...) never survived a save.
+    productQuantities: event.productQuantities || {},
     status: event.status || '',
     digitalOnly: Boolean(event.digitalOnly),
     location: event.location || '',
@@ -630,6 +633,9 @@ function DashboardApp() {
   // PDFs whose quote/invoice number could not be read (shown with a Retry in
   // the drawer's Files tab instead of failing silently).
   const [pdfReadFailures, setPdfReadFailures] = useState([]);
+  // Saves that the server rejected. They used to fail silently (console only):
+  // the edit stayed on screen and was quietly reverted by the next data push.
+  const [saveFailures, setSaveFailures] = useState([]);
   const pdfExtractionQueueRef = useRef(Promise.resolve());
   const removeUploadedEventFile = useMutation(api.files.removeFile);
   const saveAttendantFileMutation = useMutation(api.attendants.saveFile);
@@ -2118,21 +2124,49 @@ function DashboardApp() {
             deleted: false,
             pending: false,
           });
+          setSaveFailures((current) => (current.some((failure) => failure.eventId === event.id) ? current.filter((failure) => failure.eventId !== event.id) : current));
         })
         .catch((error) => {
           console.error('Failed to persist event', error);
           if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
             return;
           }
+          // Keep the unsaved edit on screen (pending lock) until the user
+          // retries or discards it, and tell them - never revert silently.
           eventSyncLocksRef.current.set(event.id, {
-            expiresAt: Date.now() + 1000,
+            expiresAt: Number.MAX_SAFE_INTEGER,
             deleted: false,
-            pending: false,
+            pending: true,
           });
+          const reason = String(error?.data || error?.message || error || '').replace(/^\[CONVEX[^\]]*\]\s*/i, '').replace(/^Uncaught Error:\s*/i, '').split('\n')[0].slice(0, 160);
+          setSaveFailures((current) => [
+            ...current.filter((failure) => failure.eventId !== event.id),
+            { eventId: event.id, name: event.name || 'Untitled event', reason },
+          ]);
         });
     }, 250);
 
     persistTimeoutsRef.current.set(event.id, timeoutId);
+  };
+
+  const retryFailedSave = (eventId) => {
+    const localEvent = eventsRef.current.find((candidate) => candidate.id === eventId);
+    if (!localEvent) {
+      setSaveFailures((current) => current.filter((failure) => failure.eventId !== eventId));
+      return;
+    }
+    persistEvent(localEvent);
+  };
+
+  const discardFailedSave = (eventId) => {
+    eventSyncLocksRef.current.delete(eventId);
+    setSaveFailures((current) => current.filter((failure) => failure.eventId !== eventId));
+    const remoteEvent = (liveEvents || []).find((candidate) => candidate.id === eventId);
+    if (remoteEvent) {
+      const nextEvents = eventsRef.current.map((candidate) => (candidate.id === eventId ? { ...remoteEvent } : candidate));
+      eventsRef.current = nextEvents;
+      setEvents(nextEvents);
+    }
   };
 
   const replaceEvents = (updater) => {
@@ -4701,6 +4735,18 @@ function DashboardApp() {
         <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
           {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop files here</p><input ref={eventFileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section>{pdfReadFailures.filter((item) => item.eventKey === selectedEvent.id).map((item) => <div className="pdf-read-failure" role="alert" key={item.storageId}><span><strong title={item.name}>{item.name}</strong> uploaded, but the quote/invoice number couldn&rsquo;t be read.</span><button className="ghost-button" type="button" disabled={item.retrying} onClick={() => void runPdfNumberExtraction(item)}>{item.retrying ? 'Retrying…' : 'Retry'}</button><button className="pdf-read-failure-dismiss" type="button" aria-label="Dismiss" onClick={() => setPdfReadFailures((current) => current.filter((entry) => entry.storageId !== item.storageId))}>x</button></div>)}<section className="drawer-card"><h4>Files</h4><div className="file-list">{selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
         </aside>
+
+      {saveFailures.length ? (
+        <div className="save-failure-stack" role="alert">
+          {saveFailures.map((failure) => (
+            <div className="save-failure" key={failure.eventId}>
+              <span><strong>Not saved:</strong> {failure.name}{failure.reason ? ` - ${failure.reason}` : ''}</span>
+              <button type="button" className="ghost-button" onClick={() => retryFailedSave(failure.eventId)}>Retry</button>
+              <button type="button" className="ghost-button" onClick={() => discardFailedSave(failure.eventId)}>Discard my change</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {previewFile ? <div className="modal-scrim" onClick={closeEventFilePreview}><div className="modal-panel file-preview-panel" role="dialog" aria-modal="true" aria-label={previewFile.name} onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3 title={previewFile.name}>{previewFile.name}</h3></div><div className="file-preview-body">{isPreviewImage(previewFile) ? <img className="file-preview-image" src={previewFile.url} alt={previewFile.name} /> : null}{!isPreviewImage(previewFile) && isPreviewPdf(previewFile) ? <iframe className="file-preview-frame" src={`${previewFile.url.split('#')[0]}#zoom=100&pagemode=none`} title={previewFile.name} /> : null}{!isPreviewImage(previewFile) && !isPreviewPdf(previewFile) ? <div className="empty-month">This file cannot be previewed here yet.</div> : null}</div><div className="modal-actions"><a className="primary-button file-preview-link" href={previewFile.url} target="_blank" rel="noreferrer">Open in new tab</a></div></div></div> : null}
 

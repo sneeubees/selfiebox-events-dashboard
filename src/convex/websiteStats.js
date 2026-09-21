@@ -55,7 +55,7 @@ export async function bumpStat(ctx, field) {
   }
 }
 
-export const recordVisit = mutation({
+export const recordVisit = internalMutation({
   args: {},
   handler: async (ctx) => {
     await bumpStat(ctx, "visits");
@@ -66,8 +66,15 @@ export const recordVisit = mutation({
 export const getWebsiteStats = query({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.query("websiteStats").collect();
     const today = zaDate();
+    // Staff only. Return an empty result rather than throwing so a signed-out
+    // or pending browser never white-screens on this query.
+    try {
+      await requireCurrentUser(ctx);
+    } catch (error) {
+      return { today, days: [] };
+    }
+    const rows = await ctx.db.query("websiteStats").collect();
     const days = rows
       .map((r) => ({ date: r.date, visits: r.visits || 0, quotes: r.quotes || 0 }))
       .sort((a, b) => (a.date < b.date ? 1 : -1));
