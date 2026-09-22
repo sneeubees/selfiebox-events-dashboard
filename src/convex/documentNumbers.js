@@ -2,7 +2,6 @@
 
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 function isPdfUpload(name, contentType) {
@@ -152,11 +151,34 @@ export const extractUploadedDocumentNumber = action({
   handler: async (ctx, args) => processUploadedDocument(ctx, args),
 });
 
+// Only our own Convex file storage may be fetched. The browser supplies the URL
+// (it comes from ctx.storage.getUrl in files.js), but without this check a caller
+// could point this server at any address (SSRF). NOTE: ctx.runQuery and
+// ctx.storage must NOT be used in this "use node" file on the self-hosted
+// backend - the Node helper calls back over HTTP on a path nginx does not route
+// (2026-09-22: every PDF read failed with an nginx 404 after exactly that).
+const OWN_STORAGE_HOSTS = new Set(["api.events.selfiebox.co.za", "staging.events.selfiebox.co.za", "127.0.0.1", "localhost"]);
+for (const envUrl of [process.env.CONVEX_CLOUD_URL, process.env.CONVEX_SITE_URL]) {
+  try { if (envUrl) OWN_STORAGE_HOSTS.add(new URL(envUrl).hostname); } catch (error) { /* ignore */ }
+}
+function isOwnStorageUrl(value) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:")
+      && OWN_STORAGE_HOSTS.has(url.hostname)
+      && /(^|\/)api\/storage\/[A-Za-z0-9-]+$/.test(url.pathname);
+  } catch (error) {
+    return false;
+  }
+}
+
 async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}) {
   if (!skipUserCheck) {
-    // Approved + active staff only - a bare login is not enough.
-    const currentUser = await ctx.runQuery(internal.bookings.getApprovedCurrentUserInternal, {});
-    if (!currentUser) {
+    // Must be signed in. The approved-staff check is enforced where the result
+    // is written (events.applyExtractedPdfDataFromAction), which is a normal
+    // mutation and can read the users table.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
       throw new Error("Not authenticated");
     }
   }
@@ -165,10 +187,11 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
     return { processed: false, reason: "not_pdf" };
   }
 
-  // Always resolve the URL from our own storage id. The caller-supplied fileUrl
-  // is ignored on purpose: fetching it let a caller point this server at any
-  // address (SSRF). The arg stays in the validator for older browser tabs.
-  const fileUrl = String((await ctx.storage.getUrl(args.storageId)) || "").trim();
+  const fileUrl = String(args.fileUrl || "").trim();
+  if (fileUrl && !isOwnStorageUrl(fileUrl)) {
+    console.log("Document extraction refused: not our storage URL", { eventKey: args.eventKey, name: args.name });
+    return { processed: false, reason: "invalid_storage_url" };
+  }
   if (!fileUrl) {
     console.log("Document extraction skipped: storage URL missing", {
       eventKey: args.eventKey,
@@ -245,10 +268,22 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
   return { processed: true, documentType, documentNumber, exVatAuto: exVatAuto || "" };
 }
 
+// Admin-key / CLI only. NOTE: ctx.runQuery does not work from this Node file on
+// the self-hosted backend (see isOwnStorageUrl) - pass the candidates in instead:
+//   convex run files:listPdfCandidatesForDocumentNumbers > c.json
+//   convex run documentNumbers:backfillLatestPdfDocumentNumbers '{"candidates": <c.json>}'
 export const backfillLatestPdfDocumentNumbers = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const candidates = await ctx.runQuery(internal.files.listPdfCandidatesForDocumentNumbers, {});
+  args: {
+    candidates: v.array(v.object({
+      eventKey: v.string(),
+      storageId: v.id("_storage"),
+      name: v.string(),
+      contentType: v.optional(v.string()),
+      fileUrl: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const candidates = args.candidates;
     const seen = new Set();
     let updated = 0;
     let skipped = 0;
