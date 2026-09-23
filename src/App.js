@@ -633,6 +633,9 @@ function DashboardApp() {
   // PDFs whose quote/invoice number could not be read (shown with a Retry in
   // the drawer's Files tab instead of failing silently).
   const [pdfReadFailures, setPdfReadFailures] = useState([]);
+  // Bumped when a row's post-save lock expires, so the merge below re-runs and
+  // picks up server changes (e.g. PDF numbers) that arrived while it was locked.
+  const [remergeTick, setRemergeTick] = useState(0);
   // Saves that the server rejected. They used to fail silently (console only):
   // the edit stayed on screen and was quietly reverted by the next data push.
   const [saveFailures, setSaveFailures] = useState([]);
@@ -1415,6 +1418,7 @@ function DashboardApp() {
           addressLabel: event.location || '',
           date: event.date,
           hours: event.hours || '0',
+          times: getCommissionTimeText(event),
           hoursPayable,
           amount,
           car,
@@ -1909,7 +1913,22 @@ function DashboardApp() {
     eventsSeededRef.current = true;
     eventsRef.current = mergedEvents;
     setEvents(mergedEvents);
-  }, [liveEvents]);
+
+    if (remergeTick < 0) {
+      return undefined;
+    }
+    let nextExpiry = Number.POSITIVE_INFINITY;
+    eventSyncLocksRef.current.forEach((lock) => {
+      if (!lock.pending && !lock.deleted && lock.expiresAt > now && lock.expiresAt < nextExpiry) {
+        nextExpiry = lock.expiresAt;
+      }
+    });
+    if (!Number.isFinite(nextExpiry)) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setRemergeTick((tick) => tick + 1), nextExpiry - now + 50);
+    return () => window.clearTimeout(timer);
+  }, [liveEvents, remergeTick]);
 
   useEffect(() => {
     if (!canAccessDashboard || liveEvents === undefined || hasAnyEvents === undefined || hasAnyEvents || eventsSeededRef.current) {
@@ -2345,6 +2364,12 @@ function DashboardApp() {
         const result = await extractUploadedDocumentNumber({ eventKey: job.eventKey, storageId: job.storageId, name: job.name, contentType: job.contentType, fileUrl: job.fileUrl });
         if (!result?.processed) {
           if (result?.reason === 'storage_fetch_failed' || result?.reason === 'missing_storage_url') {
+            // The file was saved a moment ago; give storage a second and try once more before bothering the user.
+            if (!job.retriedOnce) {
+              await new Promise((resolve) => window.setTimeout(resolve, 1500));
+              void runPdfNumberExtraction({ ...job, retriedOnce: true });
+              return;
+            }
             markFailed();
             return;
           }
@@ -2357,7 +2382,18 @@ function DashboardApp() {
         if (result.documentNumber) patch.documentNumber = result.documentNumber;
         if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') patch.exVatAuto = result.exVatAuto;
         if (patch.documentType || patch.documentNumber || patch.exVatAuto !== undefined) {
-          await applyExtractedPdfDataMutation(patch);
+          const saved = await applyExtractedPdfDataMutation(patch);
+          // Put the numbers into THIS tab's copy of the row straight away. Relying
+          // on the server push alone left a stale copy behind whenever a save had
+          // just locked the row, and the next save then wiped the numbers again
+          // (the "upload it twice" complaint).
+          if (saved) {
+            const nextEvents = eventsRef.current.map((event) => (event.id === job.eventKey
+              ? { ...event, quoteNumber: saved.quoteNumber ?? event.quoteNumber, invoiceNumber: saved.invoiceNumber ?? event.invoiceNumber, exVatAuto: saved.exVatAuto ?? event.exVatAuto }
+              : event));
+            eventsRef.current = nextEvents;
+            setEvents(nextEvents);
+          }
         }
         setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
       } catch (error) {
@@ -4882,7 +4918,7 @@ function DashboardApp() {
                       <small>{row.addressLabel || 'No address set'}</small>
                     </div>
                     <span>{formatDateDisplay(row.date || '') || '-'}</span>
-                    <span>{row.hours}</span>
+                    <span title={row.hours}>{row.times || row.hours}</span>
                     <input
                       className="text-input commission-input"
                       inputMode="numeric"
@@ -9807,20 +9843,37 @@ function isEventInCommissionPeriod(event, month, year, period, isFullTimeEmploye
   return true;
 }
 
+// Rows used to keep the time range in "hours" ("13:00 - 16:00"); newer rows keep
+// the duration there ("4.5 Hrs") and the range in the separate "time" column.
+// Both layouts are read here.
+function getCommissionTimeText(event) {
+  if (parseCommissionTimeRange(event?.time)) return String(event.time).trim();
+  if (parseCommissionTimeRange(event?.hours)) return String(event.hours).trim();
+  return '';
+}
+
+function getCommissionTotalHours(event) {
+  const fromHours = parseCommissionHours(event?.hours);
+  return fromHours > 0 ? fromHours : parseCommissionHours(event?.time);
+}
+
 function getAutomaticCommissionHours(event, isFullTimeEmployee = false) {
+  const totalHours = getCommissionTotalHours(event);
   if (!isFullTimeEmployee) {
-    return parseCommissionHours(event?.hours);
+    return totalHours;
   }
 
+  // Full-time staff: only the part of the event outside 08:00-17:00 on a
+  // weekday counts. Without a time range the duration is used as-is.
   const eventDate = parseCommissionDate(event?.date);
-  const timeRange = parseCommissionTimeRange(event?.hours);
+  const timeRange = parseCommissionTimeRange(event?.time) || parseCommissionTimeRange(event?.hours);
   if (!eventDate || !timeRange) {
-    return parseCommissionHours(event?.hours);
+    return totalHours;
   }
 
   const weekday = eventDate.getDay();
   if (weekday === 0 || weekday === 6) {
-    return parseCommissionHours(event?.hours);
+    return totalHours;
   }
 
   const totalMinutes = Math.max(0, timeRange.endMinutes - timeRange.startMinutes);
@@ -10087,7 +10140,7 @@ async function exportCommissionPdf({ month, year, period, attendant, isFullTimeE
     doc.setFontSize(10);
     doc.setTextColor(27, 34, 48);
     doc.text(formatDateDisplay(row.date || '') || '-', colX.date, y);
-    doc.text(String(row.hours || '-').slice(0, 18), colX.times, y);
+    doc.text(String(row.times || row.hours || '-').slice(0, 18), colX.times, y);
     doc.text(String(row.hoursPayable ?? 0), colX.hours + 16, y, { align: 'right' });
     doc.text(String(row.amount ?? 0), colX.amount + 22, y, { align: 'right' });
     doc.text(String(row.car ?? 0), colX.car + 16, y, { align: 'right' });
