@@ -6534,6 +6534,7 @@ const INFO_NAV = [
     { key: 'rep-general', label: 'General' },
     { key: 'rep-clients', label: 'Clients' },
     { key: 'rep-attendants', label: 'Attendants' },
+    { key: 'rep-response', label: 'Response Times' },
   ] },
   { type: 'item', key: 'server', label: 'Server Health', icon: NAV_ICON.server },
 ];
@@ -6623,6 +6624,7 @@ function WebsiteStatsPage({ onClose, isAdmin, canAccess, initialTab, turnover, r
         {tab === 'rep-general' ? <GeneralReportView reports={reports} /> : null}
         {tab === 'rep-clients' ? <ClientsReportView reports={reports} /> : null}
         {tab === 'rep-attendants' ? <AttendantsReportView reports={reports} /> : null}
+        {tab === 'rep-response' ? <ResponseTimesReportView reports={reports} /> : null}
         {tab === 'server' ? <ServerHealthView reports={reports} /> : null}
       </main>
     </div>
@@ -7834,6 +7836,139 @@ function ReportFilterBar({ regionOptions, regionSel, setRegionSel, rangeKey, set
 }
 
 // General business overview: KPIs (YoY), week-over-week, unit + feature usage, trends.
+// ---------- Response Times report ----------
+function formatDurationMs(ms) {
+  if (!Number.isFinite(ms)) return '-';
+  const totalMinutes = Math.round(ms / 60000);
+  if (totalMinutes < 1) return 'under a minute';
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) return `${totalHours}h ${totalMinutes % 60}m`;
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours ? `${days}d ${hours}h` : `${days}d`;
+}
+function formatStampSA(ms) {
+  if (!Number.isFinite(ms)) return '-';
+  return new Date(ms).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+function monthKeySA(ms) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg', year: 'numeric', month: '2-digit' }).format(new Date(ms));
+  return parts; // 'YYYY-MM'
+}
+function summarizeDurations(items) {
+  const values = items.map((item) => item.ms).sort((a, b) => a - b);
+  const count = values.length;
+  if (!count) return { count: 0, medianMs: null, averageMs: null, minMs: null, maxMs: null };
+  const mid = Math.floor(count / 2);
+  const medianMs = count % 2 ? values[mid] : Math.round((values[mid - 1] + values[mid]) / 2);
+  return { count, medianMs, averageMs: Math.round(values.reduce((s, v) => s + v, 0) / count), minMs: values[0], maxMs: values[count - 1] };
+}
+const RESPONSE_TIME_SECTIONS = [
+  { key: 'createdToQuote', title: 'Request → Quote sent', blurb: 'From the moment the event was created (website request, or the row was added) until its status first became Quote Sent.', from: 'Created', to: 'Quote sent', showSource: true },
+  { key: 'quoteToInProgress', title: 'Quote sent → In Progress', blurb: 'How long the client took to confirm after the quote went out.', from: 'Quote sent', to: 'In Progress' },
+  { key: 'inProgressToInvoice', title: 'In Progress → Invoice uploaded', blurb: 'From confirmation until the first invoice PDF (INV…) was uploaded to the event.', from: 'In Progress', to: 'Invoice uploaded' },
+  { key: 'quoteToCancelled', title: 'Quote sent → Cancelled', blurb: 'How long quotes stayed open before they were cancelled.', from: 'Quote sent', to: 'Cancelled' },
+  { key: 'eventToCompleted', title: 'Event day → Event Completed', blurb: 'From the start of the event day until the status was set to Event Completed.', from: 'Event day', to: 'Completed' },
+];
+function ResponseTimeRows({ def, items }) {
+  return (
+    <table className="rt-table">
+      <thead><tr><th>Event</th><th>Event date</th><th>Branch</th><th>{def.from}</th><th>{def.to}</th><th>Time taken</th>{def.showSource ? <th>Source</th> : null}</tr></thead>
+      <tbody>
+        {items.map((item) => (
+          <tr key={`${item.eventKey}-${item.toAt}`}>
+            <td className="rt-name" title={item.name}>{item.name}</td>
+            <td>{item.date ? formatDateDisplay(item.date) : '-'}</td>
+            <td>{(item.branch || []).join(', ') || '-'}</td>
+            <td>{formatStampSA(item.fromAt)}</td>
+            <td>{formatStampSA(item.toAt)}</td>
+            <td className="rt-dur">{formatDurationMs(item.ms)}</td>
+            {def.showSource ? <td>{item.source === 'website' ? 'Website' : 'Manual'}{item.handledBy ? ` · ${item.handledBy}` : ''}</td> : null}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+function ResponseTimeSection({ def, data }) {
+  const [showMore, setShowMore] = useState(false);
+  const [openMonth, setOpenMonth] = useState('');
+  const items = useMemo(() => data?.items || [], [data]);
+  const months = useMemo(() => {
+    const groups = new Map();
+    items.forEach((item) => {
+      const key = monthKeySA(item.fromAt);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    return Array.from(groups.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([key, list]) => ({ key, label: new Date(`${key}-01T12:00:00Z`).toLocaleString('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' }), items: list, ...summarizeDurations(list) }));
+  }, [items]);
+  const latest = items.slice(0, 10);
+  return (
+    <section className="rt-section">
+      <div className="rt-section-head">
+        <div><h3>{def.title}</h3><p className="webstats-muted">{def.blurb}</p></div>
+        {items.length > 10 || months.length > 1 ? <button type="button" className="ghost-button" onClick={() => setShowMore((v) => !v)}>{showMore ? 'Show last 10' : 'More (per month)'}</button> : null}
+      </div>
+      <div className="webseo-kpis report-kpis-5 rt-kpis">
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{data?.count ?? 0}</strong></div><span>Events measured</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.medianMs)}</strong></div><span>Typical (median)</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.averageMs)}</strong></div><span>Average</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.minMs)}</strong></div><span>Fastest</span></div>
+        <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.maxMs)}</strong></div><span>Slowest</span></div>
+      </div>
+      {!items.length ? <div className="webstats-muted rt-empty">Nothing measured yet for this year.</div> : null}
+      {items.length && !showMore ? <><p className="report-caption">Last 10, newest first.</p><div className="rt-table-wrap"><ResponseTimeRows def={def} items={latest} /></div></> : null}
+      {items.length && showMore ? (
+        <div className="rt-table-wrap">
+          <table className="rt-table rt-month-table">
+            <thead><tr><th>Month ({def.from.toLowerCase()})</th><th>Events</th><th>Typical (median)</th><th>Average</th><th>Fastest</th><th>Slowest</th><th></th></tr></thead>
+            <tbody>
+              {months.map((month) => (
+                <React.Fragment key={month.key}>
+                  <tr className={`rt-month-row${openMonth === month.key ? ' is-open' : ''}`} onClick={() => setOpenMonth((cur) => (cur === month.key ? '' : month.key))}>
+                    <td>{month.label}</td><td>{month.count}</td><td className="rt-dur">{formatDurationMs(month.medianMs)}</td><td>{formatDurationMs(month.averageMs)}</td><td>{formatDurationMs(month.minMs)}</td><td>{formatDurationMs(month.maxMs)}</td><td className="rt-month-toggle">{openMonth === month.key ? 'Hide' : 'Show events'}</td>
+                  </tr>
+                  {openMonth === month.key ? <tr className="rt-month-detail"><td colSpan={7}><ResponseTimeRows def={def} items={month.items} /></td></tr> : null}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+function ResponseTimesReportView({ reports }) {
+  const { year, canAccess } = reports;
+  const data = useQuery(api.responseTimes.get, canAccess ? { workspaceYear: year } : 'skip');
+  const head = (
+    <header className="statspage-viewhead"><div><h2>Response Times</h2><p className="webstats-muted">How long each step takes for {year} events. Calendar time, nights and weekends included. Each section shows the last 10; &ldquo;More&rdquo; breaks the year down per month.</p></div></header>
+  );
+  if (data === undefined) {
+    return <div className="statspage-view">{head}<div className="inline-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading response times&hellip;</div></div>;
+  }
+  if (!data) {
+    return <div className="statspage-view">{head}<div className="webstats-empty">Response times are not available for your account.</div></div>;
+  }
+  const { coverage, excluded } = data;
+  const notes = [];
+  if (coverage.events) notes.push(`${coverage.withTimeline} of ${coverage.events} events have a status history${coverage.earliestTimeline ? ` (recorded since ${formatStampSA(coverage.earliestTimeline)})` : ''}.`);
+  if (excluded.createdAsQuoteSent) notes.push(`${excluded.createdAsQuoteSent} events were created already as Quote Sent, so there is no request-to-quote time for them.`);
+  if (excluded.invoiceBeforeInProgress) notes.push(`${excluded.invoiceBeforeInProgress} events had the invoice uploaded before they were marked In Progress.`);
+  if (excluded.completedBeforeEventDay) notes.push(`${excluded.completedBeforeEventDay} events were marked completed before the event day.`);
+  return (
+    <div className="statspage-view">
+      {head}
+      {notes.length ? <p className="report-caption">{notes.join(' ')}</p> : null}
+      {RESPONSE_TIME_SECTIONS.map((def) => <ResponseTimeSection key={def.key} def={def} data={data.sections[def.key]} />)}
+    </div>
+  );
+}
+
 function GeneralReportView({ reports }) {
   const { year, canAccess, branchOptions, productFullNames, productStyles, statusStyles, customColumns } = reports;
   const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
