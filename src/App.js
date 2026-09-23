@@ -7907,6 +7907,12 @@ function ResponseTimeSection({ def, data }) {
       .map(([key, list]) => ({ key, label: new Date(`${key}-01T12:00:00Z`).toLocaleString('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' }), items: list, ...summarizeDurations(list) }));
   }, [items]);
   const latest = items.slice(0, 10);
+  // Website requests and hand-added rows behave very differently (a row added
+  // by staff is usually marked Quote Sent within a minute), so show them apart.
+  const bySource = useMemo(() => (def.showSource ? {
+    website: summarizeDurations(items.filter((item) => item.source === 'website')),
+    manual: summarizeDurations(items.filter((item) => item.source === 'manual')),
+  } : null), [def.showSource, items]);
   return (
     <section className="rt-section">
       <div className="rt-section-head">
@@ -7920,6 +7926,12 @@ function ResponseTimeSection({ def, data }) {
         <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.minMs)}</strong></div><span>Fastest</span></div>
         <div className="webseo-kpi"><div className="webseo-kpi-top"><strong>{formatDurationMs(data?.maxMs)}</strong></div><span>Slowest</span></div>
       </div>
+      {bySource && items.length ? (
+        <div className="rt-split">
+          <div><strong>Website requests</strong> {bySource.website.count} · typical {formatDurationMs(bySource.website.medianMs)} · average {formatDurationMs(bySource.website.averageMs)} · slowest {formatDurationMs(bySource.website.maxMs)}</div>
+          <div><strong>Rows added by staff</strong> {bySource.manual.count} · typical {formatDurationMs(bySource.manual.medianMs)} · average {formatDurationMs(bySource.manual.averageMs)}</div>
+        </div>
+      ) : null}
       {!items.length ? <div className="webstats-muted rt-empty">Nothing measured yet for this year.</div> : null}
       {items.length && !showMore ? <><p className="report-caption">Last 10, newest first.</p><div className="rt-table-wrap"><ResponseTimeRows def={def} items={latest} /></div></> : null}
       {items.length && showMore ? (
