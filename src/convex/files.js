@@ -132,6 +132,35 @@ export const listEventFiles = query({
   },
 });
 
+// Admin-key / CLI only. The PDFs of ONE event, in the shape the internal
+// backfill action takes - cheap (indexed), unlike the all-events scan below.
+//   convex run files:listPdfCandidatesForEvent '{"eventKey":"evt-..."}'
+export const listPdfCandidatesForEvent = internalQuery({
+  args: { eventKey: v.string() },
+  handler: async (ctx, args) => {
+    const eventRecord = await findEventByKey(ctx, args.eventKey);
+    if (!eventRecord) {
+      return [];
+    }
+    const files = await ctx.db
+      .query("eventFiles")
+      .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
+      .collect();
+    const candidates = [];
+    for (const file of files.sort((left, right) => left.createdAt - right.createdAt)) {
+      if (!file.storageId || !isPdfFile(file.name, file.contentType)) continue;
+      candidates.push({
+        eventKey: args.eventKey,
+        storageId: file.storageId,
+        name: file.name,
+        contentType: file.contentType || "application/pdf",
+        fileUrl: (await ctx.storage.getUrl(file.storageId)) || "",
+      });
+    }
+    return candidates;
+  },
+});
+
 export const listPdfCandidatesForDocumentNumbers = internalQuery({
   args: {},
   handler: async (ctx) => {

@@ -287,9 +287,22 @@ export const backfillLatestPdfDocumentNumbers = internalAction({
     const seen = new Set();
     let updated = 0;
     let skipped = 0;
+    // What was read from each PDF. This action cannot write to the database
+    // (see the note above), so the operator applies each entry with
+    //   convex run events:applyExtractedPdfData '{"eventKey":..,"documentType":..,"documentNumber":..,"exVatAuto":..}'
+    const results = [];
 
     for (const candidate of candidates) {
       const result = await processUploadedDocument(ctx, candidate, { skipUserCheck: true });
+      results.push({
+        eventKey: candidate.eventKey,
+        name: candidate.name,
+        processed: Boolean(result.processed),
+        reason: result.reason || "",
+        documentType: result.documentType || "",
+        documentNumber: result.documentNumber || "",
+        exVatAuto: result.exVatAuto || "",
+      });
       if (!result.processed) {
         skipped += 1;
         continue;
@@ -303,7 +316,7 @@ export const backfillLatestPdfDocumentNumbers = internalAction({
       updated += 1;
     }
 
-    return { updated, skipped, scanned: candidates.length };
+    return { updated, skipped, scanned: candidates.length, results };
   },
 });
 
