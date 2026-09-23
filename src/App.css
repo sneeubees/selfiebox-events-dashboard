@@ -580,6 +580,14 @@ button { cursor: pointer; }
 .pdf-read-failure-dismiss { flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; opacity: 0.7; }
 .pdf-read-failure-dismiss:hover { opacity: 1; }
 :root[data-theme="dark"] .pdf-read-failure { color: #fbbf24; }
+/* Shared "please wait" indicator: used where data arrives after the panel opens. */
+.inline-loading { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 0.82rem; color: #5b6c8a; }
+.inline-spinner { width: 15px; height: 15px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: inline-spin 0.8s linear infinite; }
+@keyframes inline-spin { to { transform: rotate(360deg); } }
+.file-list-empty { padding: 10px 12px; font-size: 0.82rem; color: #8b98ad; }
+.turnover-loading { margin: 0 0 10px; border: 1px dashed rgba(91,108,138,0.45); border-radius: 10px; }
+:root[data-theme="dark"] .inline-loading { color: #a9b6cc; }
+:root[data-theme="dark"] .file-list-empty { color: #8b98ad; }
 .save-failure-stack { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1200; display: flex; flex-direction: column; gap: 8px; width: min(720px, calc(100vw - 32px)); }
 .save-failure { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; line-height: 1.35; color: #7f1d1d; background: #fee2e2; border: 1px solid #f87171; border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(15,23,42,0.22); }
 .save-failure span { flex: 1; min-width: 0; }

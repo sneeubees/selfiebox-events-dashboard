@@ -722,6 +722,30 @@ export const cloneEvent = mutation({
 
     const now = Date.now();
     const nextEventKey = createUniqueEventKey();
+
+    // Rule (Johan, 2026-09-23): a duplicated row never carries the "Excl JC"
+    // amount over - a multi-day event is invoiced once, so the copies start at 0
+    // and the amount is typed on the day it belongs to. Resolve the column by
+    // its label (the key on live is custom_excl_jc) plus the legacy import keys.
+    const customFields = { ...(source.customFields || {}) };
+    const exclJcKeys = new Set(["custom_excl_jc", "exclJc"]);
+    const customColumns = await ctx.db.query("customColumns").collect();
+    for (const column of customColumns) {
+      const label = String(column.label || "").toLowerCase();
+      if (label.includes("excl") && label.includes("jc")) {
+        exclJcKeys.add(column.columnKey);
+      }
+    }
+    let exclJcReset = false;
+    for (const key of exclJcKeys) {
+      if (key in customFields && String(customFields[key] ?? "").trim() !== "" && String(customFields[key]).trim() !== "0") {
+        exclJcReset = true;
+      }
+      if (key in customFields) {
+        customFields[key] = "0";
+      }
+    }
+
     const createdId = await ctx.db.insert("events", {
       eventKey: nextEventKey,
       workspaceYear: source.workspaceYear,
@@ -756,7 +780,7 @@ export const cloneEvent = mutation({
       exVat: source.exVat ?? "",
       packageOnly: source.packageOnly || "",
       notes: source.notes || "",
-      customFields: source.customFields || {},
+      customFields,
       updates: [],
       files: [],
       activity: [],
@@ -854,9 +878,10 @@ export const cloneEvent = mutation({
       }
     }
 
-    const activityText = args.includeDrawerInfo
+    const activityText = (args.includeDrawerInfo
       ? `Duplicated from ${source.name || "Untitled event"} with drawer data.`
-      : `Duplicated from ${source.name || "Untitled event"} without drawer data.`;
+      : `Duplicated from ${source.name || "Untitled event"} without drawer data.`)
+      + (exclJcReset ? " Excl JC reset to 0 on the copy." : "");
     await ctx.db.insert("activityLog", {
       workspaceYear: source.workspaceYear,
       eventId: createdId,

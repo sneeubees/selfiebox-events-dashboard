@@ -526,8 +526,8 @@ export const submitWebsiteQuote = internalMutation({
       workspaceYear,
       eventId,
       eventName: name,
-      text: "Website quote submitted on staging.",
-      shortText: `${name}: Website quote submitted on staging.`.slice(0, 120),
+      text: "Website quote submitted from selfiebox.co.za.",
+      shortText: `${name}: Website quote submitted from selfiebox.co.za.`.slice(0, 120),
       actorName: formData.contactPerson || "Website Quote",
       createdAt: now,
     });
