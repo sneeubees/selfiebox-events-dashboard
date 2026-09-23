@@ -9738,6 +9738,13 @@ function buildTurnoverRows(regionKey, liveTurnoverRecords = {}, netProfitPct = 7
   ];
 }
 
+// Hours keep their fraction (4.5 Hrs -> 4.5, 18:30-22:00 -> 3.5), rounded to the
+// nearest quarter hour; the rate table pays fractions pro rata. Until 2026-09-23
+// everything was rounded UP to the next whole hour.
+function roundCommissionHours(hours) {
+  return Number.isFinite(hours) && hours > 0 ? Math.round(hours * 4) / 4 : 0;
+}
+
 function parseCommissionHours(value) {
   const text = String(value || '').trim();
   if (!text) {
@@ -9745,10 +9752,10 @@ function parseCommissionHours(value) {
   }
 
   const normalized = text.replace(/\u2013|\u2014/g, '-').toLowerCase();
-  const numericMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:hr|hrs|hour|hours)\b/);
+  const numericMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:hr|hrs|hour|hours)\b/) || normalized.match(/^(\d+(?:[.,]\d+)?)$/);
   if (numericMatch) {
-    const parsed = Number(numericMatch[1]);
-    return Number.isFinite(parsed) ? Math.max(0, Math.ceil(parsed)) : 0;
+    // "4.5 Hrs", "4,5 hours" or just "4" (a bare number used to count as 0 hours)
+    return roundCommissionHours(Number(numericMatch[1].replace(',', '.')));
   }
 
   const timeRangeMatch = normalized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
@@ -9758,8 +9765,7 @@ function parseCommissionHours(value) {
     if (endMinutes < startMinutes) {
       endMinutes += 24 * 60;
     }
-    const durationHours = (endMinutes - startMinutes) / 60;
-    return durationHours > 0 ? Math.ceil(durationHours) : 0;
+    return roundCommissionHours((endMinutes - startMinutes) / 60);
   }
 
   return 0;
@@ -9884,7 +9890,7 @@ function getAutomaticCommissionHours(event, isFullTimeEmployee = false) {
   const overlapMinutes = Math.max(0, overlapEnd - overlapStart);
   const payableMinutes = Math.max(0, totalMinutes - overlapMinutes);
 
-  return payableMinutes > 0 ? Math.ceil(payableMinutes / 60) : 0;
+  return roundCommissionHours(payableMinutes / 60);
 }
 
 const DEFAULT_COMMISSION_RATES = {
