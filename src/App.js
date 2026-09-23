@@ -1399,7 +1399,7 @@ function DashboardApp() {
         const override = getCommissionOverrideForAttendant(commissionDialog.attendant, event.id);
         const hoursPayable = override.hoursPayable === '' || override.hoursPayable === undefined
           ? automaticHoursPayable
-          : Math.max(0, Number(override.hoursPayable) || 0);
+          : parseCommissionHoursInput(override.hoursPayable);
         const amount = override.amount === '' || override.amount === undefined
           ? automaticAmount
           : Math.max(0, parseNumericCellValue(override.amount));
@@ -4921,7 +4921,7 @@ function DashboardApp() {
                     <span title={row.hours}>{row.times || row.hours}</span>
                     <input
                       className="text-input commission-input"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       value={row.hoursPayable}
                       onChange={(event) => updateCommissionOverride(row.id, 'hoursPayable', event.target.value)}
                     />
@@ -8533,7 +8533,7 @@ function reportComputeCommission(event, attendant, overrideMap, rates, attendant
   const has = (v) => v !== '' && v != null;
   const isFT = attendantRecordMap[attendant]?.isFullTimeEmployee;
   const autoHours = getAutomaticCommissionHours(event, isFT);
-  const hoursPayable = ov && has(ov.hoursPayable) ? Number(ov.hoursPayable) : autoHours;
+  const hoursPayable = ov && has(ov.hoursPayable) ? parseCommissionHoursInput(ov.hoursPayable) : autoHours;
   const amount = ov && has(ov.amount) ? Number(ov.amount) : calculateCommissionAmount(hoursPayable, rates);
   const car = ov && has(ov.car) ? Number(ov.car) : 0;
   const km = ov && has(ov.km) ? Number(ov.km) : 0;
@@ -9907,15 +9907,24 @@ function normalizeCommissionRates(rates) {
   };
 }
 
+// "4.5" or "4,5" typed into an hours box -> 4.5
+function parseCommissionHoursInput(value) {
+  const parsed = Number(String(value ?? '').trim().replace(',', '.'));
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
 function calculateCommissionAmount(hoursPayable, rates = DEFAULT_COMMISSION_RATES) {
   const normalizedRates = normalizeCommissionRates(rates);
-  const hours = Number(hoursPayable) || 0;
+  const hours = parseCommissionHoursInput(hoursPayable);
   if (hours <= 0) return 0;
   if (hours <= 2) return normalizedRates.twoHours;
-  if (hours === 3) return normalizedRates.threeHours;
-  if (hours === 4) return normalizedRates.fourHours;
-  if (hours === 5) return normalizedRates.fiveHours;
-  return normalizedRates.sixPlusHours;
+  if (hours >= 6) return normalizedRates.sixPlusHours;
+  const bracket = [null, null, normalizedRates.twoHours, normalizedRates.threeHours, normalizedRates.fourHours, normalizedRates.fiveHours, normalizedRates.sixPlusHours];
+  const lower = Math.floor(hours);
+  const fraction = hours - lower;
+  if (fraction === 0) return bracket[lower];
+  // Half hours pay pro rata: 4.5 h = the 4-hour rate plus half the step up to the 5-hour rate.
+  return Math.round(bracket[lower] + (bracket[lower + 1] - bracket[lower]) * fraction);
 }
 
 function calculateCommissionTotals(rows) {
