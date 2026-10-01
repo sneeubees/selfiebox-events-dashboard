@@ -165,7 +165,9 @@ export const monthDrilldown = query({
     return {
       month: MONTH_KEYS[monthIndex], year: workspaceYear, region,
       baseline, after, total,
-      weeks: weeks.map(({ label, count, amount }) => ({ label, count, amount })),
+      // endsAt = when this week's part of the month is over, so the popup can
+      // tell an empty finished week (show 0) from one still running (show a dash).
+      weeks: weeks.map(({ label, count, amount, end }) => ({ label, count, amount, endsAt: Math.min(end, monthEnd) })),
       medianLeadDays: medianLead,
       quality,
       leadBuckets: [

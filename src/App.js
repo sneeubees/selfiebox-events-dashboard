@@ -7419,7 +7419,12 @@ function BookingBuildupModal({ drill, region, regionLabel, onClose }) {
             <thead><tr><th>Confirmed</th><th>Bookings</th><th>Value (Excl JC)</th></tr></thead>
             <tbody>
               <tr><td>Before 1 {data.month}</td><td>{data.baseline.count}</td><td>{R(data.baseline.amount)}</td></tr>
-              {data.weeks.map((w) => <tr key={w.label} className={w.count ? '' : 'is-paused'}><td>Week {w.label}</td><td>{w.count || '—'}</td><td>{w.count ? R(w.amount) : '—'}</td></tr>)}
+              {data.weeks.map((w) => {
+                // A dash only while the week is still running (or still to come);
+                // once it is over, an empty week is a real 0.
+                const stillOpen = !w.count && Number.isFinite(w.endsAt) && Date.now() < w.endsAt;
+                return <tr key={w.label} className={stillOpen ? 'is-paused' : ''}><td>Week {w.label}</td><td>{stillOpen ? '—' : w.count}</td><td>{stillOpen ? '—' : R(w.amount)}</td></tr>;
+              })}
               {data.after.count ? <tr><td>After {data.month} ended</td><td>{data.after.count}</td><td>{R(data.after.amount)}</td></tr> : null}
             </tbody>
           </table></div>
