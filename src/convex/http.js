@@ -1,7 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import { sendQuoteEmails } from "./websiteQuoteEmail";
 import { sendContactEmails } from "./websiteContactEmail";
 
 
@@ -77,7 +76,7 @@ http.route({
       }
       const human = await verifyTurnstile(body && body.turnstileToken, clientIp(request));
       if (!human) {
-        return Response.json({ ok: false, error: "Verification failed. Please try again." }, { status: 400, headers: corsHeaders(origin) });
+        return Response.json({ ok: false, error: "The security check has expired or was already used. Please complete the check again and resubmit - your details are still in the form." }, { status: 400, headers: corsHeaders(origin) });
       }
       const submissions = Array.isArray(body?.submissions)
         ? body.submissions
@@ -86,12 +85,8 @@ http.route({
       for (const formData of submissions) {
         const result = await ctx.runMutation(internal.websiteQuotes.submitWebsiteQuote, { formData });
         if (result && result.ok) {
-          try {
-            const mailOut = await sendQuoteEmails(formData, result);
-            console.log("website-quote emails:", JSON.stringify(mailOut));
-          } catch (emailError) {
-            console.error("website-quote email send failed", String(emailError));
-          }
+          // Emails go out in the background - the visitor should not wait for them.
+          await ctx.scheduler.runAfter(0, internal.websiteQuoteEmail.sendQuoteEmailsJob, { formData, result });
           if (result.ref) refs.push(result.ref);
         } else {
           throw new Error((result && result.error) || "Quote submission failed.");

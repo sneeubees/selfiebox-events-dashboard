@@ -1,3 +1,6 @@
+import { v } from "convex/values";
+import { internalAction } from "./_generated/server";
+
 // Branded quote-enquiry emails, sent server-side from the /website-quote httpAction.
 // Office copy -> province mailbox (cc selfie@), customer copy -> the submitter.
 const IMG_BASE = "https://selfiebox.co.za/email-assets";
@@ -143,7 +146,17 @@ function bytesToB64(bytes) {
   }
   return out;
 }
+// The backend fetching its own website took 5-9 s per image on live (seen in
+// the fetch logs) - cache each image for the life of the isolate.
+const B64_CACHE = new Map();
 async function fetchB64(url) {
+  if (B64_CACHE.has(url)) return B64_CACHE.get(url);
+  const value = await fetchB64Uncached(url);
+  if (value) B64_CACHE.set(url, value);
+  return value;
+}
+
+async function fetchB64Uncached(url) {
   try {
     const resp = await fetch(url);
     if (!resp.ok) return null;
@@ -229,3 +242,20 @@ export async function sendQuoteEmails(fd, result) {
 }
 
 export { buildQuoteEmailHtml };
+
+// Background job: the /website-quote route schedules this after the event is
+// created so the visitor gets their answer in ~1 s instead of waiting 10-12 s
+// for two image fetches and two Resend calls.
+export const sendQuoteEmailsJob = internalAction({
+  args: { formData: v.any(), result: v.any() },
+  handler: async (ctx, args) => {
+    try {
+      const out = await sendQuoteEmails(args.formData, args.result);
+      console.log("website-quote emails:", JSON.stringify(out));
+      return out;
+    } catch (error) {
+      console.error("website-quote email send failed", String(error));
+      return { sent: false, error: String(error) };
+    }
+  },
+});
