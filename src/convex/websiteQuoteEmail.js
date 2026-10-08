@@ -76,7 +76,35 @@ function boothImageSlug(fd) {
   return BOOTH_IMG[s(fd.photoBoothChoice)] || SERVICE_IMG[s(fd.primarySelection)] || "";
 }
 
+// The year-end special pages tag their message: "[OFFER: CODE] ... Package: 2 paid
+// hours + 1 free hour (3 hours total); R3490. ..." (360) or
+// "[OFFER: CODE] Request: 3 hours total: 2 paid + 1 free; R3690. ..." (photo booths).
+const OFFER_LABELS = {
+  YEAR_END_360_2026_LED_STANCHIONS: "360 Spin \u2014 one FREE extra hour, FREE LED lights & stanchions",
+  YEAR_END_2026_EXTRA_HOUR: "Photo Booth \u2014 one FREE extra hour",
+};
+function detectOffer(fd) {
+  const msg = s(fd && fd.message);
+  const tag = msg.match(/\[OFFER:\s*([A-Z0-9_]+)\]/);
+  if (!tag) return null;
+  const code = tag[1];
+  const priceMatch = msg.match(/\bR\s?(\d{1,2}[,\s]?\d{3}|\d{3,5})\b/);
+  const price = priceMatch ? "R" + Number(priceMatch[1].replace(/[,\s]/g, "")).toLocaleString("en-US") : "";
+  const pkg = (msg.match(/(?:Package|Request):\s*([^;]+);/) || [])[1] || "";
+  return { code, label: OFFER_LABELS[code] || code.replace(/_/g, " "), price, pkg: s(pkg) };
+}
+function offerBanner(offer) {
+  if (!offer) return "";
+  return `<tr><td style="padding:18px 32px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:2px solid ${ACCENT};border-radius:14px;background:#f2f9ff"><tr><td style="padding:16px 18px">`
+    + `<div style="font:800 20px/1.2 ${FONT};color:${INK}">YEAR END SPECIAL${offer.price ? ` &mdash; ${esc(offer.price)}` : ""}</div>`
+    + (offer.label ? `<div style="margin-top:6px;font:600 13px/1.4 ${FONT};color:${ACCENT}">${esc(offer.label)}</div>` : "")
+    + (offer.pkg ? `<div style="margin-top:4px;font:400 13px/1.4 ${FONT};color:#41506e">${esc(offer.pkg)}</div>` : "")
+    + `<div style="margin-top:8px;font:400 11px/1.5 ${FONT};color:${MUTED}">Subject to availability. Only the first 2 bookings per day qualify.</div>`
+    + `</td></tr></table></td></tr>`;
+}
+
 function buildQuoteEmailHtml(fd, variant, ref, submitted) {
+  const offer = detectOffer(fd);
   const first = (s(fd.contactPerson) || "there").split(" ")[0];
   const boothName = s(fd.photoBoothChoice) || s(fd.primarySelection) || "Your selection";
   const slug = boothImageSlug(fd);
@@ -112,7 +140,9 @@ function buildQuoteEmailHtml(fd, variant, ref, submitted) {
   const cta = variant === "customer" ? "" :
     `<tr><td style="padding:28px 32px 30px" align="center">${button}<div style="margin-top:14px;font:400 12px/1.5 ${FONT};color:${MUTED}">Or call them directly on ${esc(fd.cell)}</div></td></tr>`;
   const tail = variant === "customer" ? `<tr><td style="height:14px;line-height:14px;font-size:0">&nbsp;</td></tr>` : "";
-  const eyebrow = variant === "customer" ? "Enquiry Received" : "New Booking Enquiry";
+  const eyebrow = offer
+    ? (variant === "customer" ? "Year End Special \u2014 Enquiry Received" : "New Year End Special Enquiry")
+    : (variant === "customer" ? "Enquiry Received" : "New Booking Enquiry");
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
     + `<meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light"><title>${eyebrow}</title>`
@@ -125,7 +155,7 @@ function buildQuoteEmailHtml(fd, variant, ref, submitted) {
     + `<tr><td align="center" style="padding:14px 32px 3px"><div style="font:700 13px/1 ${FONT};letter-spacing:.18em;text-transform:uppercase;color:${ACCENT}">${eyebrow}</div></td></tr>`
     + `<tr><td align="center" style="padding:0 32px 20px"><div style="font:500 12px/1.4 ${FONT};color:${MUTED}">Ref ${esc(ref)} &nbsp;&bull;&nbsp; ${esc(submitted)}</div></td></tr>`
     + `<tr><td style="padding:0 32px"><div style="border-top:1px solid ${LINE};font-size:0;line-height:0">&nbsp;</div></td></tr>`
-    + thanks + boothRow + section("Your Selection", selRows) + section("Event Details", eventRows)
+    + offerBanner(offer) + thanks + boothRow + section("Your Selection", selRows) + section("Event Details", eventRows)
     + section("Contact Details", contactRows) + chips(fd.optionalExtras) + messageBlock(fd.message) + cta + tail
     + `</table></td></tr>`
     + `<tr><td style="padding:22px 24px 8px" align="center"><div style="font:600 14px/1.5 ${FONT};color:#c7d5ee">SelfieBox &mdash; Premium Photo Booth Hire</div>`
@@ -225,7 +255,7 @@ export async function sendQuoteEmails(fd, result) {
   const rcpt = officeRecipients(fd.region);
   out.office = await sendOne(apiKey, {
     from, to: rcpt.to, cc: rcpt.cc, reply_to: s(fd.email) || undefined,
-    subject: `New Booking Enquiry — ${s(fd.functionType) || "Event"}, ${s(fd.eventDate)} [${ref}]`,
+    subject: `${detectOffer(fd) ? "YEAR END SPECIAL — " : ""}New Booking Enquiry — ${s(fd.functionType) || "Event"}, ${s(fd.eventDate)} [${ref}]`,
     html: buildQuoteEmailHtml(fd, "office", ref, submitted),
     attachments,
   });
@@ -233,7 +263,7 @@ export async function sendQuoteEmails(fd, result) {
   if (s(fd.email) && s(fd.email).includes("@")) {
     out.customer = await sendOne(apiKey, {
       from, to: [s(fd.email)], reply_to: rcpt.replyAll,
-      subject: `Thanks for your SelfieBox enquiry, ${first}! [${ref}]`,
+      subject: detectOffer(fd) ? `Your SelfieBox Year End Special enquiry, ${first}! [${ref}]` : `Thanks for your SelfieBox enquiry, ${first}! [${ref}]`,
       html: buildQuoteEmailHtml(fd, "customer", ref, submitted),
       attachments,
     });
@@ -257,5 +287,35 @@ export const sendQuoteEmailsJob = internalAction({
       console.error("website-quote email send failed", String(error));
       return { sent: false, error: String(error) };
     }
+  },
+});
+
+// Admin-key / CLI only: send the office + customer versions of a sample year-end
+// special enquiry to ONE address for approval. Nothing goes to the office mailboxes.
+//   convex run websiteQuoteEmail:previewQuoteEmail '{"to":"someone@selfiebox.co.za"}'
+export const previewQuoteEmail = internalAction({
+  args: { to: v.string(), page: v.optional(v.union(v.literal("360"), v.literal("photobooth"))) },
+  handler: async (ctx, args) => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return { sent: false, reason: "no RESEND_API_KEY" };
+    const from = process.env.RESEND_FROM_EMAIL || "SelfieBox <bookings@events.selfiebox.co.za>";
+    const is360 = args.page !== "photobooth";
+    const fd = {
+      primarySelection: is360 ? "360\u00b0 Video" : "Photo Booth", photoOutput: "", photoBoothChoice: is360 ? "" : "Halo Box",
+      spinChoice: is360 ? "Orbit 360\u00b0 Spin" : "", videoChoice: "", primaryOther: "", videoOther: "",
+      functionType: "Corporate Function", companyName: "Preview Company (Pty) Ltd", contactPerson: "Sample Client",
+      cell: "082 000 0000", email: args.to, eventDate: "2026-11-27", region: "Gauteng", address: "Sandton, Johannesburg",
+      addressPlaceId: "", addressLat: null, addressLng: null, eventStartTime: "18:00", eventFinishTime: "",
+      numberOfHours: is360 ? "3" : "3", optionalExtras: [],
+      message: is360
+        ? "[OFFER: YEAR_END_360_2026_LED_STANCHIONS] QUOTE REQUEST. Year-End 360 with one FREE extra hour, FREE LED lights and stanchions. Package: 2 paid hours + 1 free hour (3 hours total); R3490. Travel included. No hidden costs. City: Johannesburg. Offer page: /year-end-360/. utm_source=; utm_medium=; utm_campaign=; utm_content=\nThis is a PREVIEW of the year-end special email."
+        : "[OFFER: YEAR_END_2026_EXTRA_HOUR] Request: 3 hours total: 2 paid + 1 free; R3690. Travel included. No hidden costs. Eligible: photo booths only. Excludes 360 spins, Mosaic and SelfieSketch. Offer page: /year-end-photo-booths/. utm_source=; utm_medium=; utm_campaign=; utm_content=\nCity: Johannesburg; Preferred experience: Halo Box\nThis is a PREVIEW of the year-end special email.",
+    };
+    const ref = "SB-PREVIEW";
+    const submitted = "Submitted " + new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const attachments = await buildAttachments(fd);
+    const office = await sendOne(apiKey, { from, to: [args.to], subject: `[PREVIEW office copy] YEAR END SPECIAL — New Booking Enquiry — Corporate Function, 2026-11-27 [${ref}]`, html: buildQuoteEmailHtml(fd, "office", ref, submitted), attachments });
+    const customer = await sendOne(apiKey, { from, to: [args.to], subject: `[PREVIEW customer copy] Your SelfieBox Year End Special enquiry, Sample! [${ref}]`, html: buildQuoteEmailHtml(fd, "customer", ref, submitted), attachments });
+    return { office, customer };
   },
 });
