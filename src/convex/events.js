@@ -716,10 +716,27 @@ export const upsert = mutation({
   },
 });
 
+const CLONE_MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 export const cloneEvent = mutation({
   args: {
     sourceEventKey: v.string(),
     includeDrawerInfo: v.boolean(),
+    // "Duplicate -> A: new event for the same client": the basics can be changed
+    // in the popup before the copy is made. Anything left out keeps the source value.
+    overrides: v.optional(
+      v.object({
+        eventTitle: v.optional(v.string()),
+        date: v.optional(v.string()),
+        branch: v.optional(v.array(v.string())),
+        location: v.optional(v.string()),
+        locationPlaceId: v.optional(v.string()),
+        locationLat: v.optional(v.union(v.number(), v.null())),
+        locationLng: v.optional(v.union(v.number(), v.null())),
+        hours: v.optional(v.string()),
+        time: v.optional(v.string()),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     const currentUser = await requireCurrentUser(ctx);
@@ -733,6 +750,37 @@ export const cloneEvent = mutation({
 
     const now = Date.now();
     const nextEventKey = createUniqueEventKey();
+    const overrides = args.overrides || {};
+    const nextDate = overrides.date !== undefined ? String(overrides.date || "").trim() : (source.date || "");
+    if (nextDate && !/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+      throw new Error(`Invalid date: ${nextDate}`);
+    }
+    const parsedDate = nextDate ? new Date(`${nextDate}T12:00:00`) : null;
+    const dateChanged = nextDate !== (source.date || "");
+    const nextWorkspaceYear = dateChanged && parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate.getFullYear() : source.workspaceYear;
+    const nextDraftMonth = dateChanged && parsedDate && Number.isFinite(parsedDate.getTime()) ? CLONE_MONTH_NAMES[parsedDate.getMonth()] : (source.draftMonth || "");
+    const nextBranch = overrides.branch && overrides.branch.length ? overrides.branch : (source.branch || []);
+    const locationChanged = overrides.location !== undefined && String(overrides.location || "").trim() !== String(source.location || "").trim();
+    const nextLocation = overrides.location !== undefined ? String(overrides.location || "") : (source.location || "");
+    const nextLocationPlaceId = overrides.location !== undefined
+      ? (overrides.locationPlaceId || (locationChanged ? "" : source.locationPlaceId || ""))
+      : (source.locationPlaceId || "");
+    const nextLocationLat = overrides.location !== undefined
+      ? (typeof overrides.locationLat === "number" ? overrides.locationLat : (locationChanged ? undefined : (typeof source.locationLat === "number" ? source.locationLat : undefined)))
+      : (typeof source.locationLat === "number" ? source.locationLat : undefined);
+    const nextLocationLng = overrides.location !== undefined
+      ? (typeof overrides.locationLng === "number" ? overrides.locationLng : (locationChanged ? undefined : (typeof source.locationLng === "number" ? source.locationLng : undefined)))
+      : (typeof source.locationLng === "number" ? source.locationLng : undefined);
+    const nextEventTitle = overrides.eventTitle !== undefined ? String(overrides.eventTitle || "") : (source.eventTitle || "");
+    const nextHours = overrides.hours !== undefined ? String(overrides.hours || "") : (source.hours || "");
+    const nextTime = overrides.time !== undefined ? String(overrides.time || "") : (source.time || "");
+    const changedOnCopy = [];
+    if (nextEventTitle !== (source.eventTitle || "")) changedOnCopy.push(`event name "${source.eventTitle || "-"}" -> "${nextEventTitle || "-"}"`);
+    if (dateChanged) changedOnCopy.push(`date ${source.date || "-"} -> ${nextDate || "-"}`);
+    if (nextBranch.join(",") !== (source.branch || []).join(",")) changedOnCopy.push(`branch ${(source.branch || []).join("/") || "-"} -> ${nextBranch.join("/") || "-"}`);
+    if (locationChanged) changedOnCopy.push(`location "${source.location || "-"}" -> "${nextLocation || "-"}"`);
+    if (nextHours !== (source.hours || "")) changedOnCopy.push(`hours ${source.hours || "-"} -> ${nextHours || "-"}`);
+    if (nextTime !== (source.time || "")) changedOnCopy.push(`time ${source.time || "-"} -> ${nextTime || "-"}`);
 
     // Rule (Johan, 2026-09-23): a duplicated row never carries the "Excl JC"
     // amount over - a multi-day event is invoiced once, so the copies start at 0
@@ -759,25 +807,26 @@ export const cloneEvent = mutation({
 
     const createdId = await ctx.db.insert("events", {
       eventKey: nextEventKey,
-      workspaceYear: source.workspaceYear,
+      workspaceYear: nextWorkspaceYear,
       name: source.name || "",
-      eventTitle: source.eventTitle || "",
+      eventTitle: nextEventTitle,
       duplicatedFromEventKey: source.eventKey,
       duplicatedFromEventName: source.eventTitle
         ? `${source.name || "Untitled event"} - ${source.eventTitle}`
         : (source.name || "Untitled event"),
-      date: source.date || "",
-      draftMonth: source.draftMonth || "",
-      hours: source.hours || "",
-      branch: source.branch || [],
+      date: nextDate,
+      draftMonth: nextDraftMonth,
+      hours: nextHours,
+      time: nextTime,
+      branch: nextBranch,
       products: source.products || [],
       productQuantities: source.productQuantities || {},
       status: source.status || "",
       digitalOnly: Boolean(source.digitalOnly),
-      location: source.location || "",
-      locationPlaceId: source.locationPlaceId || "",
-      locationLat: typeof source.locationLat === "number" ? source.locationLat : undefined,
-      locationLng: typeof source.locationLng === "number" ? source.locationLng : undefined,
+      location: nextLocation,
+      locationPlaceId: nextLocationPlaceId,
+      locationLat: nextLocationLat,
+      locationLng: nextLocationLng,
       paymentStatus: source.paymentStatus || "",
       accounts: source.accounts || "",
       quoteNumber: source.quoteNumber || "",
@@ -892,6 +941,7 @@ export const cloneEvent = mutation({
     const activityText = (args.includeDrawerInfo
       ? `Duplicated from ${source.name || "Untitled event"} with drawer data.`
       : `Duplicated from ${source.name || "Untitled event"} without drawer data.`)
+      + (changedOnCopy.length ? ` Changed on the copy: ${changedOnCopy.join("; ")}.` : "")
       + (exclJcReset ? " Excl JC reset to 0 on the copy." : "");
     await ctx.db.insert("activityLog", {
       workspaceYear: source.workspaceYear,

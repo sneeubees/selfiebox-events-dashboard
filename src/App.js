@@ -1006,7 +1006,8 @@ function DashboardApp() {
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
   const [noticeDialog, setNoticeDialog] = useState({ isOpen: false, title: '', message: '' });
-  const [duplicateDialog, setDuplicateDialog] = useState({ isOpen: false, eventId: '', step: 'reason', rows: [], saving: false });
+  const [duplicateDialog, setDuplicateDialog] = useState({ isOpen: false, eventId: '', step: 'reason', rows: [], single: null, saving: false });
+  const [dupDateEditor, setDupDateEditor] = useState(null);
   const linkedGroupInfo = useQuery(api.bookingGroups.getGroupInfo, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
   // bookingGroupId -> number of rows on this year's board (for the row badge).
   const groupSizes = useMemo(() => {
@@ -1600,6 +1601,7 @@ function DashboardApp() {
   const selectedYearCompletedCount = events.filter((event) => (event.date ? new Date(event.date).getFullYear() === selectedWorkspaceYear : event.workspaceYear === selectedWorkspaceYear) && event.status === 'Event Completed').length;
   const mainNameSuggestions = useMemo(() => Array.from(new Set(events.map((event) => String(event.name || '').trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)), [events]);
   const hoursSuggestions = useMemo(() => Array.from(new Set(events.map((event) => String(event.hours || '').trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)), [events]);
+  const timeSuggestions = useMemo(() => Array.from(new Set(events.map((event) => String(event.time || '').trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)), [events]);
   const orderedMonths = monthOrder.length === monthNames.length ? monthOrder : monthNames;
   const displayColumnLabel = (column) => column.isCustom ? column.label : (columnLabels[column.key] || column.label);
   const buildDefaultCustomFields = () => Object.fromEntries(customColumns.map((column) => [column.key, column.type === 'multiItem' ? [] : '']));
@@ -2553,40 +2555,94 @@ function DashboardApp() {
     }
   };
 
+  const makeDuplicateDraft = (source) => ({
+    eventTitle: source.eventTitle || '',
+    date: source.date || '',
+    branch: (source.branch || [])[0] || '',
+    location: source.location || '',
+    locationPlaceId: source.locationPlaceId || '',
+    locationLat: typeof source.locationLat === 'number' ? source.locationLat : null,
+    locationLng: typeof source.locationLng === 'number' ? source.locationLng : null,
+    hours: source.hours || '',
+    time: source.time || '',
+    products: source.products || [],
+    productQuantities: source.productQuantities || {},
+  });
+
   const duplicateEvent = async (eventId) => {
-    setDuplicateDialog({ isOpen: true, eventId, step: 'reason', rows: [], saving: false });
+    setDupDateEditor(null);
+    setDuplicateDialog({ isOpen: true, eventId, step: 'reason', rows: [], single: null, saving: false });
   };
 
-  const closeDuplicateDialog = () => setDuplicateDialog({ isOpen: false, eventId: '', step: 'reason', rows: [], saving: false });
+  const closeDuplicateDialog = () => {
+    setDupDateEditor(null);
+    setDuplicateDialog({ isOpen: false, eventId: '', step: 'reason', rows: [], single: null, saving: false });
+  };
   const duplicateSourceEvent = duplicateDialog.isOpen ? events.find((event) => event.id === duplicateDialog.eventId) || null : null;
 
-  const nextDayIso = (iso) => {
-    const parsed = new Date(`${iso || ''}T12:00:00`);
-    if (!Number.isFinite(parsed.getTime())) return '';
-    parsed.setDate(parsed.getDate() + 1);
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  const openDuplicateStep = (step) => {
+    setDupDateEditor(null);
+    setDuplicateDialog((current) => {
+      const source = events.find((event) => event.id === current.eventId);
+      if (!source) return current;
+      if (step === 'single') return { ...current, step, single: current.single || makeDuplicateDraft(source) };
+      return { ...current, step };
+    });
   };
 
+  // Johan (2026-10-09): the date must NOT move on by itself. Most extra rows are
+  // other regions on the same day, and a silently shifted date is an easy slip
+  // for the admin team. A new row copies the previous one exactly.
   const addLinkedRowDraft = () => {
     setDuplicateDialog((current) => {
       const source = events.find((event) => event.id === current.eventId);
       if (!source) return current;
       const last = current.rows[current.rows.length - 1];
-      const base = last || {
-        date: source.date || '', branch: (source.branch || [])[0] || '', eventTitle: source.eventTitle || '', location: source.location || '',
-        hours: source.hours || '', time: source.time || '', products: source.products || [], productQuantities: source.productQuantities || {},
-      };
-      return { ...current, rows: [...current.rows, { ...base, date: nextDayIso(base.date) || base.date }] };
+      const base = last ? { ...last } : makeDuplicateDraft(source);
+      return { ...current, rows: [...current.rows, base] };
     });
   };
 
-  const updateLinkedRowDraft = (index, key, value) => {
-    setDuplicateDialog((current) => ({ ...current, rows: current.rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }));
+  // patch is an object or a function of the current draft row (the location
+  // text handler needs the row to decide whether to keep the map pin).
+  const patchDuplicateDraft = (target, index, patch) => {
+    const apply = (row) => ({ ...row, ...(typeof patch === 'function' ? patch(row) : patch) });
+    setDuplicateDialog((current) => (target === 'single'
+      ? { ...current, single: apply(current.single || {}) }
+      : { ...current, rows: current.rows.map((row, i) => (i === index ? apply(row) : row)) }));
+  };
+
+  const duplicateLocationTextPatch = (row, value) => {
+    const next = String(value || '');
+    const keepMeta = next.trim() !== '' && next.trim() === String(row.location || '').trim();
+    return {
+      location: next,
+      locationPlaceId: keepMeta ? row.locationPlaceId || '' : '',
+      locationLat: keepMeta ? row.locationLat : null,
+      locationLng: keepMeta ? row.locationLng : null,
+    };
   };
 
   const removeLinkedRowDraft = (index) => {
     setDuplicateDialog((current) => ({ ...current, rows: current.rows.filter((_, i) => i !== index) }));
   };
+
+  const duplicateAllowPastDates = Boolean(duplicateSourceEvent) && (currentUser?.role === 'admin' || isPastEvent(duplicateSourceEvent));
+
+  const applyDuplicateDate = () => {
+    if (!dupDateEditor) return;
+    if (dupDateEditor.value) patchDuplicateDraft(dupDateEditor.target, dupDateEditor.index, { date: dupDateEditor.value });
+    setDupDateEditor(null);
+  };
+
+  const renderDuplicateDraftCells = (target, index, row) => <>
+    <td><input className="text-input dup-input" value={row.eventTitle || ''} placeholder="Event name" onChange={(e) => patchDuplicateDraft(target, index, { eventTitle: e.target.value })} /></td>
+    <td><button className="text-input dup-input dup-date-button" type="button" title={row.date || 'Pick date'} onClick={() => setDupDateEditor({ target, index, value: row.date || '' })}><span>{formatDateDisplay(row.date) || 'Pick date'}</span>{row.date ? <small>{String(row.date).slice(0, 4)}</small> : null}<span className="dup-date-icon" aria-hidden="true">&#9662;</span></button></td>
+    <td><div className="dup-branch-pills">{(branchOptions || []).map((option) => { const isSelected = row.branch === option.abbreviation; return <button key={option.abbreviation} type="button" className={['dup-branch-pill', isSelected ? 'is-selected' : ''].join(' ').trim()} style={isSelected ? branchStyles[option.abbreviation] : undefined} title={option.fullName || option.abbreviation} onClick={() => patchDuplicateDraft(target, index, { branch: option.abbreviation })}>{option.abbreviation}</button>; })}</div></td>
+    <td><LocationInputField className="text-input dup-input dup-location" value={row.location || ''} placeholder="Start typing address" onTextChange={(nextValue) => patchDuplicateDraft(target, index, (current) => duplicateLocationTextPatch(current, nextValue))} onPlaceSelect={(place) => patchDuplicateDraft(target, index, { location: place.location || '', locationPlaceId: place.locationPlaceId || '', locationLat: typeof place.locationLat === 'number' ? place.locationLat : null, locationLng: typeof place.locationLng === 'number' ? place.locationLng : null })} hasCoordinates={typeof row.locationLat === 'number' && typeof row.locationLng === 'number'} /></td>
+    <td><AutocompleteTextInput className="text-input dup-input dup-short" value={row.hours || ''} suggestions={hoursSuggestions} minMenuWidth={140} placeholder="e.g. 5 Hrs" onChange={(nextValue) => patchDuplicateDraft(target, index, { hours: nextValue })} /></td>
+    <td><AutocompleteTextInput className="text-input dup-input dup-short" value={row.time || ''} suggestions={timeSuggestions} minMenuWidth={160} placeholder="10:00 - 15:00" onChange={(nextValue) => patchDuplicateDraft(target, index, { time: nextValue })} /></td>
+  </>;
 
   const runCreateLinkedRows = async () => {
     const source = duplicateSourceEvent;
@@ -2596,6 +2652,9 @@ function DashboardApp() {
       branch: row.branch ? [row.branch] : (source.branch || []),
       eventTitle: row.eventTitle || '',
       location: row.location || '',
+      locationPlaceId: row.locationPlaceId || '',
+      locationLat: typeof row.locationLat === 'number' ? row.locationLat : null,
+      locationLng: typeof row.locationLng === 'number' ? row.locationLng : null,
       hours: row.hours || '',
       time: row.time || '',
       products: row.products || [],
@@ -2618,19 +2677,42 @@ function DashboardApp() {
   };
 
   const runDuplicateEvent = async (includeDrawerInfo) => {
-    const sourceEventId = duplicateDialog.eventId;
-    setDuplicateDialog({ isOpen: false, eventId: '' });
-    if (!sourceEventId) {
+    const source = duplicateSourceEvent;
+    const draft = duplicateDialog.single;
+    if (!source) {
+      closeDuplicateDialog();
       return;
     }
+    if (draft && draft.date && !/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) {
+      openNotice('Please pick a valid date for the new event.');
+      return;
+    }
+    const overrides = draft ? {
+      eventTitle: draft.eventTitle || '',
+      date: draft.date || '',
+      branch: draft.branch ? [draft.branch] : (source.branch || []),
+      location: draft.location || '',
+      locationPlaceId: draft.locationPlaceId || '',
+      locationLat: typeof draft.locationLat === 'number' ? draft.locationLat : null,
+      locationLng: typeof draft.locationLng === 'number' ? draft.locationLng : null,
+      hours: draft.hours || '',
+      time: draft.time || '',
+    } : undefined;
+    setDuplicateDialog((current) => ({ ...current, saving: true }));
     try {
       const clonedEvent = await cloneEventMutation({
-        sourceEventKey: sourceEventId,
+        sourceEventKey: source.id,
         includeDrawerInfo,
+        overrides,
       });
+      closeDuplicateDialog();
+      if (clonedEvent && clonedEvent.workspaceYear && clonedEvent.workspaceYear !== selectedWorkspaceYear) {
+        openNotice(`The new event was created on the ${clonedEvent.workspaceYear} board (its date falls in ${clonedEvent.workspaceYear}).`, 'Duplicated');
+        return;
+      }
       if (clonedEvent) {
         setEvents((current) => {
-          const index = current.findIndex((event) => event.id === sourceEventId);
+          const index = current.findIndex((event) => event.id === source.id);
           let next;
           if (index === -1) {
             next = [...current, clonedEvent];
@@ -2644,6 +2726,7 @@ function DashboardApp() {
       }
     } catch (error) {
       console.error('Failed to duplicate event', error);
+      setDuplicateDialog((current) => ({ ...current, saving: false }));
       openNotice('The event could not be duplicated right now.');
     }
   };
@@ -5501,7 +5584,7 @@ function DashboardApp() {
       {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label><label className="full-span"><span>Assigned Branches</span><div className="profile-branch-selector">{branchOptions.map((option) => <label key={option.abbreviation} className="profile-branch-option"><input type="checkbox" checked={(managedUserForm.assignedBranches || []).includes(option.abbreviation)} onChange={() => toggleManagedUserBranch(option.abbreviation)} /><span className="profile-branch-chip" style={branchStyles[option.abbreviation] || undefined}>{option.abbreviation}</span></label>)}</div><small>Leave all unchecked to allow all branches.</small></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
       {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace}>Yes</button></div></div></div></div> : null}
       {confirmDialog.isOpen ? <ModalShell title={confirmDialog.title} onClose={() => closeConfirmation(false)}><div className="simple-stack"><p>{confirmDialog.message}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => closeConfirmation(false)}>Cancel</button><button className={confirmDialog.tone === 'danger' ? 'branch-delete-button danger-button' : 'primary-button'} type="button" onClick={() => closeConfirmation(true)}>{confirmDialog.confirmLabel}</button></div></div></ModalShell> : null}
-      {duplicateDialog.isOpen && duplicateSourceEvent ? <ModalShell title="Duplicate event" onClose={closeDuplicateDialog} panelClassName={duplicateDialog.step === 'rows' ? 'dup-panel-wide' : ''}>
+      {duplicateDialog.isOpen && duplicateSourceEvent ? <ModalShell title="Duplicate event" onClose={closeDuplicateDialog} closeOnScrimClick={duplicateDialog.step === 'reason'} panelClassName={duplicateDialog.step === 'reason' ? '' : 'dup-panel-wide'}>
         <div className="simple-stack">
           <div className="dup-details">
             <strong>{duplicateSourceEvent.name || 'Untitled event'}</strong>{duplicateSourceEvent.eventTitle ? <span> · {duplicateSourceEvent.eventTitle}</span> : null}
@@ -5511,29 +5594,34 @@ function DashboardApp() {
           {duplicateDialog.step === 'reason' ? <>
             <p><strong>Why are you duplicating?</strong></p>
             <div className="dup-choices">
-              <button className="dup-choice" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'drawer' }))}><strong>A — New event for the same client</strong><span>A separate booking. Nothing stays linked.</span></button>
-              <button className="dup-choice" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'rows', rows: [] }))}><strong>B — More days or regions of this event</strong><span>One booking across several rows: quote, invoice, status, notes and files stay in sync. Date, branch, event name, location, hours, times, products, attendants and Excl JC are per row.</span></button>
+              <button className="dup-choice" type="button" onClick={() => openDuplicateStep('single')}><strong>A — New event for the same client</strong><span>A separate booking with its own drawer. Nothing stays linked. Change the event name, date, branch, location, hours or time before it is created.</span></button>
+              <button className="dup-choice" type="button" onClick={() => openDuplicateStep('rows')}><strong>B — More days or regions of this event</strong><span>One booking across several rows: quote, invoice, status, notes and files stay in sync. Date, branch, event name, location, hours, times, products, attendants and Excl JC are per row.</span></button>
             </div>
             <div className="modal-actions"><button className="ghost-button" type="button" onClick={closeDuplicateDialog}>Cancel</button></div>
           </> : null}
-          {duplicateDialog.step === 'drawer' ? <>
-            <p>Copy this event with or without its drawer data (updates, files, booking form)?</p>
-            <div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'reason' }))}>Back</button><button className="ghost-button" type="button" onClick={() => void runDuplicateEvent(false)}>Without drawer info</button><button className="primary-button" type="button" onClick={() => void runDuplicateEvent(true)}>With drawer info</button></div>
+          {duplicateDialog.step === 'single' && duplicateDialog.single ? <>
+            <p>Change what differs for the new event. The client stays the same; the rest is copied from the row above and can still be edited on the board afterwards.</p>
+            <div className="rt-table-wrap dup-table-wrap"><table className="rt-table dup-rows">
+              <thead><tr><th>Client</th><th>Event name</th><th>Date</th><th>Branch</th><th>Location</th><th>Hours</th><th>Time</th></tr></thead>
+              <tbody><tr><td className="dup-client">{duplicateSourceEvent.name}</td>{renderDuplicateDraftCells('single', 0, duplicateDialog.single)}</tr></tbody>
+            </table></div>
+            <div className="dup-drawer-note">The new event starts with an <strong>empty drawer</strong> (no updates, files or booking form). Use <em>Copy with drawer info</em> only when it really needs the same files and notes.</div>
+            <div className="modal-actions dup-actions">
+              <button className="ghost-button" type="button" onClick={() => openDuplicateStep('reason')}>Back</button>
+              <span className="dup-spacer" />
+              <button className="ghost-button" type="button" disabled={duplicateDialog.saving} onClick={() => void runDuplicateEvent(true)}>Copy with drawer info</button>
+              <button className="primary-button" type="button" disabled={duplicateDialog.saving} onClick={() => void runDuplicateEvent(false)}>{duplicateDialog.saving ? 'Creating…' : 'Create without drawer info'}</button>
+            </div>
           </> : null}
           {duplicateDialog.step === 'rows' ? <>
-            <p>Each row below becomes a linked day or region. Press <strong>+</strong> to add one (the date moves on a day), then change what differs. Products and quantities are copied and can be changed on the board afterwards.</p>
-            <div className="rt-table-wrap"><table className="rt-table dup-rows">
+            <p>Each row below becomes a linked day or region. Press <strong>+</strong> to add one, then change what differs. The date stays the same until you change it (extra regions on one day are common), so set it for extra days. Products and quantities are copied and can be changed on the board afterwards.</p>
+            <div className="rt-table-wrap dup-table-wrap"><table className="rt-table dup-rows">
               <thead><tr><th>Client</th><th>Event name</th><th>Date</th><th>Branch</th><th>Location</th><th>Hours</th><th>Time</th><th></th></tr></thead>
               <tbody>
                 <tr className="dup-source"><td>{duplicateSourceEvent.name}</td><td>{duplicateSourceEvent.eventTitle || '—'}</td><td>{formatDateDisplay(duplicateSourceEvent.date) || '—'}</td><td>{(duplicateSourceEvent.branch || []).join(', ') || '—'}</td><td className="rt-name" title={duplicateSourceEvent.location}>{duplicateSourceEvent.location || '—'}</td><td>{duplicateSourceEvent.hours || '—'}</td><td>{duplicateSourceEvent.time || '—'}</td><td className="webstats-muted">this row</td></tr>
                 {duplicateDialog.rows.map((row, index) => <tr key={index}>
                   <td className="webstats-muted">{duplicateSourceEvent.name}</td>
-                  <td><input className="text-input dup-input" value={row.eventTitle} placeholder="Event name" onChange={(e) => updateLinkedRowDraft(index, 'eventTitle', e.target.value)} /></td>
-                  <td><input className="text-input dup-input dup-date" type="date" value={row.date} onChange={(e) => updateLinkedRowDraft(index, 'date', e.target.value)} /></td>
-                  <td><select className="text-input dup-input dup-branch" value={row.branch} onChange={(e) => updateLinkedRowDraft(index, 'branch', e.target.value)}>{(branchOptions || []).map((option) => <option key={option.abbreviation} value={option.abbreviation}>{option.abbreviation}</option>)}</select></td>
-                  <td><input className="text-input dup-input" value={row.location} placeholder="Venue / address" onChange={(e) => updateLinkedRowDraft(index, 'location', e.target.value)} /></td>
-                  <td><input className="text-input dup-input dup-short" value={row.hours} placeholder="e.g. 5 Hrs" onChange={(e) => updateLinkedRowDraft(index, 'hours', e.target.value)} /></td>
-                  <td><input className="text-input dup-input dup-short" value={row.time} placeholder="10:00 - 15:00" onChange={(e) => updateLinkedRowDraft(index, 'time', e.target.value)} /></td>
+                  {renderDuplicateDraftCells('rows', index, row)}
                   <td><button className="row-delete" type="button" title="Remove this row" onClick={() => removeLinkedRowDraft(index)}>X</button></td>
                 </tr>)}
               </tbody>
@@ -5541,10 +5629,11 @@ function DashboardApp() {
             <div className="modal-actions dup-actions">
               <button className="ghost-button" type="button" onClick={addLinkedRowDraft}>+ Add a day or region</button>
               <span className="dup-spacer" />
-              <button className="ghost-button" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'reason' }))}>Back</button>
+              <button className="ghost-button" type="button" onClick={() => openDuplicateStep('reason')}>Back</button>
               <button className="primary-button" type="button" disabled={!duplicateDialog.rows.length || duplicateDialog.saving} onClick={() => void runCreateLinkedRows()}>{duplicateDialog.saving ? 'Creating…' : `Create ${duplicateDialog.rows.length || ''} linked ${duplicateDialog.rows.length === 1 ? 'row' : 'rows'}`}</button>
             </div>
           </> : null}
+          {dupDateEditor ? <DateInlineEditor value={dupDateEditor.value} allowPastDates={duplicateAllowPastDates} onChange={(nextValue) => setDupDateEditor((current) => (current ? { ...current, value: nextValue } : current))} onCancel={() => setDupDateEditor(null)} onApply={applyDuplicateDate} /> : null}
         </div>
       </ModalShell> : null}
       {groupStatusPrompt ? <ModalShell title="Linked booking" onClose={() => setGroupStatusPrompt(null)}><div className="simple-stack"><p>This row is one of <strong>{groupStatusPrompt.count}</strong> linked rows. Set the status to <strong>{groupStatusPrompt.statusName}</strong> on all of them, or only this one?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setGroupStatusPrompt(null)}>Cancel</button><button className="ghost-button" type="button" onClick={() => applyGroupStatusChoice(false)}>Only this one</button><button className="primary-button" type="button" onClick={() => applyGroupStatusChoice(true)}>All {groupStatusPrompt.count} linked rows</button></div></div></ModalShell> : null}

@@ -2174,8 +2174,26 @@ button.report-th.is-sorted { color: var(--blue); }
 .dup-rows td { white-space: nowrap; }
 .dup-rows .dup-source td { color: var(--muted); }
 .dup-input { min-height: 34px; padding: 4px 8px; font-size: 0.8rem; width: 100%; min-width: 120px; }
-.dup-date { min-width: 150px; }
-.dup-branch { min-width: 80px; }
+.dup-table-wrap { overflow: visible; }
+.dup-rows th { font-size: 0.74rem; }
+.dup-rows td { vertical-align: middle; }
+.dup-rows .dup-client { font-weight: 600; }
+.dup-rows .location-field { min-width: 220px; }
+.dup-rows .autocomplete-field { width: 100%; }
+/* Date: the board's own calendar (DateInlineEditor) instead of the OS date picker. */
+.dup-date-button { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 118px; cursor: pointer; text-align: left; font: inherit; font-size: 0.8rem; }
+.dup-date-button small { color: var(--muted); font-size: 0.68rem; }
+.dup-date-button .dup-date-icon { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
+.dup-date-button:hover { border-color: #2f9fed; }
+/* Branch: coloured pills (same colours as the board) instead of a native <select>. */
+.dup-branch-pills { display: flex; flex-wrap: wrap; gap: 4px; max-width: 230px; }
+.dup-branch-pill { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 5px 9px; font: inherit; font-size: 0.72rem; font-weight: 700; line-height: 1; cursor: pointer; }
+.dup-branch-pill:hover { border-color: #2f9fed; color: var(--text); }
+.dup-branch-pill.is-selected { border-color: transparent; box-shadow: 0 0 0 2px rgba(47, 159, 237, 0.45); }
+.dup-location { min-width: 220px; }
+.dup-drawer-note { font-size: 0.78rem; color: var(--muted); padding: 8px 12px; border-radius: 10px; background: var(--panel-alt); }
+:root[data-theme="dark"] .dup-branch-pill { border-color: var(--line); color: #a9bbdc; }
+:root[data-theme="dark"] .dup-branch-pill:hover { color: var(--text); }
 .dup-short { min-width: 110px; }
 .dup-actions { align-items: center; }
 .dup-spacer { flex: 1; }
