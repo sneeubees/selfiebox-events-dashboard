@@ -137,12 +137,17 @@ export default defineSchema({
     websiteOrigin: v.optional(v.boolean()),
     // Offer code from a special landing page (e.g. YEAR_END_360_2026_LED_STANCHIONS), parsed from the message.
     websiteOffer: v.optional(v.string()),
+    // Linked booking (multi-day / multi-region rows of one event): all rows share
+    // bookingGroupId; the primary row holds the group's files and drawer updates.
+    bookingGroupId: v.optional(v.string()),
+    bookingGroupPrimary: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_event_key", ["eventKey"])
     .index("by_workspace_year", ["workspaceYear"])
-    .index("by_date", ["date"]),
+    .index("by_date", ["date"])
+    .index("by_booking_group", ["bookingGroupId"]),
   deletedEventKeys: defineTable({
     eventKey: v.string(),
     deletedAt: v.number(),

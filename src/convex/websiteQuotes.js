@@ -357,6 +357,9 @@ function validateSubmission(formData) {
 // booking token back to anonymous callers.
 export const submitWebsiteQuote = internalMutation({
   args: {
+    // Set by the /website-quote route when one request carries several days.
+    bookingGroupId: v.optional(v.string()),
+    bookingGroupPrimary: v.optional(v.boolean()),
     formData: v.object({
       primarySelection: v.string(),
       photoOutput: v.optional(v.string()),
@@ -487,6 +490,7 @@ export const submitWebsiteQuote = internalMutation({
       ],
       websiteOrigin: true,
       ...(websiteOffer ? { websiteOffer } : {}),
+      ...(args.bookingGroupId ? { bookingGroupId: args.bookingGroupId, bookingGroupPrimary: Boolean(args.bookingGroupPrimary) } : {}),
       createdAt: now,
       updatedAt: now,
     });

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { fanOutSharedFields, handOverPrimary } from "./bookingGroups";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { seedEvents } from "../seedData";
 
@@ -161,6 +162,8 @@ function toEventDto(record, creator = null, statusChanger = null) {
     files: record.files || [],
     activity: record.activity || [],
     createdByUserId: record.createdByUserId || null,
+    bookingGroupId: record.bookingGroupId || "",
+    bookingGroupPrimary: Boolean(record.bookingGroupPrimary),
     createdByName: creator?.fullName || "",
     createdByProfilePic: "",
     firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
@@ -207,6 +210,8 @@ function toEventListDto(record, creator = null, statusChanger = null) {
     notes: record.notes || "",
     customFields: record.customFields || {},
     createdByUserId: record.createdByUserId || null,
+    bookingGroupId: record.bookingGroupId || "",
+    bookingGroupPrimary: Boolean(record.bookingGroupPrimary),
     createdByName: creator?.fullName || "",
     firstStatusChangeByUserId: record.firstStatusChangeByUserId || null,
     firstStatusChangeByName: statusChanger?.fullName || "",
@@ -590,6 +595,8 @@ export const upsert = mutation({
         date: v.string(),
       })),
     }),
+    // Linked bookings: when the status changed on this row, also move the siblings.
+    applyStatusToGroup: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const currentUser = await requireCurrentUser(ctx);
@@ -668,6 +675,10 @@ export const upsert = mutation({
       }
       await ctx.db.patch(existing._id, payload);
       const refreshed = await ctx.db.get(existing._id);
+      // Linked booking: copy the SHARED fields that actually changed to the siblings.
+      if (refreshed.bookingGroupId) {
+        await fanOutSharedFields(ctx, existing, refreshed, currentUser, { applyStatusToGroup: Boolean(args.applyStatusToGroup) });
+      }
       const changedFields = getChangedEventFields(existing, refreshed);
       if (changedFields.length) {
         const actorName = currentUser.fullName || currentUser.firstName || currentUser.email;
@@ -914,6 +925,9 @@ export const remove = mutation({
       return null;
     }
 
+    if (existing.bookingGroupId) {
+      await handOverPrimary(ctx, existing);
+    }
     await ctx.db.delete(existing._id);
     if (deletedMarker) {
       await ctx.db.patch(deletedMarker._id, {
@@ -1008,7 +1022,11 @@ async function applyExtractedPdfDataPatch(ctx, args) {
   }
 
   await ctx.db.patch(existing._id, patch);
-  return await ctx.db.get(existing._id);
+  const refreshed = await ctx.db.get(existing._id);
+  if (refreshed && refreshed.bookingGroupId) {
+    await fanOutSharedFields(ctx, existing, refreshed, null);
+  }
+  return refreshed;
 }
 
 export const applyExtractedPdfData = internalMutation({

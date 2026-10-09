@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { getGroupMembers, resolveStorageEvent } from "./bookingGroups";
 
 function parseLegacyTimestamp(value) {
   if (!value) {
@@ -95,9 +96,10 @@ export const listEventUpdates = query({
       return [];
     }
 
+    const storageEvent = await resolveStorageEvent(ctx, eventRecord);
     const updates = await ctx.db
       .query("eventUpdates")
-      .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
+      .withIndex("by_event", (q) => q.eq("eventId", storageEvent._id))
       .collect();
 
     return updates
@@ -125,10 +127,18 @@ export const listEventActivity = query({
       return [];
     }
 
-    const activity = await ctx.db
-      .query("activityLog")
-      .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
-      .collect();
+    // Linked booking: show the logs of every row, labelled with the row's date.
+    const rows = eventRecord.bookingGroupId ? await getGroupMembers(ctx, eventRecord.bookingGroupId) : [eventRecord];
+    const activity = [];
+    for (const row of rows) {
+      const entries = await ctx.db
+        .query("activityLog")
+        .withIndex("by_event", (q) => q.eq("eventId", row._id))
+        .collect();
+      const sameRow = String(row._id) === String(eventRecord._id);
+      const label = sameRow ? "" : `[${row.date || "no date"}${row.branch && row.branch.length ? " " + row.branch.join("/") : ""}] `;
+      for (const entry of entries) activity.push({ ...entry, text: label + entry.text });
+    }
 
     return activity
       .sort((left, right) => right.createdAt - left.createdAt)
@@ -196,8 +206,9 @@ export const addUpdate = mutation({
       throw new Error("Update body is required.");
     }
 
+    const storageEvent = await resolveStorageEvent(ctx, eventRecord);
     const updateId = await ctx.db.insert("eventUpdates", {
-      eventId: eventRecord._id,
+      eventId: storageEvent._id,
       body: trimmedBody,
       actorName,
       createdByUserId: currentUser._id,

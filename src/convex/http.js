@@ -82,8 +82,15 @@ http.route({
         ? body.submissions
         : (body?.formData ? [body.formData] : []);
       const refs = [];
+      // Several days in one request = one linked booking on the dashboard.
+      const bookingGroupId = submissions.length > 1 ? `grp-${crypto.randomUUID()}` : undefined;
+      let index = 0;
       for (const formData of submissions) {
-        const result = await ctx.runMutation(internal.websiteQuotes.submitWebsiteQuote, { formData });
+        const result = await ctx.runMutation(internal.websiteQuotes.submitWebsiteQuote, {
+          formData,
+          ...(bookingGroupId ? { bookingGroupId, bookingGroupPrimary: index === 0 } : {}),
+        });
+        index += 1;
         if (result && result.ok) {
           // Emails go out in the background - the visitor should not wait for them.
           await ctx.scheduler.runAfter(0, internal.websiteQuoteEmail.sendQuoteEmailsJob, { formData, result });

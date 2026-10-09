@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
+import { resolveStorageEvent } from "./bookingGroups";
 
 async function requireCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -99,9 +100,11 @@ export const listEventFiles = query({
       return [];
     }
 
+    // Linked booking: every row shows the files stored on the primary row.
+    const storageEvent = await resolveStorageEvent(ctx, eventRecord);
     const files = await ctx.db
       .query("eventFiles")
-      .withIndex("by_event", (q) => q.eq("eventId", eventRecord._id))
+      .withIndex("by_event", (q) => q.eq("eventId", storageEvent._id))
       .collect();
     // Fetch only the uploaders present on this event's files (typically 1-3
     // users) instead of collecting every user document.
@@ -213,8 +216,9 @@ export const saveUploadedFile = mutation({
     }
 
     const now = Date.now();
+    const storageEvent = await resolveStorageEvent(ctx, eventRecord);
     const fileId = await ctx.db.insert("eventFiles", {
-      eventId: eventRecord._id,
+      eventId: storageEvent._id,
       name: args.name,
       storageId: args.storageId,
       contentType: args.contentType,
