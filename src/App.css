@@ -2170,31 +2170,37 @@ button.report-th.is-sorted { color: var(--blue); }
 .dup-choice { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; font: inherit; color: var(--text); }
 .dup-choice:hover { border-color: #2f9fed; background: rgba(47,159,237,0.08); }
 .dup-choice span { font-size: 0.78rem; color: var(--muted); }
-.modal-panel.dup-panel-wide { width: min(1100px, 100%); }
+.modal-panel.dup-panel-wide { width: min(1160px, 100%); }
 .dup-rows td { white-space: nowrap; }
 .dup-rows .dup-source td { color: var(--muted); }
-.dup-input { min-height: 34px; padding: 4px 8px; font-size: 0.8rem; width: 100%; min-width: 120px; }
+.dup-input { min-height: 34px; padding: 4px 8px; font-size: 0.8rem; width: 100%; min-width: 110px; }
+.dup-rows td { padding: 6px 5px; }
 .dup-table-wrap { overflow: visible; }
 .dup-rows th { font-size: 0.74rem; }
 .dup-rows td { vertical-align: middle; }
 .dup-rows .dup-client { font-weight: 600; }
-.dup-rows .location-field { min-width: 220px; }
+.dup-rows .location-field { min-width: 200px; }
 .dup-rows .autocomplete-field { width: 100%; }
 /* Date: the board's own calendar (DateInlineEditor) instead of the OS date picker. */
 .dup-date-button { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 118px; cursor: pointer; text-align: left; font: inherit; font-size: 0.8rem; }
 .dup-date-button small { color: var(--muted); font-size: 0.68rem; }
 .dup-date-button .dup-date-icon { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
 .dup-date-button:hover { border-color: #2f9fed; }
-/* Branch: coloured pills (same colours as the board) instead of a native <select>. */
-.dup-branch-pills { display: flex; flex-wrap: wrap; gap: 4px; max-width: 230px; }
-.dup-branch-pill { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 5px 9px; font: inherit; font-size: 0.72rem; font-weight: 700; line-height: 1; cursor: pointer; }
+/* Branch: compact button with the coloured tag; opens a grid of all branches
+   (12 on live) instead of a native <select> or a tall stack of pills. */
+.dup-branch-button { display: inline-flex; align-items: center; gap: 6px; min-width: 92px; cursor: pointer; text-align: left; font: inherit; font-size: 0.8rem; }
+.dup-branch-button:hover { border-color: #2f9fed; }
+.dup-branch-tag { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; padding: 3px 8px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; line-height: 1.2; }
+.dup-branch-menu { position: fixed; z-index: 130; display: grid; grid-template-columns: repeat(4, max-content); gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14); }
+.dup-branch-pill { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 6px 10px; font: inherit; font-size: 0.74rem; font-weight: 700; line-height: 1; cursor: pointer; }
 .dup-branch-pill:hover { border-color: #2f9fed; color: var(--text); }
 .dup-branch-pill.is-selected { border-color: transparent; box-shadow: 0 0 0 2px rgba(47, 159, 237, 0.45); }
-.dup-location { min-width: 220px; }
+:root[data-theme="dark"] .dup-branch-menu { background: var(--panel); border-color: var(--line); }
+.dup-location { min-width: 200px; }
 .dup-drawer-note { font-size: 0.78rem; color: var(--muted); padding: 8px 12px; border-radius: 10px; background: var(--panel-alt); }
 :root[data-theme="dark"] .dup-branch-pill { border-color: var(--line); color: #a9bbdc; }
 :root[data-theme="dark"] .dup-branch-pill:hover { color: var(--text); }
-.dup-short { min-width: 110px; }
+.dup-short { min-width: 96px; }
 .dup-actions { align-items: center; }
 .dup-spacer { flex: 1; }
 .staging-banner { position: sticky; top: 0; z-index: 2000; padding: 6px 12px; text-align: center; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: #3b0d0d; background: #ffb4b4; border-bottom: 2px solid #d93c56; }

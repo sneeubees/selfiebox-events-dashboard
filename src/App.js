@@ -2638,7 +2638,7 @@ function DashboardApp() {
   const renderDuplicateDraftCells = (target, index, row) => <>
     <td><input className="text-input dup-input" value={row.eventTitle || ''} placeholder="Event name" onChange={(e) => patchDuplicateDraft(target, index, { eventTitle: e.target.value })} /></td>
     <td><button className="text-input dup-input dup-date-button" type="button" title={row.date || 'Pick date'} onClick={() => setDupDateEditor({ target, index, value: row.date || '' })}><span>{formatDateDisplay(row.date) || 'Pick date'}</span>{row.date ? <small>{String(row.date).slice(0, 4)}</small> : null}<span className="dup-date-icon" aria-hidden="true">&#9662;</span></button></td>
-    <td><div className="dup-branch-pills">{(branchOptions || []).map((option) => { const isSelected = row.branch === option.abbreviation; return <button key={option.abbreviation} type="button" className={['dup-branch-pill', isSelected ? 'is-selected' : ''].join(' ').trim()} style={isSelected ? branchStyles[option.abbreviation] : undefined} title={option.fullName || option.abbreviation} onClick={() => patchDuplicateDraft(target, index, { branch: option.abbreviation })}>{option.abbreviation}</button>; })}</div></td>
+    <td><DupBranchPicker value={row.branch || ''} options={branchOptions || []} styles={branchStyles} fullNames={branchFullNames} onChange={(abbreviation) => patchDuplicateDraft(target, index, { branch: abbreviation })} /></td>
     <td><LocationInputField className="text-input dup-input dup-location" value={row.location || ''} placeholder="Start typing address" onTextChange={(nextValue) => patchDuplicateDraft(target, index, (current) => duplicateLocationTextPatch(current, nextValue))} onPlaceSelect={(place) => patchDuplicateDraft(target, index, { location: place.location || '', locationPlaceId: place.locationPlaceId || '', locationLat: typeof place.locationLat === 'number' ? place.locationLat : null, locationLng: typeof place.locationLng === 'number' ? place.locationLng : null })} hasCoordinates={typeof row.locationLat === 'number' && typeof row.locationLng === 'number'} /></td>
     <td><AutocompleteTextInput className="text-input dup-input dup-short" value={row.hours || ''} suggestions={hoursSuggestions} minMenuWidth={140} placeholder="e.g. 5 Hrs" onChange={(nextValue) => patchDuplicateDraft(target, index, { hours: nextValue })} /></td>
     <td><AutocompleteTextInput className="text-input dup-input dup-short" value={row.time || ''} suggestions={timeSuggestions} minMenuWidth={160} placeholder="10:00 - 15:00" onChange={(nextValue) => patchDuplicateDraft(target, index, { time: nextValue })} /></td>
@@ -6408,6 +6408,56 @@ function getEventDayShadeClass(event) {
   }
 
   return parsed.getDate() % 2 === 0 ? 'is-alt-day' : '';
+}
+
+// Branch picker for the Duplicate popup: a compact button showing the selected
+// branch tag that opens a small grid of all branches. Live has 12 branches, so
+// inline pills stacked into a tall column (Johan, 2026-10-09).
+function DupBranchPicker({ value, options, styles = {}, fullNames = {}, onChange }) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return undefined;
+    const update = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (rect) setMenuStyle({ top: rect.bottom + 4, left: rect.left });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (event) => {
+      if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return <>
+    <button ref={buttonRef} type="button" className="text-input dup-input dup-branch-button" title={fullNames[value] || value || 'Branch'} onClick={() => setOpen((current) => !current)}>
+      {value ? <span className="dup-branch-tag" style={styles[value] || undefined}>{value}</span> : <span className="webstats-muted">Branch</span>}
+      <span className="dup-date-icon" aria-hidden="true">&#9662;</span>
+    </button>
+    {open && menuStyle ? createPortal(<div ref={menuRef} className="dup-branch-menu" style={menuStyle} role="listbox">
+      {options.map((option) => { const isSelected = option.abbreviation === value; return <button key={option.abbreviation} type="button" role="option" aria-selected={isSelected} className={['dup-branch-pill', isSelected ? 'is-selected' : ''].join(' ').trim()} style={isSelected ? styles[option.abbreviation] : undefined} title={option.fullName || fullNames[option.abbreviation] || option.abbreviation} onClick={() => { onChange(option.abbreviation); setOpen(false); }}>{option.abbreviation}</button>; })}
+    </div>, document.body) : null}
+  </>;
 }
 
 function DateInlineEditor({ value, allowPastDates = false, onChange, onCancel, onApply }) {
