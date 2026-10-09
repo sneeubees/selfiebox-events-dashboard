@@ -440,6 +440,9 @@ export const submitWebsiteQuote = internalMutation({
       .some((value) => /AI Experience/i.test(String(value || ""))) ? "Yes" : "";
     const bookingCustomerType = normalizeDashboardCustomerType(formData.functionType);
     const selectionNotes = buildQuoteSelectionNotes(formData);
+    // Special landing pages tag the message "[OFFER: CODE] ..." - keep the code on
+    // the event so reports can tell special requests from normal ones.
+    const websiteOffer = (normalizeString(formData.message).match(/\[OFFER:\s*([A-Z0-9_]+)\]/) || [])[1] || "";
 
     const eventId = await ctx.db.insert("events", {
       eventKey,
@@ -483,6 +486,7 @@ export const submitWebsiteQuote = internalMutation({
         ),
       ],
       websiteOrigin: true,
+      ...(websiteOffer ? { websiteOffer } : {}),
       createdAt: now,
       updatedAt: now,
     });

@@ -135,6 +135,8 @@ export default defineSchema({
     // backfillWebsiteOrigin action (source: the append-only activityLog
     // table, keyed by event, which upsert never touches).
     websiteOrigin: v.optional(v.boolean()),
+    // Offer code from a special landing page (e.g. YEAR_END_360_2026_LED_STANCHIONS), parsed from the message.
+    websiteOffer: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

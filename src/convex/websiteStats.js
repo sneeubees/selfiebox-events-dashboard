@@ -274,3 +274,74 @@ export const backfillWebsiteOrigin = mutation({
     return { scheduled: true };
   },
 });
+
+// ---- Year-end special landing pages: requests + conversions per offer ----
+export const OFFER_PAGES = [
+  { code: "YEAR_END_360_2026_LED_STANCHIONS", path: "/year-end-360/", label: "Year-End 360" },
+  { code: "YEAR_END_2026_EXTRA_HOUR", path: "/year-end-photo-booths/", label: "Year-End Photo Booths" },
+];
+
+function sastBounds(startDate, endDate) {
+  const parse = (d, end) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || "").trim());
+    if (!m) return null;
+    const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) - 2 * 3600 * 1000; // 00:00 SAST
+    return end ? ms + 24 * 3600 * 1000 - 1 : ms;
+  };
+  return { from: parse(startDate, false), to: parse(endDate, true) };
+}
+
+function offerCodeFromNotes(text) {
+  return (String(text || "").match(/\[OFFER:\s*([A-Z0-9_]+)\]/) || [])[1] || "";
+}
+
+// Quote requests that came from a special landing page, created in the date
+// range, and how many of them reached In Progress (= converted).
+export const getOfferStats = query({
+  args: { startDate: v.string(), endDate: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      await requireCurrentUser(ctx);
+    } catch (error) {
+      return null;
+    }
+    const { from, to } = sastBounds(args.startDate, args.endDate);
+    if (from === null || to === null) return { pages: [], range: args };
+    // Event dates can fall in the next calendar year, so scan the request year and the next.
+    const y0 = Number(args.startDate.slice(0, 4));
+    const y1 = Number(args.endDate.slice(0, 4)) + 1;
+    const counts = Object.fromEntries(OFFER_PAGES.map((p) => [p.code, { requests: 0, converted: 0, completed: 0 }]));
+    for (let year = y0; year <= y1; year += 1) {
+      const events = await ctx.db
+        .query("events")
+        .withIndex("by_workspace_year", (q) => q.eq("workspaceYear", year))
+        .collect();
+      for (const event of events) {
+        if (!event.websiteOrigin) continue;
+        const created = Number.isFinite(event.createdAt) ? event.createdAt : event._creationTime;
+        if (created < from || created > to) continue;
+        let code = event.websiteOffer || "";
+        if (!code) {
+          // Requests from before the code was stored on the event: read the booking notes.
+          const booking = await ctx.db
+            .query("eventBookings")
+            .withIndex("by_event", (q) => q.eq("eventId", event._id))
+            .unique();
+          code = offerCodeFromNotes(booking?.formData?.notes);
+        }
+        if (!code || !counts[code]) continue;
+        counts[code].requests += 1;
+        const timeline = Array.isArray(event.statusTimeline) ? event.statusTimeline : [];
+        const status = String(event.status || "").trim().toLowerCase();
+        const reachedInProgress = status === "in progress" || status === "event completed"
+          || timeline.some((e) => String(e.status || "").trim().toLowerCase() === "in progress");
+        if (reachedInProgress) counts[code].converted += 1;
+        if (status === "event completed") counts[code].completed += 1;
+      }
+    }
+    return {
+      range: args,
+      pages: OFFER_PAGES.map((p) => ({ ...p, ...counts[p.code], conversionPct: counts[p.code].requests ? Math.round((100 * counts[p.code].converted) / counts[p.code].requests) : null })),
+    };
+  },
+});

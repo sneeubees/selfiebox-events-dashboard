@@ -2155,6 +2155,10 @@ button.report-th.is-sorted { color: var(--blue); }
 .rt-empty { padding: 6px 0 2px; }
 .rt-split { display: grid; gap: 4px; margin: -4px 0 12px; font-size: 0.8rem; color: var(--muted); }
 .rt-split strong { color: var(--text); margin-right: 4px; }
+.offer-panel { margin: 0 0 18px; border-color: var(--accent, #2f9fed); }
+.offer-panel h3 span { font-weight: 500; font-size: 0.85rem; }
+.offer-panel .rt-name a { color: var(--text); text-decoration: none; }
+.offer-panel .rt-name a:hover { text-decoration: underline; }
 .rt-table-wrap { overflow-x: auto; }
 .rt-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .rt-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }

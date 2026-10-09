@@ -555,3 +555,64 @@ export const getSeoStats = action({
     });
   },
 });
+
+// ---- Visits to the year-end special landing pages (same Google connection) ----
+const OFFER_PAGE_PATHS = ["/year-end-360/", "/year-end-photo-booths/"];
+
+export const fetchOfferPages = internalAction({
+  args: { startDate: v.string(), endDate: v.string() },
+  handler: async (ctx, { startDate, endDate }) => {
+    const refreshToken = await ctx.runQuery(internal.ga4.getTokenRaw, {});
+    if (!refreshToken) return { connected: false, canManage: true };
+    const propertyId = process.env.GA4_PROPERTY_ID;
+    let accessToken;
+    try {
+      accessToken = await accessTokenFromRefresh(refreshToken);
+    } catch (e) {
+      return { connected: true, canManage: true, error: "reauth_needed", detail: String(e.message || e) };
+    }
+    try {
+      const report = await runReport(accessToken, propertyId, {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: "pagePath" }],
+        metrics: [{ name: "sessions" }, { name: "screenPageViews" }, { name: "totalUsers" }],
+        dimensionFilter: {
+          orGroup: {
+            expressions: OFFER_PAGE_PATHS.map((path) => ({
+              filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: path.replace(/\/$/, "") } },
+            })),
+          },
+        },
+        limit: 100,
+      });
+      const pages = OFFER_PAGE_PATHS.map((path) => {
+        const rows = (report.rows || []).filter((r) => String(r.dimensionValues?.[0]?.value || "").startsWith(path.replace(/\/$/, "")));
+        const sum = (i) => rows.reduce((s, r) => s + Number(r.metricValues?.[i]?.value || 0), 0);
+        return { path, sessions: sum(0), pageViews: sum(1), users: sum(2) };
+      });
+      return { connected: true, canManage: true, pages, fetchedAt: Date.now() };
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (/invalid_grant|reauth/i.test(msg)) return { connected: true, canManage: true, error: "reauth_needed", detail: msg };
+      return { connected: true, canManage: true, error: "ga4_failed", detail: msg };
+    }
+  },
+});
+
+export const getOfferPageStats = action({
+  args: { startDate: v.string(), endDate: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { connected: false, canManage: false };
+    try {
+      const token = await ctx.runQuery(internal.ga4.getTokenIfAdmin, {
+        clerkId: identity.subject ?? identity.tokenIdentifier ?? "",
+        email: identity.email || "",
+      });
+      if (!token) return { connected: false, canManage: true };
+    } catch {
+      return { connected: false, canManage: false };
+    }
+    return await ctx.runAction(internal.ga4.fetchOfferPages, args);
+  },
+});

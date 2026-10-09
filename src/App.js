@@ -9064,6 +9064,51 @@ function AIAnalysisView({ isAdmin }) {
   return <div className="statspage-view">{head}{inner}</div>;
 }
 
+// ---------- Year-end special landing pages: visits, requests, conversions ----------
+const OFFER_PAGE_LABELS = { '/year-end-360/': 'Year-End 360', '/year-end-photo-booths/': 'Year-End Photo Booths' };
+function OfferStatsPanel({ range, periodLabel, isAdmin }) {
+  const runPages = useAction(api.ga4.getOfferPageStats);
+  const [visits, setVisits] = useState(undefined);
+  const quotes = useQuery(api.websiteStats.getOfferStats, range);
+  useEffect(() => {
+    let cancelled = false;
+    setVisits(undefined);
+    runPages(range).then((res) => { if (!cancelled) setVisits(res); }).catch((e) => { if (!cancelled) setVisits({ error: String(e?.message || e) }); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.startDate, range.endDate]);
+  const visitFor = (path) => (visits && visits.pages ? visits.pages.find((p) => p.path === path) : null);
+  const visitsNote = visits === undefined ? 'loading…' : visits?.error || visits?.connected === false ? 'Google Analytics not available' : '';
+  const rows = (quotes && quotes.pages) || Object.entries(OFFER_PAGE_LABELS).map(([path, label]) => ({ path, label }));
+  const n = (v) => (v === undefined || v === null ? '—' : Number(v).toLocaleString('en-ZA'));
+  return (
+    <section className="rt-section offer-panel">
+      <div className="rt-section-head">
+        <div><h3>Year-End Specials <span className="webstats-muted">({periodLabel})</span></h3><p className="webstats-muted">Visits from Google Analytics, requests and conversions from the dashboard. Converted = the request reached In Progress.</p></div>
+      </div>
+      <div className="rt-table-wrap">
+        <table className="rt-table">
+          <thead><tr><th>Landing page</th><th>Visits</th><th>Page views</th><th>Quote requests</th><th>Converted</th><th>Conversion</th><th>Completed</th></tr></thead>
+          <tbody>
+            {rows.map((r) => { const v = visitFor(r.path); return (
+              <tr key={r.path}>
+                <td className="rt-name"><a href={`https://selfiebox.co.za${r.path}`} target="_blank" rel="noreferrer">{OFFER_PAGE_LABELS[r.path] || r.label}</a><div className="webstats-muted">{r.path}</div></td>
+                <td className="rt-dur">{v ? n(v.sessions) : (visitsNote ? <span className="webstats-muted" title={visits?.detail || ''}>{visitsNote}</span> : '—')}</td>
+                <td>{v ? n(v.pageViews) : '—'}</td>
+                <td className="rt-dur">{quotes === undefined ? '…' : n(r.requests)}</td>
+                <td className="rt-dur">{quotes === undefined ? '…' : n(r.converted)}</td>
+                <td>{quotes === undefined || r.conversionPct === null || r.conversionPct === undefined ? '—' : `${r.conversionPct}%`}</td>
+                <td>{quotes === undefined ? '…' : n(r.completed)}</td>
+              </tr>
+            ); })}
+          </tbody>
+        </table>
+      </div>
+      {!isAdmin ? <p className="report-caption">Visits need an admin Google connection.</p> : null}
+    </section>
+  );
+}
+
 function AdsStatsView({ isAdmin, connectUrl, openConnect }) {
   const runAds = useAction(api.ads.getAdsStats);
   const [byPeriod, setByPeriod] = useState({});
@@ -9200,7 +9245,7 @@ function AdsStatsView({ isAdmin, connectUrl, openConnect }) {
     </div>;
   }
 
-  return <div className="statspage-view">{head}{inner}</div>;
+  return <div className="statspage-view">{head}<OfferStatsPanel range={rangeFor(period)} periodLabel={periodLabel} isAdmin={isAdmin} />{inner}</div>;
 }
 
 function ComingSoonView({ title, blurb }) {
