@@ -616,6 +616,11 @@ function DashboardApp() {
   const upsertEventMutation = useMutation(api.events.upsert);
   const removeEventMutation = useMutation(api.events.remove);
   const cloneEventMutation = useMutation(api.events.cloneEvent);
+  const createLinkedRowsMutation = useMutation(api.bookingGroups.createLinkedRows);
+  const unlinkFromGroupMutation = useMutation(api.bookingGroups.unlinkFromGroup);
+  // Rows whose next save must move the status of the whole linked booking.
+  const pendingGroupStatusRef = useRef(new Set());
+  const [groupStatusPrompt, setGroupStatusPrompt] = useState(null); // { eventId, statusName, count }
   const upsertLabelOptionMutation = useMutation(api.labels.upsert);
   const removeLabelOptionMutation = useMutation(api.labels.remove);
   const createCustomColumnMutation = useMutation(api.columns.create);
@@ -1001,7 +1006,14 @@ function DashboardApp() {
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
   const [noticeDialog, setNoticeDialog] = useState({ isOpen: false, title: '', message: '' });
-  const [duplicateDialog, setDuplicateDialog] = useState({ isOpen: false, eventId: '' });
+  const [duplicateDialog, setDuplicateDialog] = useState({ isOpen: false, eventId: '', step: 'reason', rows: [], saving: false });
+  const linkedGroupInfo = useQuery(api.bookingGroups.getGroupInfo, canAccessDashboard && selectedId ? { eventKey: selectedId } : 'skip');
+  // bookingGroupId -> number of rows on this year's board (for the row badge).
+  const groupSizes = useMemo(() => {
+    const sizes = new Map();
+    events.forEach((event) => { if (event.bookingGroupId) sizes.set(event.bookingGroupId, (sizes.get(event.bookingGroupId) || 0) + 1); });
+    return sizes;
+  }, [events]);
   const [renameDialog, setRenameDialog] = useState({ isOpen: false, columnKey: '', value: '' });
   const [dateEditor, setDateEditor] = useState({ eventId: '', columnKey: 'date', value: '' });
   const [eventForm, setEventForm] = useState({ ...eventDefaults });
@@ -2133,7 +2145,9 @@ function DashboardApp() {
 
     const timeoutId = window.setTimeout(() => {
       persistTimeoutsRef.current.delete(event.id);
-      void upsertEventMutation({ event: serializeEventForConvex(event) })
+      const applyStatusToGroup = pendingGroupStatusRef.current.has(event.id);
+      pendingGroupStatusRef.current.delete(event.id);
+      void upsertEventMutation({ event: serializeEventForConvex(event), ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}) })
         .then(() => {
           if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
             return;
@@ -2540,7 +2554,67 @@ function DashboardApp() {
   };
 
   const duplicateEvent = async (eventId) => {
-    setDuplicateDialog({ isOpen: true, eventId });
+    setDuplicateDialog({ isOpen: true, eventId, step: 'reason', rows: [], saving: false });
+  };
+
+  const closeDuplicateDialog = () => setDuplicateDialog({ isOpen: false, eventId: '', step: 'reason', rows: [], saving: false });
+  const duplicateSourceEvent = duplicateDialog.isOpen ? events.find((event) => event.id === duplicateDialog.eventId) || null : null;
+
+  const nextDayIso = (iso) => {
+    const parsed = new Date(`${iso || ''}T12:00:00`);
+    if (!Number.isFinite(parsed.getTime())) return '';
+    parsed.setDate(parsed.getDate() + 1);
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  };
+
+  const addLinkedRowDraft = () => {
+    setDuplicateDialog((current) => {
+      const source = events.find((event) => event.id === current.eventId);
+      if (!source) return current;
+      const last = current.rows[current.rows.length - 1];
+      const base = last || {
+        date: source.date || '', branch: (source.branch || [])[0] || '', eventTitle: source.eventTitle || '', location: source.location || '',
+        hours: source.hours || '', time: source.time || '', products: source.products || [], productQuantities: source.productQuantities || {},
+      };
+      return { ...current, rows: [...current.rows, { ...base, date: nextDayIso(base.date) || base.date }] };
+    });
+  };
+
+  const updateLinkedRowDraft = (index, key, value) => {
+    setDuplicateDialog((current) => ({ ...current, rows: current.rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)) }));
+  };
+
+  const removeLinkedRowDraft = (index) => {
+    setDuplicateDialog((current) => ({ ...current, rows: current.rows.filter((_, i) => i !== index) }));
+  };
+
+  const runCreateLinkedRows = async () => {
+    const source = duplicateSourceEvent;
+    if (!source || !duplicateDialog.rows.length) return;
+    const rows = duplicateDialog.rows.map((row) => ({
+      date: row.date,
+      branch: row.branch ? [row.branch] : (source.branch || []),
+      eventTitle: row.eventTitle || '',
+      location: row.location || '',
+      hours: row.hours || '',
+      time: row.time || '',
+      products: row.products || [],
+      productQuantities: row.productQuantities || {},
+    }));
+    if (rows.some((row) => !/^\d{4}-\d{2}-\d{2}$/.test(row.date))) {
+      openNotice('Every row needs a date.');
+      return;
+    }
+    setDuplicateDialog((current) => ({ ...current, saving: true }));
+    try {
+      const result = await createLinkedRowsMutation({ sourceEventKey: source.id, rows });
+      closeDuplicateDialog();
+      openNotice(`${result.createdEventKeys.length} linked ${result.createdEventKeys.length === 1 ? 'row' : 'rows'} added. Shared details stay in sync across the booking; Excl JC starts at 0 on the new rows.`, 'Linked booking');
+    } catch (error) {
+      console.error('Failed to create linked rows', error);
+      setDuplicateDialog((current) => ({ ...current, saving: false }));
+      openNotice(String(error?.data || error?.message || 'The rows could not be created right now.'));
+    }
   };
 
   const runDuplicateEvent = async (includeDrawerInfo) => {
@@ -4227,8 +4301,31 @@ function DashboardApp() {
   };
 
   const selectStatusOnEvent = (eventId, statusName) => {
-    updateEvent(eventId, (event) => ({ ...event, status: statusName }));
+    const target = eventsRef.current.find((event) => event.id === eventId);
     setStatusEditorEventId(null);
+    if (target && target.bookingGroupId && target.status !== statusName && (groupSizes.get(target.bookingGroupId) || 0) > 1) {
+      setGroupStatusPrompt({ eventId, statusName, count: groupSizes.get(target.bookingGroupId) || 0 });
+      return;
+    }
+    updateEvent(eventId, (event) => ({ ...event, status: statusName }));
+  };
+
+  const applyGroupStatusChoice = (applyToAll) => {
+    const prompt = groupStatusPrompt;
+    setGroupStatusPrompt(null);
+    if (!prompt) return;
+    if (applyToAll) pendingGroupStatusRef.current.add(prompt.eventId);
+    updateEvent(prompt.eventId, (event) => ({ ...event, status: prompt.statusName }));
+  };
+
+  const unlinkSelectedFromGroup = async (eventId) => {
+    if (!window.confirm('Unlink this row from its linked booking? It keeps its data but will no longer share changes, files or updates with the other rows.')) return;
+    try {
+      await unlinkFromGroupMutation({ eventKey: eventId });
+    } catch (error) {
+      console.error('Failed to unlink', error);
+      openNotice('The row could not be unlinked right now.');
+    }
   };
 
   const openManagedSingleManager = (columnKey) => {
@@ -4748,7 +4845,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -4769,7 +4866,7 @@ function DashboardApp() {
         <section className="drawer-card"><h4>{selectedWorkspaceYear} workspace</h4><div className="activity-list board-activity-list">{boardActivities.length ? boardActivities.map((entry) => <ActivityEntry entry={{ ...entry, text: entry.text }} eventName={entry.eventName} eventKey={entry.eventKey} onEventClick={openEventById} title={`${entry.eventName}: ${entry.text}`} />) : <div className="empty-month">No board activities yet.</div>}</div></section>
       </aside>
         <aside className={`event-drawer ${drawerOpen ? 'is-open' : ''}`}>
-          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop files here</p><input ref={eventFileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section>{pdfReadFailures.filter((item) => item.eventKey === selectedEvent.id).map((item) => <div className="pdf-read-failure" role="alert" key={item.storageId}><span><strong title={item.name}>{item.name}</strong> uploaded, but the quote/invoice number couldn&rsquo;t be read.</span><button className="ghost-button" type="button" disabled={item.retrying} onClick={() => void runPdfNumberExtraction(item)}>{item.retrying ? 'Retrying…' : 'Retry'}</button><button className="pdf-read-failure-dismiss" type="button" aria-label="Dismiss" onClick={() => setPdfReadFailures((current) => current.filter((entry) => entry.storageId !== item.storageId))}>x</button></div>)}<section className="drawer-card"><h4>Files</h4><div className="file-list">{eventFileEntries === undefined ? <div className="inline-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading files&hellip;</div> : selectedEventFiles.length === 0 ? <div className="file-list-empty">No files uploaded yet.</div> : selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
+          {selectedEvent ? <><div className="drawer-header"><div><div className="topbar-kicker">Event drawer</div><h3>{selectedEvent.name || 'New event'}</h3><p className="drawer-meta">{[formatDateDisplay(selectedEvent.date), selectedEvent.hours, (selectedEvent.branch || []).map((item) => branchFullNames[item] || item).join(', ')].filter(Boolean).join('   ')}</p>{selectedEvent.bookingGroupId ? <div className="drawer-group-note"><span>⛓ Linked booking{linkedGroupInfo && linkedGroupInfo.members ? `: ${linkedGroupInfo.members.length} rows — ${linkedGroupInfo.members.map((m) => `${formatDateDisplay(m.date) || '?'} ${(m.branch || []).join('/')}`).join(', ')}` : ''}. Quote, invoice, status, notes, custom columns, files and updates are shared.</span><button className="ghost-button" type="button" onClick={() => void unlinkSelectedFromGroup(selectedEvent.id)}>Unlink this row</button></div> : null}{selectedEvent.location ? <div className="drawer-location-row"><span className="drawer-location-text" title={selectedEvent.location}>{selectedEvent.location}</span>{typeof selectedEvent.locationLat === 'number' && typeof selectedEvent.locationLng === 'number' ? <button className="location-pin-button drawer-location-pin" type="button" title="View map" onClick={() => openLocationPreview(selectedEvent)}>{renderPinIcon()}</button> : null}</div> : null}{selectedEvent.duplicatedFromEventKey ? <button className="drawer-duplicate-source" type="button" onClick={() => openEventById(selectedEvent.duplicatedFromEventKey)}>{`Duplicated from ${selectedEvent.duplicatedFromEventName || selectedEvent.duplicatedFromEventKey}`}</button> : null}</div><button className="drawer-close" type="button" onClick={closeDrawer}>x</button></div><div className="drawer-tabs">{[{ id: 'updates', label: 'Updates' }, { id: 'files', label: 'Files' }, { id: 'booking', label: 'Booking' }, { id: 'activity', label: 'Logs' }].map((tab) => <button className={drawerTab === tab.id ? 'is-active' : ''} key={tab.id} type="button" onClick={() => setDrawerTab(tab.id)}>{tab.label}</button>)}</div>{drawerTab === 'updates' ? <div className="drawer-section-stack"><section className="drawer-card"><h4>Updates / Notes</h4><textarea rows={4} value={draftUpdate} onChange={(event) => { const nextValue = event.target.value; setDraftUpdate(nextValue); setDraftUpdatesByEvent((current) => selectedEvent ? ({ ...current, [selectedEvent.id]: nextValue }) : current); }} placeholder="Click and type. Your note stays here until you click Update." /><div className="modal-actions"><button className="primary-button" type="button" onClick={saveQuickUpdate}>Update</button></div></section><section className="drawer-card"><h4>Update History</h4><div className="activity-list">{selectedEventUpdates.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section></div> : null}{drawerTab === 'files' ? <div className="drawer-section-stack"><section className={`drawer-card file-upload-dropzone ${isFileDropActive ? 'is-drag-over' : ''}`} onDragEnter={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragOver={(event) => { event.preventDefault(); setIsFileDropActive(true); }} onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsFileDropActive(false); }} onDrop={(event) => { void handleFileDrop(event); }}><h4>Upload files</h4><p className="file-upload-types">PDF, JPG, PNG, JPEG</p><button className="primary-button" type="button" onClick={openEventFilePicker}>Upload file</button><p className="file-drop-hint">or drag and drop files here</p><input ref={eventFileInputRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleEventFileSelection} /></section>{pdfReadFailures.filter((item) => item.eventKey === selectedEvent.id).map((item) => <div className="pdf-read-failure" role="alert" key={item.storageId}><span><strong title={item.name}>{item.name}</strong> uploaded, but the quote/invoice number couldn&rsquo;t be read.</span><button className="ghost-button" type="button" disabled={item.retrying} onClick={() => void runPdfNumberExtraction(item)}>{item.retrying ? 'Retrying…' : 'Retry'}</button><button className="pdf-read-failure-dismiss" type="button" aria-label="Dismiss" onClick={() => setPdfReadFailures((current) => current.filter((entry) => entry.storageId !== item.storageId))}>x</button></div>)}<section className="drawer-card"><h4>Files</h4><div className="file-list">{eventFileEntries === undefined ? <div className="inline-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading files&hellip;</div> : selectedEventFiles.length === 0 ? <div className="file-list-empty">No files uploaded yet.</div> : selectedEventFiles.map((file) => <article className="file-card" key={file.id}><button className="file-delete" type="button" aria-label="Delete file" onClick={() => deleteEventFile(file.id)}>x</button><div className="file-card-main"><span>{file.type}</span><strong className="file-name" title={file.name}>{file.url ? <button className="file-name-button" type="button" title={file.name} onClick={() => openEventFilePreview(file)}>{file.name}</button> : file.name}</strong><div className="file-card-meta-line"><p>{file.size || ''}</p><small>{`Uploaded by ${file.uploadedBy || 'Unknown'}`}</small></div></div></article>)}</div></section></div> : null}{drawerTab === 'booking' ? <div className="drawer-section-stack"><section className="drawer-card booking-link-card"><h4>Booking link</h4><p>Generate a unique booking form link for this event. The completed form is stored below and stays editable only through the booking link.</p><div className="modal-actions booking-link-actions">{selectedEventBooking?.token ? <button className="primary-button" type="button" onClick={() => openBookingLink(selectedEventBooking.token)}>Open link</button> : <button className="primary-button" type="button" onClick={() => void generateBookingLink()} disabled={isPastEvent(selectedEvent)}>Generate Booking Link</button>}</div>{selectedEventBooking?.token ? <div className="booking-link-summary"><label><span>Active link</span><input className="text-input locked-input booking-link-input" readOnly value={buildBookingLinkUrl(selectedEventBooking.token)} onClick={() => void copyBookingLink(selectedEventBooking.token)} title="Click to copy booking link" /></label><div className="booking-link-meta"><span>Click the link field to copy the booking link.</span><span>This booking link stays editable through the event day and locks from the day after the event.</span>{selectedEventBooking.isLocked ? <span>Form is now locked for editing.</span> : null}{selectedEventBooking.submittedAt ? <span>Last submitted: {formatSouthAfricaTimestamp(selectedEventBooking.submittedAt)}</span> : <span>Not submitted yet</span>}</div></div> : <div className="empty-month">{isPastEvent(selectedEvent) ? 'Booking links are disabled for past events.' : 'No booking link generated yet.'}</div>}</section><section className="drawer-card"><h4>Booking form data</h4>{selectedEventBooking ? <BookingDrawerSummary booking={selectedEventBooking} /> : <div className="empty-month">Generate the booking link to start collecting booking information.</div>}</section></div> : null}{drawerTab === 'activity' ? <section className="drawer-card"><h4>All activity</h4><div className="activity-list">{selectedEventActivity.map((entry) => <ActivityEntry entry={entry} title={entry.text} />)}</div></section> : null}</> : null}
         </aside>
 
       {saveFailures.length ? (
@@ -5404,7 +5501,53 @@ function DashboardApp() {
       {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label><label className="full-span"><span>Assigned Branches</span><div className="profile-branch-selector">{branchOptions.map((option) => <label key={option.abbreviation} className="profile-branch-option"><input type="checkbox" checked={(managedUserForm.assignedBranches || []).includes(option.abbreviation)} onChange={() => toggleManagedUserBranch(option.abbreviation)} /><span className="profile-branch-chip" style={branchStyles[option.abbreviation] || undefined}>{option.abbreviation}</span></label>)}</div><small>Leave all unchecked to allow all branches.</small></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
       {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace}>Yes</button></div></div></div></div> : null}
       {confirmDialog.isOpen ? <ModalShell title={confirmDialog.title} onClose={() => closeConfirmation(false)}><div className="simple-stack"><p>{confirmDialog.message}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => closeConfirmation(false)}>Cancel</button><button className={confirmDialog.tone === 'danger' ? 'branch-delete-button danger-button' : 'primary-button'} type="button" onClick={() => closeConfirmation(true)}>{confirmDialog.confirmLabel}</button></div></div></ModalShell> : null}
-      {duplicateDialog.isOpen ? <ModalShell title="Duplicate event" onClose={() => setDuplicateDialog({ isOpen: false, eventId: '' })}><div className="simple-stack"><p>Duplicate this event with or without its current drawer data?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setDuplicateDialog({ isOpen: false, eventId: '' })}>Cancel</button><button className="ghost-button" type="button" onClick={() => void runDuplicateEvent(false)}>Without drawer info</button><button className="primary-button" type="button" onClick={() => void runDuplicateEvent(true)}>With drawer info</button></div></div></ModalShell> : null}
+      {duplicateDialog.isOpen && duplicateSourceEvent ? <ModalShell title="Duplicate event" onClose={closeDuplicateDialog} panelClassName={duplicateDialog.step === 'rows' ? 'dup-panel-wide' : ''}>
+        <div className="simple-stack">
+          <div className="dup-details">
+            <strong>{duplicateSourceEvent.name || 'Untitled event'}</strong>{duplicateSourceEvent.eventTitle ? <span> · {duplicateSourceEvent.eventTitle}</span> : null}
+            <div className="webstats-muted">{[formatDateDisplay(duplicateSourceEvent.date), (duplicateSourceEvent.branch || []).map((b) => branchFullNames[b] || b).join(', '), duplicateSourceEvent.location, (duplicateSourceEvent.products || []).map((item) => productFullNames[item] || item).join(', '), duplicateSourceEvent.status].filter(Boolean).join(' · ')}</div>
+            {duplicateSourceEvent.bookingGroupId ? <div className="webstats-muted">Already part of a linked booking ({groupSizes.get(duplicateSourceEvent.bookingGroupId) || 1} rows on this board).</div> : null}
+          </div>
+          {duplicateDialog.step === 'reason' ? <>
+            <p><strong>Why are you duplicating?</strong></p>
+            <div className="dup-choices">
+              <button className="dup-choice" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'drawer' }))}><strong>A — New event for the same client</strong><span>A separate booking. Nothing stays linked.</span></button>
+              <button className="dup-choice" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'rows', rows: [] }))}><strong>B — More days or regions of this event</strong><span>One booking across several rows: quote, invoice, status, notes and files stay in sync. Date, branch, event name, location, hours, times, products, attendants and Excl JC are per row.</span></button>
+            </div>
+            <div className="modal-actions"><button className="ghost-button" type="button" onClick={closeDuplicateDialog}>Cancel</button></div>
+          </> : null}
+          {duplicateDialog.step === 'drawer' ? <>
+            <p>Copy this event with or without its drawer data (updates, files, booking form)?</p>
+            <div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'reason' }))}>Back</button><button className="ghost-button" type="button" onClick={() => void runDuplicateEvent(false)}>Without drawer info</button><button className="primary-button" type="button" onClick={() => void runDuplicateEvent(true)}>With drawer info</button></div>
+          </> : null}
+          {duplicateDialog.step === 'rows' ? <>
+            <p>Each row below becomes a linked day or region. Press <strong>+</strong> to add one (the date moves on a day), then change what differs. Products and quantities are copied and can be changed on the board afterwards.</p>
+            <div className="rt-table-wrap"><table className="rt-table dup-rows">
+              <thead><tr><th>Client</th><th>Event name</th><th>Date</th><th>Branch</th><th>Location</th><th>Hours</th><th>Time</th><th></th></tr></thead>
+              <tbody>
+                <tr className="dup-source"><td>{duplicateSourceEvent.name}</td><td>{duplicateSourceEvent.eventTitle || '—'}</td><td>{formatDateDisplay(duplicateSourceEvent.date) || '—'}</td><td>{(duplicateSourceEvent.branch || []).join(', ') || '—'}</td><td className="rt-name" title={duplicateSourceEvent.location}>{duplicateSourceEvent.location || '—'}</td><td>{duplicateSourceEvent.hours || '—'}</td><td>{duplicateSourceEvent.time || '—'}</td><td className="webstats-muted">this row</td></tr>
+                {duplicateDialog.rows.map((row, index) => <tr key={index}>
+                  <td className="webstats-muted">{duplicateSourceEvent.name}</td>
+                  <td><input className="text-input dup-input" value={row.eventTitle} placeholder="Event name" onChange={(e) => updateLinkedRowDraft(index, 'eventTitle', e.target.value)} /></td>
+                  <td><input className="text-input dup-input dup-date" type="date" value={row.date} onChange={(e) => updateLinkedRowDraft(index, 'date', e.target.value)} /></td>
+                  <td><select className="text-input dup-input dup-branch" value={row.branch} onChange={(e) => updateLinkedRowDraft(index, 'branch', e.target.value)}>{(branchOptions || []).map((option) => <option key={option.abbreviation} value={option.abbreviation}>{option.abbreviation}</option>)}</select></td>
+                  <td><input className="text-input dup-input" value={row.location} placeholder="Venue / address" onChange={(e) => updateLinkedRowDraft(index, 'location', e.target.value)} /></td>
+                  <td><input className="text-input dup-input dup-short" value={row.hours} placeholder="e.g. 5 Hrs" onChange={(e) => updateLinkedRowDraft(index, 'hours', e.target.value)} /></td>
+                  <td><input className="text-input dup-input dup-short" value={row.time} placeholder="10:00 - 15:00" onChange={(e) => updateLinkedRowDraft(index, 'time', e.target.value)} /></td>
+                  <td><button className="row-delete" type="button" title="Remove this row" onClick={() => removeLinkedRowDraft(index)}>X</button></td>
+                </tr>)}
+              </tbody>
+            </table></div>
+            <div className="modal-actions dup-actions">
+              <button className="ghost-button" type="button" onClick={addLinkedRowDraft}>+ Add a day or region</button>
+              <span className="dup-spacer" />
+              <button className="ghost-button" type="button" onClick={() => setDuplicateDialog((current) => ({ ...current, step: 'reason' }))}>Back</button>
+              <button className="primary-button" type="button" disabled={!duplicateDialog.rows.length || duplicateDialog.saving} onClick={() => void runCreateLinkedRows()}>{duplicateDialog.saving ? 'Creating…' : `Create ${duplicateDialog.rows.length || ''} linked ${duplicateDialog.rows.length === 1 ? 'row' : 'rows'}`}</button>
+            </div>
+          </> : null}
+        </div>
+      </ModalShell> : null}
+      {groupStatusPrompt ? <ModalShell title="Linked booking" onClose={() => setGroupStatusPrompt(null)}><div className="simple-stack"><p>This row is one of <strong>{groupStatusPrompt.count}</strong> linked rows. Set the status to <strong>{groupStatusPrompt.statusName}</strong> on all of them, or only this one?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setGroupStatusPrompt(null)}>Cancel</button><button className="ghost-button" type="button" onClick={() => applyGroupStatusChoice(false)}>Only this one</button><button className="primary-button" type="button" onClick={() => applyGroupStatusChoice(true)}>All {groupStatusPrompt.count} linked rows</button></div></div></ModalShell> : null}
       {noticeDialog.isOpen ? <ModalShell title={noticeDialog.title} onClose={closeNotice}><div className="simple-stack"><p>{noticeDialog.message}</p><div className="modal-actions"><button className="primary-button" type="button" onClick={closeNotice}>OK</button></div></div></ModalShell> : null}
     </div>
   );
@@ -5794,7 +5937,7 @@ function renderEventFields(
     </>
   );
 }
-function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, allowPastDates, creatorProfileMap }) {
+function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, allowPastDates, creatorProfileMap, groupSizes }) {
     if (columnKey === 'name') {
       const creatorProfile = creatorProfileMap.get(String(event.createdByUserId || '')) || null;
       const creatorName = creatorProfile?.fullName || event.createdByName || '';
@@ -5807,7 +5950,9 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
       const avatarNode = isNewWebRequest
         ? <span className="row-creator-avatar is-new-request-badge" title="New web request">NEW</span>
         : <span className="row-creator-avatar" title={(hasStatusChanger ? statusChangerName : creatorName) || 'Created by user'}>{hasStatusChanger ? (statusChangerPic ? <img src={statusChangerPic} alt={statusChangerName || 'Status changed by'} /> : getInitials(statusChangerName || '')) : (creatorProfilePic ? <img src={creatorProfilePic} alt={creatorName || 'Creator'} /> : getInitials(creatorName || ''))}</span>;
-      return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button>{avatarNode}<div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
+      const groupSize = event.bookingGroupId ? (groupSizes.get(event.bookingGroupId) || 1) : 0;
+      const groupBadge = groupSize ? <span className="row-group-badge" title={`Linked booking: ${groupSize} rows on this board share quote, invoice, status, notes and files`}>⛓{groupSize}</span> : null;
+      return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button>{avatarNode}{groupBadge}<div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
     }
   if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;
   if (columnKey === 'time') return <input className="inline-input inline-time" title={event.time || ''} value={event.time || ''} readOnly={!canEdit} placeholder="e.g. 12:00 - 14:00" onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'time', inputEvent.target.value)} />;
@@ -6417,8 +6562,10 @@ function App() {
     return <BookingPage token={bookingToken} />;
   }
 
+  const isStaging = typeof window !== 'undefined' && /^staging\./.test(window.location.hostname);
   return (
     <>
+      {isStaging ? <div className="staging-banner">STAGING — test copy with old data. Nothing here affects the live dashboard.</div> : null}
       <AuthLoading>
         <LoadingShell />
       </AuthLoading>

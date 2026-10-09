@@ -2159,6 +2159,27 @@ button.report-th.is-sorted { color: var(--blue); }
 .offer-panel h3 span { font-weight: 500; font-size: 0.85rem; }
 .offer-panel .rt-name a { color: var(--text); text-decoration: none; }
 .offer-panel .rt-name a:hover { text-decoration: underline; }
+/* Linked bookings */
+.row-group-badge { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; padding: 1px 6px; border-radius: 999px; background: rgba(47,159,237,0.16); color: #1d6fb8; font-size: 0.68rem; font-weight: 700; white-space: nowrap; cursor: help; }
+:root[data-theme="dark"] .row-group-badge { background: rgba(84,212,255,0.18); color: #7fd6ff; }
+.drawer-group-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(47,159,237,0.1); font-size: 0.76rem; line-height: 1.4; }
+.drawer-group-note .ghost-button { flex: none; padding: 4px 9px; font-size: 0.72rem; }
+.dup-details { padding: 10px 12px; border-radius: 10px; background: var(--panel-alt); font-size: 0.86rem; }
+.dup-details strong { font-size: 0.95rem; }
+.dup-choices { display: grid; gap: 10px; }
+.dup-choice { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; font: inherit; color: var(--text); }
+.dup-choice:hover { border-color: #2f9fed; background: rgba(47,159,237,0.08); }
+.dup-choice span { font-size: 0.78rem; color: var(--muted); }
+.modal-panel.dup-panel-wide { width: min(1100px, 100%); }
+.dup-rows td { white-space: nowrap; }
+.dup-rows .dup-source td { color: var(--muted); }
+.dup-input { min-height: 34px; padding: 4px 8px; font-size: 0.8rem; width: 100%; min-width: 120px; }
+.dup-date { min-width: 150px; }
+.dup-branch { min-width: 80px; }
+.dup-short { min-width: 110px; }
+.dup-actions { align-items: center; }
+.dup-spacer { flex: 1; }
+.staging-banner { position: sticky; top: 0; z-index: 2000; padding: 6px 12px; text-align: center; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; color: #3b0d0d; background: #ffb4b4; border-bottom: 2px solid #d93c56; }
 .rt-table-wrap { overflow-x: auto; }
 .rt-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .rt-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
