@@ -2160,7 +2160,9 @@ button.report-th.is-sorted { color: var(--blue); }
 .offer-panel .rt-name a { color: var(--text); text-decoration: none; }
 .offer-panel .rt-name a:hover { text-decoration: underline; }
 /* Linked bookings */
-.row-group-badge { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; padding: 1px 6px; border-radius: 999px; background: rgba(47,159,237,0.16); color: #1d6fb8; font-size: 0.68rem; font-weight: 700; white-space: nowrap; cursor: help; }
+.row-avatar-wrap { position: relative; display: inline-flex; width: 22px; height: 22px; }
+.row-group-badge { position: absolute; right: -7px; bottom: -5px; z-index: 1; min-width: 10px; height: 10px; padding: 2px; border-radius: 999px; background: #1d6fb8; color: #fff; font-size: 0.56rem; font-weight: 700; line-height: 10px; text-align: center; border: 2px solid var(--panel, #fff); white-space: nowrap; cursor: help; }
+:root[data-theme="dark"] .row-group-badge { background: #3b8fe6; border-color: var(--panel); }
 :root[data-theme="dark"] .row-group-badge { background: rgba(84,212,255,0.18); color: #7fd6ff; }
 .drawer-group-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(47,159,237,0.1); font-size: 0.76rem; line-height: 1.4; }
 .drawer-group-note .ghost-button { flex: none; padding: 4px 9px; font-size: 0.72rem; }
