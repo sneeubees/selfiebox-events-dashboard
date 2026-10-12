@@ -655,6 +655,10 @@ function DashboardApp() {
   const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
   const [search, setSearch] = useState('');
   const [newOnlyMode, setNewOnlyMode] = useState(false);
+  // Linked-booking filter: set by clicking a row's group badge; shows only that
+  // booking's rows (all months on this board). Cleared by clicking the badge
+  // again, the chip, or the Filter "x" (Johan, 2026-10-12).
+  const [groupFilterId, setGroupFilterId] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedBranches, setSelectedBranches] = useState([]);
   const [savedFilterViews, setSavedFilterViews] = useState([]);
@@ -1261,6 +1265,11 @@ function DashboardApp() {
         .filter((event) => event.status === 'Web Request')
         .sort((left, right) => sortEvents(left, right));
     }
+    if (groupFilterId) {
+      return yearEvents
+        .filter((event) => event.bookingGroupId === groupFilterId)
+        .sort((left, right) => sortEvents(left, right));
+    }
 
     return [...yearEvents]
       .filter((event) => {
@@ -1276,7 +1285,19 @@ function DashboardApp() {
         .filter((event) => (selectedPayments.length ? selectedPayments.includes(event.paymentStatus) : true))
         .filter((event) => (selectedAttendants.length ? (event.attendants || []).some((item) => selectedAttendants.includes(item)) : true))
         .sort((left, right) => sortEvents(left, right));
-  }, [yearEvents, search, newOnlyMode, selectedAttendants, selectedBranches, selectedPayments, selectedProducts, selectedStatuses]);
+  }, [yearEvents, search, newOnlyMode, groupFilterId, selectedAttendants, selectedBranches, selectedPayments, selectedProducts, selectedStatuses]);
+
+  // Drop the linked-booking filter if its rows leave this board (unlinked, deleted, moved year).
+  useEffect(() => {
+    if (groupFilterId && !yearEvents.some((event) => event.bookingGroupId === groupFilterId)) {
+      setGroupFilterId('');
+    }
+  }, [groupFilterId, yearEvents]);
+  const groupFilterInfo = useMemo(() => {
+    if (!groupFilterId) return null;
+    const rows = yearEvents.filter((event) => event.bookingGroupId === groupFilterId);
+    return { name: rows[0]?.name || 'Linked booking', count: rows.length };
+  }, [groupFilterId, yearEvents]);
 
   const eventsByMonth = useMemo(() => {
     const grouped = Object.fromEntries(monthNames.map((month) => [month, []]));
@@ -1287,7 +1308,7 @@ function DashboardApp() {
   }, [filteredEvents]);
 
   useEffect(() => {
-    const isNarrowedView = Boolean(search.trim()) || newOnlyMode;
+    const isNarrowedView = Boolean(search.trim()) || newOnlyMode || Boolean(groupFilterId);
     if (!isNarrowedView) {
       if (searchCollapsedStateRef.current) {
         setCollapsedMonths(searchCollapsedStateRef.current);
@@ -1308,7 +1329,7 @@ function DashboardApp() {
     if (hasChanged) {
       setCollapsedMonths(nextState);
     }
-  }, [collapsedMonths, eventsByMonth, search, newOnlyMode]);
+  }, [collapsedMonths, eventsByMonth, search, newOnlyMode, groupFilterId]);
 
   const selectedEvent = useMemo(() => events.find((event) => event.id === selectedId) || null, [events, selectedId]);
   const editingUser = useMemo(() => users.find((user) => user.id === editingUserId) || null, [users, editingUserId]);
@@ -3863,7 +3884,14 @@ function DashboardApp() {
     setter((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
   };
 
+  const toggleGroupFilter = (groupId) => {
+    setFiltersOpen(false);
+    setNewOnlyMode(false);
+    setGroupFilterId((current) => (current === groupId ? '' : groupId));
+  };
+
   const clearFilters = ({ includeSearch = false } = {}) => {
+    setGroupFilterId('');
     setSelectedBranches([]);
     setSelectedProducts([]);
     setSelectedStatuses([]);
@@ -3874,6 +3902,7 @@ function DashboardApp() {
     }
   };
   const activeFilterCount =
+    (groupFilterId ? 1 : 0) +
     selectedBranches.length +
     selectedProducts.length +
     selectedStatuses.length +
@@ -4819,9 +4848,9 @@ function DashboardApp() {
         <section className="board-shell">
         <div className="board-toolbar compact-toolbar">
           <div className="filters-grid compact-filters single-row-tools">
-            <div className={["search-input-wrap", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Search is paused while New is on' : undefined}>
-              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" disabled={newOnlyMode} />
-              {search && !newOnlyMode ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
+            <div className={["search-input-wrap", newOnlyMode || groupFilterId ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Search is paused while New is on' : (groupFilterId ? 'Search is paused while a linked booking is shown' : undefined)}>
+              <input className="text-input search-wide search-input" aria-label="Search events" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" disabled={newOnlyMode || Boolean(groupFilterId)} />
+              {search && !newOnlyMode && !groupFilterId ? <button className="search-clear-button" type="button" aria-label="Clear search" onClick={() => setSearch('')}>x</button> : null}
             </div>
             {hasNewRequests ? (
               <button
@@ -4851,6 +4880,7 @@ function DashboardApp() {
               </button>
               {hasActiveFilters && !newOnlyMode ? <button className="filter-clear-mini-button" type="button" aria-label="Clear filters" onClick={(event) => { event.stopPropagation(); clearFilters(); }}>x</button> : null}
             </div>
+            {groupFilterInfo && !newOnlyMode ? <button className="group-filter-chip" type="button" title="Showing only the rows of this linked booking. Click to show everything again." onClick={() => setGroupFilterId('')}><span className="group-filter-chip-icon" aria-hidden="true">&#9939;</span><span className="group-filter-chip-text">{groupFilterInfo.name} · {groupFilterInfo.count} linked {groupFilterInfo.count === 1 ? 'row' : 'rows'}</span><span className="group-filter-chip-close" aria-hidden="true">x</span></button> : null}
             {savedFilterViews.length ? (
               <div className={["saved-filter-chip-stack", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Filters are paused while New is on' : undefined}>
                 <div className="saved-filter-chip-label">Saved Filters</div>
@@ -4928,7 +4958,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -6026,7 +6056,7 @@ function renderEventFields(
     </>
   );
 }
-function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, allowPastDates, creatorProfileMap, groupSizes }) {
+function renderCell({ columnKey, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit, allowPastDates, creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter }) {
     if (columnKey === 'name') {
       const creatorProfile = creatorProfileMap.get(String(event.createdByUserId || '')) || null;
       const creatorName = creatorProfile?.fullName || event.createdByName || '';
@@ -6042,7 +6072,8 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
       const groupSize = event.bookingGroupId ? (groupSizes.get(event.bookingGroupId) || 1) : 0;
       // The badge sits ON the avatar (absolute corner) - as a 4th grid child it
       // took the name column and squashed the name/event-name inputs (2026-10-12).
-      const groupBadge = groupSize ? <span className="row-group-badge" title={`Linked booking: ${groupSize} rows on this board share quote, invoice, status, notes and files`}>{groupSize}</span> : null;
+      const isGroupFiltered = Boolean(groupFilterId) && groupFilterId === event.bookingGroupId;
+      const groupBadge = groupSize ? <button className={["row-group-badge", isGroupFiltered ? "is-active" : ""].join(" ").trim()} type="button" title={isGroupFiltered ? 'Showing only this linked booking. Click to show everything again.' : `Linked booking: ${groupSize} rows on this board share quote, invoice, status, notes and files. Click to show only these rows.`} aria-pressed={isGroupFiltered} onClick={(clickEvent) => { clickEvent.stopPropagation(); toggleGroupFilter?.(event.bookingGroupId); }}>{groupSize}</button> : null;
       return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-avatar-wrap">{avatarNode}{groupBadge}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
     }
   if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;

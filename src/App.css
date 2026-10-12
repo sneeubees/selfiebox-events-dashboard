@@ -2161,8 +2161,20 @@ button.report-th.is-sorted { color: var(--blue); }
 .offer-panel .rt-name a:hover { text-decoration: underline; }
 /* Linked bookings */
 .row-avatar-wrap { position: relative; display: inline-flex; width: 22px; height: 22px; }
-.row-group-badge { position: absolute; right: -8px; bottom: -3px; z-index: 1; min-width: 13px; height: 13px; padding: 2px; border-radius: 999px; background: #1d6fb8; color: #fff; font-size: 0.7rem; font-weight: 800; line-height: 13px; text-align: center; border: 2px solid var(--panel, #fff); white-space: nowrap; cursor: help; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25); }
+.row-group-badge { position: absolute; right: -10px; bottom: -5px; z-index: 1; width: 18px; height: 18px; padding: 0; border-radius: 999px; background: #1d6fb8; color: #fff; font: inherit; font-size: 0.66rem; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid var(--panel, #fff); white-space: nowrap; cursor: pointer; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3); box-sizing: content-box; }
+.row-group-badge:hover { background: #2a86d8; transform: scale(1.08); }
+.row-group-badge.is-active { background: #2f7d45; box-shadow: 0 0 0 2px rgba(47, 125, 69, 0.35), 0 1px 3px rgba(15, 23, 42, 0.3); }
 :root[data-theme="dark"] .row-group-badge { background: #3b8fe6; border-color: var(--panel); }
+:root[data-theme="dark"] .row-group-badge.is-active { background: #3aa65a; }
+/* Toolbar chip while a linked booking is shown on its own. */
+.group-filter-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; max-width: 320px; border: 1px solid #b6dfbf; border-radius: 8px; background: #e4f8e8; color: #2f6b3f; padding: 6px 8px 6px 10px; font: inherit; font-size: 0.74rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.group-filter-chip:hover { background: #d7f2dd; }
+.group-filter-chip-icon { font-size: 0.8rem; line-height: 1; }
+.group-filter-chip-text { overflow: hidden; text-overflow: ellipsis; }
+.group-filter-chip-close { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 999px; background: #c6ecd0; color: #3e8350; font-size: 0.62rem; font-weight: 700; line-height: 1; }
+:root[data-theme="dark"] .group-filter-chip { background: rgba(58, 166, 90, 0.18); border-color: rgba(58, 166, 90, 0.5); color: #9fe3b4; }
+:root[data-theme="dark"] .group-filter-chip:hover { background: rgba(58, 166, 90, 0.28); }
+:root[data-theme="dark"] .group-filter-chip-close { background: rgba(58, 166, 90, 0.35); color: #d6f5de; }
 .drawer-group-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: rgba(47,159,237,0.1); font-size: 0.76rem; line-height: 1.4; }
 .drawer-group-note .ghost-button { flex: none; padding: 4px 9px; font-size: 0.72rem; }
 .dup-details { padding: 10px 12px; border-radius: 10px; background: var(--panel-alt); font-size: 0.86rem; }
