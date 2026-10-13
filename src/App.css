@@ -607,10 +607,12 @@ button { cursor: pointer; }
 .file-delete { position: absolute; top: 7px; right: 7px; width: 20px; height: 20px; min-width: 20px; border: 0; border-radius: 999px; padding: 0; background: #ffe9ee; color: #c23c57; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .file-delete:hover { background: #ffdce5; }
 .file-delete:disabled { opacity: 0.45; cursor: not-allowed; background: #f3f4f7; color: #8994a8; }
-.file-preview-panel { width: min(940px, 100%); }
-.file-preview-body { min-height: 320px; max-height: 72vh; overflow: auto; display: grid; place-items: center; border-radius: 14px; background: #f7f9fc; border: 1px solid var(--line); }
-.file-preview-image { display: block; max-width: 100%; max-height: 68vh; object-fit: contain; }
-.file-preview-frame { width: min(820px, 100%); height: 68vh; border: 0; background: #fff; }
+/* PDF preview: no thumbnail pane, page fitted to the full width, as tall as the
+   screen allows (Johan, 2026-10-13). The viewer hints are in the iframe URL. */
+.file-preview-panel { width: min(1180px, calc(100vw - 32px)); }
+.file-preview-body { min-height: 320px; max-height: 82vh; overflow: auto; display: grid; place-items: center; border-radius: 14px; background: #f7f9fc; border: 1px solid var(--line); }
+.file-preview-image { display: block; max-width: 100%; max-height: 78vh; object-fit: contain; }
+.file-preview-frame { width: 100%; height: 80vh; border: 0; background: #fff; }
 .file-preview-link { text-decoration: none; }
 textarea { resize: vertical; min-height: 110px; }
 .modal-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, 0.28); }
