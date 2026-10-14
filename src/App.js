@@ -595,6 +595,7 @@ function DashboardApp() {
     canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip'
   );
   const hasAnyEvents = useQuery(api.events.hasAny, canAccessDashboard ? {} : 'skip');
+  const webRequestCountsByYear = useQuery(api.events.webRequestCountsByYear, canAccessDashboard ? {} : 'skip');
   const websiteStats = useQuery(api.websiteStats.getWebsiteStats, canAccessDashboard ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
   const customColumnRecords = useQuery(api.columns.listAll, canAccessDashboard ? {} : 'skip');
@@ -655,6 +656,11 @@ function DashboardApp() {
   const saveCommissionRatesMutation = useMutation(api.commissions.saveRates);
   const [search, setSearch] = useState('');
   const [newOnlyMode, setNewOnlyMode] = useState(false);
+  // Which board year the merged `events` state currently belongs to. While a
+  // year switch is loading, `yearEvents` is empty, so New-mode must not auto-exit.
+  const [loadedEventsYear, setLoadedEventsYear] = useState(null);
+  const selectedWorkspaceYearRef = useRef(selectedWorkspaceYear);
+  selectedWorkspaceYearRef.current = selectedWorkspaceYear;
   // Linked-booking filter: set by clicking a row's group badge; shows only that
   // booking's rows (all months on this board). Cleared by clicking the badge
   // again, the chip, or the Filter "x" (Johan, 2026-10-12).
@@ -1250,10 +1256,24 @@ function DashboardApp() {
   // "New" mode is active, drop out of it automatically instead of leaving the
   // user stuck on a hidden toggle with nothing left to show.
   useEffect(() => {
-    if (newOnlyMode && !hasNewRequests) {
+    if (newOnlyMode && !hasNewRequests && loadedEventsYear === selectedWorkspaceYear) {
       setNewOnlyMode(false);
     }
-  }, [newOnlyMode, hasNewRequests]);
+  }, [newOnlyMode, hasNewRequests, loadedEventsYear, selectedWorkspaceYear]);
+
+  // "New <year>" buttons: Web Request rows sitting on OTHER boards (a website
+  // request for next year lands on next year's board - Johan, 2026-10-14).
+  const otherYearNewRequests = useMemo(
+    () => (webRequestCountsByYear || []).filter((entry) => entry.count > 0 && Number(entry.year) !== Number(selectedWorkspaceYear)),
+    [webRequestCountsByYear, selectedWorkspaceYear]
+  );
+  const openNewRequestsForYear = (year) => {
+    setFiltersOpen(false);
+    setYearMenuOpen(false);
+    setGroupFilterId('');
+    setSelectedWorkspaceYear(Number(year));
+    setNewOnlyMode(true);
+  };
 
   const filteredEvents = useMemo(() => {
     // "New" is a temporary override: while it is pressed, search and every
@@ -1948,6 +1968,7 @@ function DashboardApp() {
     eventsSeededRef.current = true;
     eventsRef.current = mergedEvents;
     setEvents(mergedEvents);
+    setLoadedEventsYear(selectedWorkspaceYearRef.current);
 
     if (remergeTick < 0) {
       return undefined;
@@ -4864,6 +4885,18 @@ function DashboardApp() {
                 <span className="new-requests-count">{newRequestCount}</span>
               </button>
             ) : null}
+            {otherYearNewRequests.map((entry) => (
+              <button
+                key={entry.year}
+                className="new-requests-button new-requests-year-button"
+                type="button"
+                title={`${entry.count} new web request${entry.count === 1 ? '' : 's'} on the ${entry.year} board. Click to open that board and show them.`}
+                onClick={() => openNewRequestsForYear(entry.year)}
+              >
+                New {entry.year}
+                <span className="new-requests-count">{entry.count}</span>
+              </button>
+            ))}
             <div className={["filter-button-wrap", newOnlyMode ? "is-paused" : ""].join(" ").trim()} title={newOnlyMode ? 'Filters are paused while New is on' : undefined}>
               <button
                 className={[
