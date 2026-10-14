@@ -147,7 +147,8 @@ export default defineSchema({
     .index("by_event_key", ["eventKey"])
     .index("by_workspace_year", ["workspaceYear"])
     .index("by_date", ["date"])
-    .index("by_booking_group", ["bookingGroupId"]),
+    .index("by_booking_group", ["bookingGroupId"])
+    .index("by_status", ["status"]),
   deletedEventKeys: defineTable({
     eventKey: v.string(),
     deletedAt: v.number(),

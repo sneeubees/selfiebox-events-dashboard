@@ -515,6 +515,35 @@ export const hasAny = query({
   },
 });
 
+// Toolbar "New <year>" buttons: how many rows are still at Web Request on each
+// board OTHER than the one being viewed (a website request for next year lands
+// on next year's board, where nobody is looking - Johan, 2026-10-14). Reads only
+// the Web Request rows via the by_status index, so it stays cheap and reactive.
+export const webRequestCountsByYear = query({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      await requireCurrentUser(ctx);
+    } catch {
+      return [];
+    }
+    const rows = await ctx.db
+      .query("events")
+      .withIndex("by_status", (q) => q.eq("status", "Web Request"))
+      .collect();
+    const counts = new Map();
+    for (const row of rows) {
+      // Same board rule as the frontend: the event date decides the board,
+      // falling back to workspaceYear for rows without a date.
+      const match = String(row.date || "").match(/^(\d{4})-/);
+      const year = match ? Number(match[1]) : Number(row.workspaceYear);
+      if (!Number.isFinite(year)) continue;
+      counts.set(year, (counts.get(year) || 0) + 1);
+    }
+    return [...counts.entries()].map(([year, count]) => ({ year, count })).sort((a, b) => a.year - b.year);
+  },
+});
+
 export const seedInitialData = mutation({
   args: {},
   handler: async (ctx) => {
