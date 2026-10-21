@@ -864,7 +864,10 @@ export const cloneEvent = mutation({
       vinyl: source.vinyl || "",
       gsAi: source.gsAi || "",
       imagesSent: source.imagesSent || "",
-      snappic: source.snappic || "",
+      // Rule (Johan, 2026-10-21): a copy never carries the Snappic mark over. Nicole
+      // ticks it once she has created the Snappic site, so a copied tick made her
+      // think the new event's site already existed.
+      snappic: "",
       attendants: source.attendants || [],
       exVat: source.exVat ?? "",
       packageOnly: source.packageOnly || "",
@@ -971,7 +974,8 @@ export const cloneEvent = mutation({
       ? `Duplicated from ${source.name || "Untitled event"} with drawer data.`
       : `Duplicated from ${source.name || "Untitled event"} without drawer data.`)
       + (changedOnCopy.length ? ` Changed on the copy: ${changedOnCopy.join("; ")}.` : "")
-      + (exclJcReset ? " Excl JC reset to 0 on the copy." : "");
+      + (exclJcReset ? " Excl JC reset to 0 on the copy." : "")
+      + (String(source.snappic || "").trim() ? " Snappic cleared on the copy." : "");
     await ctx.db.insert("activityLog", {
       workspaceYear: source.workspaceYear,
       eventId: createdId,

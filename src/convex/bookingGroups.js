@@ -268,7 +268,8 @@ export const createLinkedRows = mutation({
         vinyl: source.vinyl || "",
         gsAi: source.gsAi || "",
         imagesSent: source.imagesSent || "",
-        snappic: source.snappic || "",
+        // Same rule as cloneEvent (Johan, 2026-10-21): new rows start without the Snappic mark.
+        snappic: "",
         attendants: row.attendants ?? [],
         exVat: source.exVat ?? "",
         packageOnly: source.packageOnly || "",
@@ -299,7 +300,7 @@ export const createLinkedRows = mutation({
         workspaceYear: parsed.getFullYear(),
         eventId,
         eventName: source.name || "Untitled event",
-        text: `Added to the linked booking of ${source.name || "Untitled event"} (${date}${row.branch && row.branch.length ? ", " + row.branch.join("/") : ""}).`,
+        text: `Added to the linked booking of ${source.name || "Untitled event"} (${date}${row.branch && row.branch.length ? ", " + row.branch.join("/") : ""}).${String(source.snappic || "").trim() ? " Snappic left blank on the new row." : ""}`,
         shortText: `${source.name || "Untitled event"}: linked row added (${date})`.slice(0, 120),
         actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
         actorUserId: currentUser._id,
