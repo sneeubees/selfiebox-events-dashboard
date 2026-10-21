@@ -83,7 +83,16 @@ const OFFER_LABELS = {
   YEAR_END_360_2026_LED_STANCHIONS: "360 Spin \u2014 one FREE extra hour, FREE LED lights & stanchions",
   YEAR_END_2026_EXTRA_HOUR: "Photo Booth \u2014 one FREE extra hour",
 };
+const YEAR_END_EXCLUDED_DATES = new Set(["2026-11-27", "2026-11-28", "2026-12-04", "2026-12-05", "2026-12-11", "2026-12-12"]);
+function isYearEndStandardQuote(fd) {
+  return YEAR_END_EXCLUDED_DATES.has(s(fd && fd.eventDate)) && /\[(?:YEAR_END_STANDARD_QUOTE|OFFER:\s*(?:YEAR_END_360_2026_LED_STANCHIONS|YEAR_END_2026_EXTRA_HOUR))\]/.test(s(fd && fd.message));
+}
+function standardQuoteBanner(fd) {
+  if (!isYearEndStandardQuote(fd)) return "";
+  return messageBlock("Sorry, our year-end special is no longer available for your selected date. Your enquiry has been received and our team will send you a full quote at our standard rates soon. Your booking is not yet confirmed.");
+}
 function detectOffer(fd) {
+  if (isYearEndStandardQuote(fd)) return null;
   const msg = s(fd && fd.message);
   const tag = msg.match(/\[OFFER:\s*([A-Z0-9_]+)\]/);
   if (!tag) return null;
@@ -140,7 +149,9 @@ function buildQuoteEmailHtml(fd, variant, ref, submitted) {
   const cta = variant === "customer" ? "" :
     `<tr><td style="padding:28px 32px 30px" align="center">${button}<div style="margin-top:14px;font:400 12px/1.5 ${FONT};color:${MUTED}">Or call them directly on ${esc(fd.cell)}</div></td></tr>`;
   const tail = variant === "customer" ? `<tr><td style="height:14px;line-height:14px;font-size:0">&nbsp;</td></tr>` : "";
-  const eyebrow = offer
+  const eyebrow = isYearEndStandardQuote(fd)
+    ? (variant === "customer" ? "Full Quote Request Received" : "New Full Quote Request — Special Unavailable")
+    : offer
     ? (variant === "customer" ? "Year End Special \u2014 Enquiry Received" : "New Year End Special Enquiry")
     : (variant === "customer" ? "Enquiry Received" : "New Booking Enquiry");
 
@@ -155,7 +166,7 @@ function buildQuoteEmailHtml(fd, variant, ref, submitted) {
     + `<tr><td align="center" style="padding:14px 32px 3px"><div style="font:700 13px/1 ${FONT};letter-spacing:.18em;text-transform:uppercase;color:${ACCENT}">${eyebrow}</div></td></tr>`
     + `<tr><td align="center" style="padding:0 32px 20px"><div style="font:500 12px/1.4 ${FONT};color:${MUTED}">Ref ${esc(ref)} &nbsp;&bull;&nbsp; ${esc(submitted)}</div></td></tr>`
     + `<tr><td style="padding:0 32px"><div style="border-top:1px solid ${LINE};font-size:0;line-height:0">&nbsp;</div></td></tr>`
-    + offerBanner(offer) + thanks + boothRow + section("Your Selection", selRows) + section("Event Details", eventRows)
+    + standardQuoteBanner(fd) + offerBanner(offer) + thanks + boothRow + section("Your Selection", selRows) + section("Event Details", eventRows)
     + section("Contact Details", contactRows) + chips(fd.optionalExtras) + messageBlock(fd.message) + cta + tail
     + `</table></td></tr>`
     + `<tr><td style="padding:22px 24px 8px" align="center"><div style="font:600 14px/1.5 ${FONT};color:#c7d5ee">SelfieBox &mdash; Premium Photo Booth Hire</div>`
@@ -255,7 +266,7 @@ export async function sendQuoteEmails(fd, result) {
   const rcpt = officeRecipients(fd.region);
   out.office = await sendOne(apiKey, {
     from, to: rcpt.to, cc: rcpt.cc, reply_to: s(fd.email) || undefined,
-    subject: `${detectOffer(fd) ? "YEAR END SPECIAL — " : ""}New Booking Enquiry — ${s(fd.functionType) || "Event"}, ${s(fd.eventDate)} [${ref}]`,
+    subject: `${isYearEndStandardQuote(fd) ? "FULL QUOTE — SPECIAL UNAVAILABLE — " : ""}${detectOffer(fd) ? "YEAR END SPECIAL — " : ""}New Booking Enquiry — ${s(fd.functionType) || "Event"}, ${s(fd.eventDate)} [${ref}]`,
     html: buildQuoteEmailHtml(fd, "office", ref, submitted),
     attachments,
   });
@@ -263,7 +274,7 @@ export async function sendQuoteEmails(fd, result) {
   if (s(fd.email) && s(fd.email).includes("@")) {
     out.customer = await sendOne(apiKey, {
       from, to: [s(fd.email)], reply_to: rcpt.replyAll,
-      subject: detectOffer(fd) ? `Your SelfieBox Year End Special enquiry, ${first}! [${ref}]` : `Thanks for your SelfieBox enquiry, ${first}! [${ref}]`,
+      subject: isYearEndStandardQuote(fd) ? `Your SelfieBox full quote request, ${first}! [${ref}]` : detectOffer(fd) ? `Your SelfieBox Year End Special enquiry, ${first}! [${ref}]` : `Thanks for your SelfieBox enquiry, ${first}! [${ref}]`,
       html: buildQuoteEmailHtml(fd, "customer", ref, submitted),
       attachments,
     });
