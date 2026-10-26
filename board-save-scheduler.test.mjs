@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./src/boardSaveScheduler.js', import.meta.url), 'utf8');
-const { createBoardSaveScheduler, nextBoardSaveTiming, TYPING_SAVE, BOARD_SAVE_DELAY_MS, BOARD_TYPING_SAVE_DELAY_MS } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+const { createBoardSaveScheduler, nextBoardSaveTiming, flushBeforeUnload, TYPING_SAVE, BOARD_SAVE_DELAY_MS, BOARD_TYPING_SAVE_DELAY_MS, UNSAVED_CHANGES_MESSAGE } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 
 // Manual clock: advance(ms) runs due timers in order.
 function fakeClock() {
@@ -145,4 +145,48 @@ test('rows are independent', () => {
   assert.equal(scheduler.isPending('a'), true);
   clock.advance(1750);
   assert.deepEqual(sent, [['b', 'pick'], ['a', 'typing']]);
+});
+
+// A stand-in for the browser's beforeunload event.
+function unloadEvent() {
+  return { prevented: false, returnValue: undefined, preventDefault() { this.prevented = true; } };
+}
+
+test('hasPending reflects waiting saves', () => {
+  const { scheduler, save, type } = setup();
+  assert.equal(scheduler.hasPending(), false);
+  type('a', 1);
+  save('b', 2);
+  assert.equal(scheduler.hasPending(), true);
+  scheduler.flush('a');
+  assert.equal(scheduler.hasPending(), true);
+  scheduler.cancel('b');
+  assert.equal(scheduler.hasPending(), false);
+});
+
+test('closing or reloading while a typed save waits: sends it and asks "Leave site?"', () => {
+  const { clock, scheduler, sent, type } = setup();
+  type('a', '7370');
+  clock.advance(300); // well inside the 2 s typing wait, cell never left
+  const event = unloadEvent();
+  assert.equal(flushBeforeUnload(scheduler, event), true);
+  assert.deepEqual(sent, [['a', '7370']]);
+  assert.equal(event.prevented, true);
+  assert.equal(event.returnValue, UNSAVED_CHANGES_MESSAGE);
+  assert.equal(scheduler.hasPending(), false);
+  // Staying on the page: the save is not sent a second time later.
+  clock.advance(5000);
+  scheduler.flushAll();
+  assert.equal(sent.length, 1);
+});
+
+test('closing with nothing waiting does not ask', () => {
+  const { scheduler, sent, type } = setup();
+  type('a', 'x');
+  scheduler.flush('a'); // the cell was left; Convex's own prompt covers it now
+  const event = unloadEvent();
+  assert.equal(flushBeforeUnload(scheduler, event), false);
+  assert.equal(event.prevented, false);
+  assert.equal(event.returnValue, undefined);
+  assert.equal(sent.length, 1);
 });

@@ -7,6 +7,10 @@
 //   pressed (the caller calls flush), or 2 s after the last keystroke if the
 //   cell stays focused, and flushAll() when the tab is hidden or the page
 //   goes away. The board shows the typed value at once; only the save waits.
+// - Leaving or reloading the page while a save is still waiting here (Cmd+R,
+//   Cmd+W or a bookmark never leave the cell) sends it and asks "Leave site?"
+//   (flushBeforeUnload), because Convex's own prompt only knows about saves
+//   already handed to it.
 // - Everything else (picks, ticks, dates, new rows, retries): 250 ms, as
 //   before. A save like that which is already waiting keeps its deadline even
 //   if typing follows on the same row, so typing never delays it.
@@ -76,5 +80,25 @@ export function createBoardSaveScheduler({
     isPending(id) {
       return pending.has(id);
     },
+    hasPending() {
+      return pending.size > 0;
+    },
   };
+}
+
+// Same wording as Convex's own unsaved-changes prompt (browsers show their own
+// text these days; it only has to be non-empty for older ones).
+export const UNSAVED_CHANGES_MESSAGE = 'Are you sure you want to leave? Your changes may not be saved.';
+
+// beforeunload: Convex's listener (added when the client is created, so it runs
+// first) only prompts while a request it was given is unfinished. A save still
+// waiting here would otherwise only go out on pagehide, milliseconds before the
+// socket closes. Send it now and ask "Leave site?" so it can finish while the
+// dialog is open. Returns true when the page asked.
+export function flushBeforeUnload(scheduler, unloadEvent) {
+  if (!scheduler.hasPending()) return false;
+  scheduler.flushAll();
+  unloadEvent.preventDefault();
+  unloadEvent.returnValue = UNSAVED_CHANGES_MESSAGE;
+  return true;
 }

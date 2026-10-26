@@ -7,7 +7,7 @@ import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './go
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
-import { createBoardSaveScheduler, TYPING_SAVE } from './boardSaveScheduler';
+import { createBoardSaveScheduler, flushBeforeUnload, TYPING_SAVE } from './boardSaveScheduler';
 import {
   BOARD_COLUMNS,
   PAYMENT_OPTIONS,
@@ -2227,16 +2227,23 @@ function DashboardApp() {
 
   useEffect(() => {
     // Typed edits still waiting for their save go out as soon as the tab is
-    // hidden, the page is closed or reloaded, or the board unmounts.
+    // hidden, the page is closed or reloaded, or the board unmounts. Closing
+    // or reloading also asks "Leave site?" while one is waiting, so the save
+    // can finish (Convex's own prompt cannot see it yet).
     const flushAll = () => boardSaveScheduler.flushAll();
     const flushWhenHidden = () => {
       if (document.visibilityState === 'hidden') {
         flushAll();
       }
     };
+    const flushBeforeLeaving = (unloadEvent) => {
+      flushBeforeUnload(boardSaveScheduler, unloadEvent);
+    };
+    window.addEventListener('beforeunload', flushBeforeLeaving);
     window.addEventListener('pagehide', flushAll);
     document.addEventListener('visibilitychange', flushWhenHidden);
     return () => {
+      window.removeEventListener('beforeunload', flushBeforeLeaving);
       window.removeEventListener('pagehide', flushAll);
       document.removeEventListener('visibilitychange', flushWhenHidden);
       flushAll();
