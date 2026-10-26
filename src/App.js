@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
-import { Authenticated, AuthLoading, Unauthenticated, useAction, useMutation, useQuery } from 'convex/react';
+import { Authenticated, AuthLoading, Unauthenticated, useAction, useConvex, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
@@ -8352,10 +8352,30 @@ function ResponseTimeSection({ def, data }) {
 }
 function ResponseTimesReportView({ reports }) {
   const { year, canAccess } = reports;
-  const data = useQuery(api.responseTimes.get, canAccess ? { workspaceYear: year } : 'skip');
+  // Fetched once per open / year / Refresh, not a live subscription: a full
+  // year scan that re-ran on every board save while this page sat open.
+  const convex = useConvex();
+  const [loaded, setLoaded] = useState({ year: null, data: undefined, error: '' });
+  const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    if (!canAccess) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    convex.query(api.responseTimes.get, { workspaceYear: year })
+      .then((result) => { if (!cancelled) setLoaded({ year, data: result, error: '' }); })
+      .catch((error) => { if (!cancelled) setLoaded((current) => ({ year, data: current.year === year ? current.data : undefined, error: String(error?.message || error) })); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [convex, canAccess, year, refreshKey]);
+  const data = loaded.year === year ? loaded.data : undefined;
+  const loadError = loaded.year === year ? loaded.error : '';
   const head = (
-    <header className="statspage-viewhead"><div><h2>Response Times</h2><p className="webstats-muted">How long each step takes for {year} events. Calendar time, nights and weekends included. Each section shows the last 10; &ldquo;More&rdquo; breaks the year down per month.</p></div></header>
+    <header className="statspage-viewhead"><div><h2>Response Times</h2><p className="webstats-muted">How long each step takes for {year} events. Calendar time, nights and weekends included. Each section shows the last 10; &ldquo;More&rdquo; breaks the year down per month.</p></div>{canAccess ? <div className="webstats-controls"><button className="ghost-button" type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button></div> : null}</header>
   );
+  if (data === undefined && loadError) {
+    return <div className="statspage-view">{head}<div className="webstats-empty"><p>Couldn&apos;t load response times.</p><p className="webstats-muted">{loadError}</p><button className="ghost-button" type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading}>Retry</button></div></div>;
+  }
   if (data === undefined) {
     return <div className="statspage-view">{head}<div className="inline-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading response times&hellip;</div></div>;
   }
@@ -8368,6 +8388,7 @@ function ResponseTimesReportView({ reports }) {
   if (excluded.createdAsQuoteSent) notes.push(`${excluded.createdAsQuoteSent} events were created already as Quote Sent, so there is no request-to-quote time for them.`);
   if (excluded.invoiceBeforeInProgress) notes.push(`${excluded.invoiceBeforeInProgress} events had the invoice uploaded before they were marked In Progress.`);
   if (excluded.completedBeforeEventDay) notes.push(`${excluded.completedBeforeEventDay} events were marked completed before the event day.`);
+  notes.push(loadError ? `Refresh failed (${loadError}); showing figures from ${formatStampSA(data.generatedAt)}.` : `Figures as of ${formatStampSA(data.generatedAt)}; Refresh to update.`);
   return (
     <div className="statspage-view">
       {head}
@@ -9423,15 +9444,26 @@ function AIAnalysisView({ isAdmin }) {
 const OFFER_PAGE_LABELS = { '/year-end-360/': 'Year-End 360', '/year-end-photo-booths/': 'Year-End Photo Booths' };
 function OfferStatsPanel({ range, periodLabel, isAdmin }) {
   const runPages = useAction(api.ga4.getOfferPageStats);
+  const convex = useConvex();
   const [visits, setVisits] = useState(undefined);
-  const quotes = useQuery(api.websiteStats.getOfferStats, range);
+  // Requests/conversions are fetched once per period / Refresh, not as a live
+  // subscription: it re-ran on every board save while this tab sat open and
+  // filled the backend on 20 Oct.
+  const [quotes, setQuotes] = useState(undefined);
+  const [quotesError, setQuotesError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setVisits(undefined);
+    setQuotes(undefined);
+    setQuotesError('');
     runPages(range).then((res) => { if (!cancelled) setVisits(res); }).catch((e) => { if (!cancelled) setVisits({ error: String(e?.message || e) }); });
+    convex.query(api.websiteStats.getOfferStats, { startDate: range.startDate, endDate: range.endDate })
+      .then((res) => { if (!cancelled) setQuotes(res); })
+      .catch((e) => { if (!cancelled) { setQuotes(null); setQuotesError(String(e?.message || e)); } });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.startDate, range.endDate]);
+  }, [range.startDate, range.endDate, refreshKey]);
   const visitFor = (path) => (visits && visits.pages ? visits.pages.find((p) => p.path === path) : null);
   const visitsNote = visits === undefined ? 'loading…' : visits?.error || visits?.connected === false ? 'Google Analytics not available' : '';
   const rows = (quotes && quotes.pages) || Object.entries(OFFER_PAGE_LABELS).map(([path, label]) => ({ path, label }));
@@ -9440,6 +9472,7 @@ function OfferStatsPanel({ range, periodLabel, isAdmin }) {
     <section className="rt-section offer-panel">
       <div className="rt-section-head">
         <div><h3>Year-End Specials <span className="webstats-muted">({periodLabel})</span></h3><p className="webstats-muted">Visits from Google Analytics, requests and conversions from the dashboard. Converted = the request reached In Progress.</p></div>
+        <button className="ghost-button" type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={quotes === undefined}>{quotes === undefined ? 'Refreshing...' : 'Refresh'}</button>
       </div>
       <div className="rt-table-wrap">
         <table className="rt-table">
@@ -9459,6 +9492,7 @@ function OfferStatsPanel({ range, periodLabel, isAdmin }) {
           </tbody>
         </table>
       </div>
+      {quotesError ? <p className="report-caption">Couldn&apos;t load quote requests ({quotesError}). Try Refresh.</p> : null}
       {!isAdmin ? <p className="report-caption">Visits need an admin Google connection.</p> : null}
     </section>
   );
