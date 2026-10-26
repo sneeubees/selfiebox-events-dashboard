@@ -626,6 +626,7 @@ export const upsert = mutation({
     }),
     // Linked bookings: when the status changed on this row, also move the siblings.
     applyStatusToGroup: v.optional(v.boolean()),
+    applySnappicToGroup: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const currentUser = await requireCurrentUser(ctx);
@@ -706,7 +707,7 @@ export const upsert = mutation({
       const refreshed = await ctx.db.get(existing._id);
       // Linked booking: copy the SHARED fields that actually changed to the siblings.
       if (refreshed.bookingGroupId) {
-        await fanOutSharedFields(ctx, existing, refreshed, currentUser, { applyStatusToGroup: Boolean(args.applyStatusToGroup) });
+        await fanOutSharedFields(ctx, existing, refreshed, currentUser, { applyStatusToGroup: Boolean(args.applyStatusToGroup), applySnappicToGroup: Boolean(args.applySnappicToGroup) });
       }
       const changedFields = getChangedEventFields(existing, refreshed);
       if (changedFields.length) {

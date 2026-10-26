@@ -622,6 +622,9 @@ function DashboardApp() {
   // Rows whose next save must move the status of the whole linked booking.
   const pendingGroupStatusRef = useRef(new Set());
   const [groupStatusPrompt, setGroupStatusPrompt] = useState(null); // { eventId, statusName, count }
+  // Snappic on a linked row asks the same question (it used to tick every linked day silently).
+  const pendingGroupSnappicRef = useRef(new Set());
+  const [groupSnappicPrompt, setGroupSnappicPrompt] = useState(null); // { eventId, value, count }
   const upsertLabelOptionMutation = useMutation(api.labels.upsert);
   const removeLabelOptionMutation = useMutation(api.labels.remove);
   const createCustomColumnMutation = useMutation(api.columns.create);
@@ -2211,7 +2214,13 @@ function DashboardApp() {
     boardSaveScheduler.schedule(event.id, () => {
       const applyStatusToGroup = pendingGroupStatusRef.current.has(event.id);
       pendingGroupStatusRef.current.delete(event.id);
-      void upsertEventMutation({ event: serializeEventForConvex(event), ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}) })
+      const applySnappicToGroup = pendingGroupSnappicRef.current.has(event.id);
+      pendingGroupSnappicRef.current.delete(event.id);
+      void upsertEventMutation({
+        event: serializeEventForConvex(event),
+        ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}),
+        ...(applySnappicToGroup ? { applySnappicToGroup: true } : {}),
+      })
         .then(() => {
           if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
             return;
@@ -4608,8 +4617,24 @@ function DashboardApp() {
   };
 
   const selectManagedSingleValue = (columnKey, eventId, value) => {
-    updateEvent(eventId, (event) => ({ ...event, [columnKey]: value }));
     setManagedSingleEditor({ columnKey: '', eventId: '' });
+    if (columnKey === 'snappic') {
+      const target = eventsRef.current.find((event) => event.id === eventId);
+      const count = target && target.bookingGroupId ? groupSizes.get(target.bookingGroupId) || 0 : 0;
+      if (target && count > 1 && (target.snappic || '') !== value) {
+        setGroupSnappicPrompt({ eventId, value, count });
+        return;
+      }
+    }
+    updateEvent(eventId, (event) => ({ ...event, [columnKey]: value }));
+  };
+
+  const applyGroupSnappicChoice = (applyToAll) => {
+    const prompt = groupSnappicPrompt;
+    setGroupSnappicPrompt(null);
+    if (!prompt) return;
+    if (applyToAll) pendingGroupSnappicRef.current.add(prompt.eventId);
+    updateEvent(prompt.eventId, (event) => ({ ...event, snappic: prompt.value }));
   };
 
   const openAttendantManager = () => {
@@ -5744,6 +5769,7 @@ function DashboardApp() {
         </div>
       </ModalShell> : null}
       {groupStatusPrompt ? <ModalShell title="Linked booking" onClose={() => setGroupStatusPrompt(null)}><div className="simple-stack"><p>This row is one of <strong>{groupStatusPrompt.count}</strong> linked rows. Set the status to <strong>{groupStatusPrompt.statusName}</strong> on all of them, or only this one?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setGroupStatusPrompt(null)}>Cancel</button><button className="ghost-button" type="button" onClick={() => applyGroupStatusChoice(false)}>Only this one</button><button className="primary-button" type="button" onClick={() => applyGroupStatusChoice(true)}>All {groupStatusPrompt.count} linked rows</button></div></div></ModalShell> : null}
+      {groupSnappicPrompt ? <ModalShell title="Linked booking" onClose={() => setGroupSnappicPrompt(null)}><div className="simple-stack"><p>This row is one of <strong>{groupSnappicPrompt.count}</strong> linked rows. {groupSnappicPrompt.value ? <>Set Snappic to <strong>{groupSnappicPrompt.value}</strong></> : 'Clear Snappic'} on all of them, or only this one?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setGroupSnappicPrompt(null)}>Cancel</button><button className="ghost-button" type="button" onClick={() => applyGroupSnappicChoice(false)}>Only this one</button><button className="primary-button" type="button" onClick={() => applyGroupSnappicChoice(true)}>All {groupSnappicPrompt.count} linked rows</button></div></div></ModalShell> : null}
       {noticeDialog.isOpen ? <ModalShell title={noticeDialog.title} onClose={closeNotice}><div className="simple-stack"><p>{noticeDialog.message}</p><div className="modal-actions"><button className="primary-button" type="button" onClick={closeNotice}>OK</button></div></div></ModalShell> : null}
     </div>
   );

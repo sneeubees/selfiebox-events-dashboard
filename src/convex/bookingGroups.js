@@ -10,12 +10,13 @@ import { mutation, query } from "./_generated/server";
 // is changed on any row, the change is copied to the siblings in the same
 // transaction (events.js:upsert -> fanOutSharedFields). Per-row fields stay
 // independent: event name, date, branch, location, hours, time, products,
-// quantities, attendants, Excl JC, status (status asks "apply to all?").
+// quantities, attendants, Excl JC, status and Snappic (both ask "apply to
+// all?"; Nicole, 26 Oct 2026: ticking Snappic on one day ticked every day).
 // ---------------------------------------------------------------------------
 
 export const SHARED_FIELDS = [
   "name", "paymentStatus", "accounts", "quoteNumber", "invoiceNumber", "exVatAuto",
-  "vinyl", "gsAi", "imagesSent", "snappic", "packageOnly", "notes", "digitalOnly", "exVat",
+  "vinyl", "gsAi", "imagesSent", "packageOnly", "notes", "digitalOnly", "exVat",
 ];
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -69,6 +70,8 @@ export async function fanOutSharedFields(ctx, before, after, currentUser, option
   for (const key of SHARED_FIELDS) {
     if (comparable(before?.[key]) !== comparable(after[key])) patch[key] = after[key];
   }
+  // Snappic is copied only when the user chose "All linked rows".
+  if (options.applySnappicToGroup && comparable(before?.snappic) !== comparable(after.snappic)) patch.snappic = after.snappic || "";
   const customBefore = before?.customFields || {};
   const customAfter = after.customFields || {};
   const customChanges = {};
