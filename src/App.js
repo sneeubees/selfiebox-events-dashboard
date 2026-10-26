@@ -597,7 +597,6 @@ function DashboardApp() {
   );
   const hasAnyEvents = useQuery(api.events.hasAny, canAccessDashboard ? {} : 'skip');
   const webRequestCountsByYear = useQuery(api.events.webRequestCountsByYear, canAccessDashboard ? {} : 'skip');
-  const websiteStats = useQuery(api.websiteStats.getWebsiteStats, canAccessDashboard ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
   const customColumnRecords = useQuery(api.columns.listAll, canAccessDashboard ? {} : 'skip');
   const staticColumnLabelRecords = useQuery(api.staticColumnLabels.listAll, canAccessDashboard ? {} : 'skip');
@@ -699,12 +698,28 @@ function DashboardApp() {
   const [pendingAttendantFileCategory, setPendingAttendantFileCategory] = useState('');
   const [showChangelogModal, setShowChangelogModal] = useState(false);
   const commissionRatesRecord = useQuery(api.commissions.getRates, canAccessDashboard && currentUser?.role === 'admin' ? {} : 'skip');
-  const liveTurnoverRecords = useQuery(
-    api.turnover.getLiveTurnover,
-    canAccessDashboard && currentUser?.role === 'admin' && showWebsiteStats
-      ? { workspaceYear: selectedWorkspaceYear }
-      : 'skip'
-  );
+  // This year's turnover for Info & Reporting: fetched when the page opens, when the
+  // board year changes and on Refresh. As a live subscription it re-read the whole
+  // year on every board save while the page sat open.
+  const convexClient = useConvex();
+  const turnoverWanted = Boolean(canAccessDashboard && currentUser?.role === 'admin' && showWebsiteStats);
+  const [liveTurnoverRecords, setLiveTurnoverRecords] = useState(undefined);
+  const [turnoverRefreshKey, setTurnoverRefreshKey] = useState(0);
+  useEffect(() => {
+    if (!turnoverWanted) {
+      setLiveTurnoverRecords(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    setLiveTurnoverRecords(undefined);
+    convexClient.query(api.turnover.getLiveTurnover, { workspaceYear: selectedWorkspaceYear })
+      .then((records) => { if (!cancelled) setLiveTurnoverRecords(records); })
+      .catch((error) => {
+        console.error('Failed to load turnover', error);
+        if (!cancelled) setLiveTurnoverRecords(null);
+      });
+    return () => { cancelled = true; };
+  }, [convexClient, turnoverWanted, selectedWorkspaceYear, turnoverRefreshKey]);
   const commissionOverrideRecords = useQuery(
     api.commissions.listOverrides,
     canAccessDashboard && commissionDialog.isOpen && commissionDialog.month && commissionDialog.attendant
@@ -2189,6 +2204,10 @@ function DashboardApp() {
     const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
     eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
 
+    // Linked bookings keep the quick 250 ms save for typing too: the server copies shared
+    // fields to the sibling rows, and a sibling's full-row save sent just after a delayed
+    // one could put the old value back.
+    const scheduleOptions = event.bookingGroupId ? undefined : saveOptions;
     boardSaveScheduler.schedule(event.id, () => {
       const applyStatusToGroup = pendingGroupStatusRef.current.has(event.id);
       pendingGroupStatusRef.current.delete(event.id);
@@ -2222,7 +2241,7 @@ function DashboardApp() {
             { eventId: event.id, name: event.name || 'Untitled event', reason },
           ]);
         });
-    }, saveOptions);
+    }, scheduleOptions);
   };
 
   useEffect(() => {
@@ -3119,6 +3138,11 @@ function DashboardApp() {
   };
 
   const exportTurnoverToExcel = async () => {
+    // Without this year's figures the totals would come from history only.
+    if (liveTurnoverRecords === undefined || liveTurnoverRecords === null) {
+      openNotice(liveTurnoverRecords === null ? 'This year\'s figures could not be loaded. Press Refresh, then export.' : 'This year\'s figures are still loading. Please export in a moment.');
+      return;
+    }
     if (!turnoverRows.length) {
       openNotice('There is no turnover data to export for this selection yet.');
       return;
@@ -5024,7 +5048,7 @@ function DashboardApp() {
       </section>
 
       <footer className="app-footer"><span>Total events completed for {selectedWorkspaceYear} is {selectedYearCompletedCount}</span><button className="footer-version-button" type="button" title="View changelog" onClick={() => setShowChangelogModal(true)}>V2.0</button><span>Software developed by SelfieBox - All rights reserved</span></footer>
-            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel, isLoading: liveTurnoverRecords === undefined }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles, attendantRecordMap, attendantStyles }} /> : null}
+            {showWebsiteStats ? <WebsiteStatsPage onClose={() => setShowWebsiteStats(false)} isAdmin={currentUser?.role === 'admin'} canAccess={canAccessDashboard} initialTab={statsInitialTab} turnover={{ region: turnoverRegion, setRegion: setTurnoverRegion, regionOptions: turnoverRegionOptions, netProfitPct: turnoverNetProfitPct, setNetProfitPct: setTurnoverNetProfitPct, rows: turnoverRows, exportToExcel: exportTurnoverToExcel, isLoading: liveTurnoverRecords === undefined, loadFailed: liveTurnoverRecords === null, refresh: () => setTurnoverRefreshKey((key) => key + 1) }} reports={{ year: selectedWorkspaceYear, canAccess: canAccessDashboard, role: currentUser?.role, isAdmin: currentUser?.role === 'admin', branchOptions, productOptions, customColumns, branchFullNames, productFullNames, productStyles, statusStyles, branchStyles, attendantRecordMap, attendantStyles }} /> : null}
 
       <div className={`drawer-scrim ${drawerOpen || activitiesOpen ? 'is-visible' : ''}`} onClick={() => { closeDrawer(); setActivitiesOpen(false); }} />
       <aside className={`event-drawer board-activities-drawer ${activitiesOpen ? 'is-open' : ''}`}>
@@ -7443,16 +7467,17 @@ function TurnoverView({ isAdmin, turnover }) {
       </div>
     );
   }
-  const { region, setRegion, regionOptions, netProfitPct, setNetProfitPct, rows, exportToExcel, isLoading } = turnover;
+  const { region, setRegion, regionOptions, netProfitPct, setNetProfitPct, rows, exportToExcel, isLoading, loadFailed, refresh } = turnover;
   const regionLabel = (regionOptions.find((o) => o.value === region) || {}).label || region;
   // While this year's figures are still coming from the server, the totals and
   // difference rows would be computed from history only - hide them and say so,
   // rather than showing a wrong number that later "jumps".
-  const visibleRows = isLoading ? rows.filter((row) => !['totals', 'diff', 'diffPct'].includes(row.rowType || '')) : rows;
+  const visibleRows = isLoading || loadFailed ? rows.filter((row) => !['totals', 'diff', 'diffPct'].includes(row.rowType || '')) : rows;
   return (
     <div className="statspage-view statspage-view-wide">
       <header className="statspage-viewhead"><div><h2>Turnover Figures</h2></div></header>
       {isLoading ? <div className="inline-loading turnover-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading this year&rsquo;s figures and the totals&hellip; (older years are shown already)</div> : null}
+      {loadFailed ? <div className="inline-loading turnover-loading" role="alert">This year&rsquo;s figures could not be loaded. Press Refresh to try again.</div> : null}
       <div className="turnover-sheet turnover-sheet-inpage">
         <div className="turnover-toolbar">
           <label>
@@ -7464,6 +7489,7 @@ function TurnoverView({ isAdmin, turnover }) {
             <input className="turnover-profit-input" type="number" min="0" step="1" value={netProfitPct} onChange={(event) => setNetProfitPct(event.target.value)} />
           </label>
           <div className="modal-actions">
+            {refresh ? <button className="ghost-button" type="button" onClick={refresh} disabled={isLoading}>{isLoading ? 'Refreshing...' : 'Refresh'}</button> : null}
             <button className="primary-button" type="button" onClick={() => void exportToExcel()}>Export to Excel</button>
           </div>
         </div>
