@@ -7,6 +7,7 @@ import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './go
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
+import { createBoardSaveScheduler, TYPING_SAVE } from './boardSaveScheduler';
 import {
   BOARD_COLUMNS,
   PAYMENT_OPTIONS,
@@ -1136,7 +1137,8 @@ function DashboardApp() {
   const skipActiveFiltersPersistRef = useRef(false);
   const skipSavedFilterViewsPersistRef = useRef(false);
   const eventsRef = useRef(events);
-  const persistTimeoutsRef = useRef(new Map());
+  // Pending events.upsert per row (typed cell edits wait for blur / 2 s idle).
+  const [boardSaveScheduler] = useState(() => createBoardSaveScheduler());
   const eventPersistVersionsRef = useRef(new Map());
   const eventDeleteVersionsRef = useRef(new Map());
   const commissionOverrideSaveTimeoutsRef = useRef(new Map());
@@ -2181,17 +2183,13 @@ function DashboardApp() {
     });
   };
 
-  const persistEvent = (event) => {
-    const pendingTimeout = persistTimeoutsRef.current.get(event.id);
-    if (pendingTimeout) {
-      clearTimeout(pendingTimeout);
-    }
-
+  // saveOptions: TYPING_SAVE for free typing in a board cell (see
+  // boardSaveScheduler.js); anything else is saved after 250 ms as before.
+  const persistEvent = (event, saveOptions) => {
     const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
     eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
 
-    const timeoutId = window.setTimeout(() => {
-      persistTimeoutsRef.current.delete(event.id);
+    boardSaveScheduler.schedule(event.id, () => {
       const applyStatusToGroup = pendingGroupStatusRef.current.has(event.id);
       pendingGroupStatusRef.current.delete(event.id);
       void upsertEventMutation({ event: serializeEventForConvex(event), ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}) })
@@ -2224,10 +2222,26 @@ function DashboardApp() {
             { eventId: event.id, name: event.name || 'Untitled event', reason },
           ]);
         });
-    }, 250);
-
-    persistTimeoutsRef.current.set(event.id, timeoutId);
+    }, saveOptions);
   };
+
+  useEffect(() => {
+    // Typed edits still waiting for their save go out as soon as the tab is
+    // hidden, the page is closed or reloaded, or the board unmounts.
+    const flushAll = () => boardSaveScheduler.flushAll();
+    const flushWhenHidden = () => {
+      if (document.visibilityState === 'hidden') {
+        flushAll();
+      }
+    };
+    window.addEventListener('pagehide', flushAll);
+    document.addEventListener('visibilitychange', flushWhenHidden);
+    return () => {
+      window.removeEventListener('pagehide', flushAll);
+      document.removeEventListener('visibilitychange', flushWhenHidden);
+      flushAll();
+    };
+  }, [boardSaveScheduler]);
 
   const retryFailedSave = (eventId) => {
     const localEvent = eventsRef.current.find((candidate) => candidate.id === eventId);
@@ -2249,7 +2263,7 @@ function DashboardApp() {
     }
   };
 
-  const replaceEvents = (updater) => {
+  const replaceEvents = (updater, saveOptions) => {
     const previousEvents = eventsRef.current;
     const nextEvents = updater(previousEvents);
     const previousById = new Map(previousEvents.map((event) => [event.id, event]));
@@ -2275,16 +2289,12 @@ function DashboardApp() {
     setEvents(nextEvents);
 
     changedEvents.forEach((event) => {
-      persistEvent(event);
+      persistEvent(event, saveOptions);
     });
 
     previousEvents.forEach((event) => {
       if (!nextIds.has(event.id)) {
-        const pendingTimeout = persistTimeoutsRef.current.get(event.id);
-        if (pendingTimeout) {
-          clearTimeout(pendingTimeout);
-          persistTimeoutsRef.current.delete(event.id);
-        }
+        boardSaveScheduler.cancel(event.id);
         const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
         eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
         const nextDeleteVersion = (eventDeleteVersionsRef.current.get(event.id) || 0) + 1;
@@ -2311,15 +2321,15 @@ function DashboardApp() {
     });
   };
 
-  const updateEvent = (eventId, updater) => {
-    replaceEvents((current) => current.map((event) => (event.id === eventId ? updater(event) : event)));
+  const updateEvent = (eventId, updater, saveOptions) => {
+    replaceEvents((current) => current.map((event) => (event.id === eventId ? updater(event) : event)), saveOptions);
   };
 
-  const updateEventField = (eventId, key, value) => {
-    updateEvent(eventId, (event) => ({ ...event, [key]: value }));
+  const updateEventField = (eventId, key, value, saveOptions) => {
+    updateEvent(eventId, (event) => ({ ...event, [key]: value }), saveOptions);
   };
 
-  const updateEventLocationText = (eventId, value) => {
+  const updateEventLocationText = (eventId, value, saveOptions) => {
     updateEvent(eventId, (event) => {
       const nextLocation = String(value || '');
       const currentLocation = String(event.location || '');
@@ -2337,7 +2347,7 @@ function DashboardApp() {
         locationLat: shouldPreserveLocationMeta ? event.locationLat : null,
         locationLng: shouldPreserveLocationMeta ? event.locationLng : null,
       };
-    });
+    }, saveOptions);
   };
 
   const applyEventLocation = (eventId, nextLocation) => {
@@ -2350,11 +2360,11 @@ function DashboardApp() {
     }));
   };
 
-  const updateEventCustomField = (eventId, key, value) => {
+  const updateEventCustomField = (eventId, key, value, saveOptions) => {
     updateEvent(eventId, (event) => ({
       ...event,
       customFields: { ...(event.customFields || {}), [key]: value },
-    }));
+    }), saveOptions);
   };
 
 
@@ -4994,7 +5004,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} onBlur={() => boardSaveScheduler.flush(event.id)} onKeyDown={(keyEvent) => { if (keyEvent.key === 'Enter' && keyEvent.target.tagName === 'INPUT') boardSaveScheduler.flush(event.id); }} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -6110,14 +6120,14 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
       // took the name column and squashed the name/event-name inputs (2026-10-12).
       const isGroupFiltered = Boolean(groupFilterId) && groupFilterId === event.bookingGroupId;
       const groupBadge = groupSize ? <button className={["row-group-badge", isGroupFiltered ? "is-active" : ""].join(" ").trim()} type="button" title={isGroupFiltered ? 'Showing only this linked booking. Click to show everything again.' : `Linked booking: ${groupSize} rows on this board share quote, invoice, status, notes and files. Click to show only these rows.`} aria-pressed={isGroupFiltered} onClick={(clickEvent) => { clickEvent.stopPropagation(); toggleGroupFilter?.(event.bookingGroupId); }}>{groupSize}</button> : null;
-      return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-avatar-wrap">{avatarNode}{groupBadge}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value)} /></div></div>;
+      return <div className="name-cell"><button className="plus-trigger" type="button" onClick={() => openDrawer(event.id)}>-</button><span className="row-avatar-wrap">{avatarNode}{groupBadge}</span><div className="name-cell-copy"><AutocompleteTextInput className="inline-input inline-name" title={event.name} value={event.name} readOnly={!canEdit} suggestions={mainNameSuggestions} minMenuWidth={320} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'name', nextValue, TYPING_SAVE)} /><input className="inline-input inline-event-title" title={event.eventTitle || ''} placeholder="Event Name" value={event.eventTitle || ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'eventTitle', inputEvent.target.value, TYPING_SAVE)} /></div></div>;
     }
-  if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue)} />;
-  if (columnKey === 'time') return <input className="inline-input inline-time" title={event.time || ''} value={event.time || ''} readOnly={!canEdit} placeholder="e.g. 12:00 - 14:00" onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'time', inputEvent.target.value)} />;
-  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
-  if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value)} />;
+  if (columnKey === 'hours') return <AutocompleteTextInput className="inline-input inline-hours" title={event.hours} value={event.hours} readOnly={!canEdit} suggestions={hoursSuggestions} minMenuWidth={150} onFocus={() => setActiveRowId(event.id)} onChange={(nextValue) => updateEventField(event.id, 'hours', nextValue, TYPING_SAVE)} />;
+  if (columnKey === 'time') return <input className="inline-input inline-time" title={event.time || ''} value={event.time || ''} readOnly={!canEdit} placeholder="e.g. 12:00 - 14:00" onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'time', inputEvent.target.value, TYPING_SAVE)} />;
+  if (columnKey === 'location') return <LocationInputField value={event.location || ''} title={event.location || ''} readOnly={!canEdit} placeholder='Start typing address' onFocus={() => setActiveRowId(event.id)} onTextChange={(nextValue) => updateEventLocationText(event.id, nextValue, TYPING_SAVE)} onPlaceSelect={(place) => applyEventLocation(event.id, place)} onOpenMap={() => openLocationPreview(event)} hasCoordinates={typeof event.locationLat === 'number' && typeof event.locationLng === 'number'} compact />;
+  if (columnKey === 'exVat') return <input className="inline-input inline-number" value={event.exVat ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'exVat', inputEvent.target.value, TYPING_SAVE)} />;
   if (columnKey === 'exVatAuto') return <span title={String(event.exVatAuto || '')}>{event.exVatAuto || ''}</span>;
-  if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value)} />;
+  if (columnKey === 'packageOnly') return <input className="inline-input inline-number" value={event.packageOnly ?? ''} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventField(event.id, 'packageOnly', inputEvent.target.value, TYPING_SAVE)} />;
   if (columnKey === 'quoteNumber' || columnKey === 'invoiceNumber') return <span title={event[columnKey] || ''}>{event[columnKey] || ''}</span>;
   if (columnKey === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === 'date' ? <DateInlineEditor value={dateEditor.value} allowPastDates={allowPastDates} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, 'date')} /> : <button className='cell-select-button date-cell-button' type='button' title={event.date || ''} disabled={!canEdit} onClick={() => openDateEditor(event, 'date')}><span>{formatDateDisplay(event.date) || 'Pick date'}</span></button>;
   if (columnKey === 'branch') return <button className='cell-select-button' type='button' title={event.branch.map((item) => branchFullNames[item] || item).join(', ')} disabled={!canEdit} onClick={() => openBranchSelector(event.id)}><CompactTagList items={event.branch} styles={branchStyles} /></button>;
@@ -6132,8 +6142,8 @@ function renderCell({ columnKey, event, openDrawer, updateEventField, updateEven
   const customColumn = customColumns.find((column) => column.key === columnKey);
   if (customColumn) {
     const customValue = (event.customFields || {})[columnKey];
-    if (customColumn.type === 'text') return <input className="inline-input" title={String(customValue || '')} value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value)} />;
-    if (customColumn.type === 'number') return <input className="inline-input inline-number" value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value)} />;
+    if (customColumn.type === 'text') return <input className="inline-input" title={String(customValue || '')} value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value, TYPING_SAVE)} />;
+    if (customColumn.type === 'number') return <input className="inline-input inline-number" value={String(customValue || '')} readOnly={!canEdit} onFocus={() => setActiveRowId(event.id)} onChange={(inputEvent) => updateEventCustomField(event.id, columnKey, inputEvent.target.value, TYPING_SAVE)} />;
     if (customColumn.type === 'date') return dateEditor.eventId === event.id && dateEditor.columnKey === columnKey ? <DateInlineEditor value={String(customValue || dateEditor.value || '')} allowPastDates={allowPastDates} onChange={(nextValue) => setDateEditor((current) => ({ ...current, value: nextValue }))} onCancel={closeDateEditor} onApply={() => applyEventDate(event.id, dateEditor.value, columnKey)} /> : <button className='cell-select-button date-cell-button' type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openDateEditor(event, columnKey)}><span>{formatDateDisplay(String(customValue || '')) || 'Pick date'}</span></button>;
     if (customColumn.type === 'singleItem') return <button className='cell-select-button custom-single-select-button' style={customColumnWidths[columnKey] ? { width: customColumnWidths[columnKey], minWidth: customColumnWidths[columnKey] } : undefined} type='button' title={String(customValue || '')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CustomSingleTag value={String(customValue || '')} styles={customItemStyles[columnKey] || {}} width={customColumnWidths[columnKey]} placeholder='' /></button>;
     if (customColumn.type === 'multiItem') return <button className='cell-select-button' type='button' title={(Array.isArray(customValue) ? customValue : []).join(', ')} disabled={!canEdit} onClick={() => openCustomOptionSelector(columnKey, event.id)}><CompactTagList items={Array.isArray(customValue) ? customValue : []} styles={customItemStyles[columnKey] || {}} wide /></button>;
