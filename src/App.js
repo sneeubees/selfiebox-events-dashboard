@@ -1036,6 +1036,11 @@ function DashboardApp() {
   const [profileForm, setProfileForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: '', profilePic: '', theme: 'light', assignedBranches: [] });
   const [managedUserForm, setManagedUserForm] = useState({ firstName: '', surname: '', designation: '', email: '', role: 'user', profilePic: '', isApproved: false, assignedBranches: [] });
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+  // "+ Add Year" adds the next year on every call, so repeat clicks while the
+  // first is still saving must be ignored (27 Oct 2026: a slow save plus a few
+  // clicks made 2029, 2030 and 2031).
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const creatingWorkspaceRef = useRef(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', confirmLabel: 'Confirm', tone: 'default' });
   const [noticeDialog, setNoticeDialog] = useState({ isOpen: false, title: '', message: '' });
   const [duplicateDialog, setDuplicateDialog] = useState({ isOpen: false, eventId: '', step: 'reason', rows: [], single: null, saving: false });
@@ -1291,6 +1296,10 @@ function DashboardApp() {
     [webRequestCountsByYear, selectedWorkspaceYear]
   );
   const openNewRequestsForYear = (year) => {
+    if (workspaceRecords !== undefined && !workspaceYears.includes(Number(year))) {
+      openNotice(`There is no ${year} board yet, so these requests can't be shown. An admin can add it with "+ Add Year" in the year menu.`);
+      return;
+    }
     setFiltersOpen(false);
     setYearMenuOpen(false);
     setGroupFilterId('');
@@ -2114,7 +2123,13 @@ function DashboardApp() {
 
   useEffect(() => {
     if (workspaceYears.length && !workspaceYears.includes(selectedWorkspaceYear)) {
-      setSelectedWorkspaceYear(workspaceYears[0]);
+      // A board that doesn't exist: open this year's board (or the nearest
+      // earlier one), never the oldest board in the list.
+      const thisYear = new Date().getFullYear();
+      const fallback = workspaceYears.includes(thisYear)
+        ? thisYear
+        : [...workspaceYears].reverse().find((year) => year <= thisYear) ?? workspaceYears[workspaceYears.length - 1];
+      setSelectedWorkspaceYear(fallback);
     }
   }, [workspaceYears, selectedWorkspaceYear]);
 
@@ -3038,9 +3053,22 @@ function DashboardApp() {
     if (!currentUser || !['admin', 'manager'].includes(currentUser.role)) {
       return;
     }
-    const createdWorkspace = await createNextWorkspaceYear({});
-    setSelectedWorkspaceYear(createdWorkspace.year);
-    setShowWorkspaceModal(false);
+    if (creatingWorkspaceRef.current) {
+      return;
+    }
+    creatingWorkspaceRef.current = true;
+    setCreatingWorkspace(true);
+    try {
+      const createdWorkspace = await createNextWorkspaceYear({});
+      setSelectedWorkspaceYear(createdWorkspace.year);
+      setShowWorkspaceModal(false);
+    } catch (error) {
+      console.error('Failed to add year', error);
+      openNotice('The year could not be added right now. Please try again in a moment.');
+    } finally {
+      creatingWorkspaceRef.current = false;
+      setCreatingWorkspace(false);
+    }
   };
 
   const openExportDialog = ({ scope, month = '', monthItems = [] }) => {
@@ -5714,7 +5742,7 @@ function DashboardApp() {
       {showProfileModal ? <ModalShell title="Profile" onClose={() => setShowProfileModal(false)} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{profileForm.profilePic ? <img className="profile-avatar-image" src={profileForm.profilePic} alt="Profile" /> : <div className="profile-avatar-fallback">{`${profileForm.firstName?.[0] || currentUser.firstName?.[0] || ''}${profileForm.surname?.[0] || currentUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{profileForm.firstName || currentUser.firstName} {profileForm.surname || currentUser.surname}</strong><span>{profileForm.designation || currentUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{profileForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setProfileForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={profileForm.firstName} onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={profileForm.surname} onChange={(event) => setProfileForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={profileForm.designation} onChange={(event) => setProfileForm((current) => ({ ...current, designation: event.target.value }))} /></label><label><span>Email</span><input className="text-input locked-input" value={profileForm.email} readOnly /></label><label><span>Role</span><input className="text-input locked-input" value={profileForm.role} readOnly /></label><label className="full-span"><span>Branches</span><div className="profile-branch-list">{(profileForm.assignedBranches || []).length ? (profileForm.assignedBranches || []).map((branchKey) => <span key={branchKey} className="profile-branch-chip" style={branchStyles[branchKey] || undefined}>{branchKey}</span>) : <input className="text-input locked-input" value="All branches" readOnly />}</div></label><label className="full-span"><span>Theme</span><select className="text-input" value={profileForm.theme} onChange={(event) => setProfileForm((current) => ({ ...current, theme: event.target.value === 'dark' ? 'dark' : 'light' }))}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => { setShowProfileModal(false); void signOut(); }}>Logout</button><button className="ghost-button" type="button" onClick={() => setShowProfileModal(false)}>Cancel</button><button className="primary-button" type="button" onClick={saveProfile}>Save profile</button></div></div></ModalShell> : null}
       {showUsersModal ? <ModalShell title="Manage users" onClose={() => setShowUsersModal(false)}><div className="users-modal">{users.map((user) => <button className="user-list-card" type="button" key={user.id} onClick={() => openUserEditor(user.id)}><div className="user-list-avatar">{`${user.firstName?.[0] || ''}${user.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div><div className="user-list-copy"><strong>{user.firstName} {user.surname}</strong><span>{user.email}</span></div><div className="user-list-meta"><span className={`role-pill role-${user.role}`}>{formatRole(user.role)}</span><small>{user.isApproved ? 'Approved' : 'Pending'}</small></div></button>)}</div></ModalShell> : null}
       {editingUser ? <ModalShell title="User profile" onClose={() => setEditingUserId('')} hideCloseButton><div className="profile-modal"><section className="profile-hero"><div className="profile-avatar-shell">{managedUserForm.profilePic ? <img className="profile-avatar-image" src={managedUserForm.profilePic} alt="User profile" /> : <div className="profile-avatar-fallback">{`${managedUserForm.firstName?.[0] || editingUser.firstName?.[0] || ''}${managedUserForm.surname?.[0] || editingUser.surname?.[0] || ''}`.toUpperCase() || 'SB'}</div>}</div><div className="profile-hero-copy"><strong>{managedUserForm.firstName || editingUser.firstName} {managedUserForm.surname || editingUser.surname}</strong><span>{managedUserForm.designation || editingUser.designation}</span><div className="profile-upload-stack"><label className="profile-upload-button">{managedUserForm.profilePic ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/*" onChange={(event) => handleProfileImageChange(event, setManagedUserForm)} /></label><small>Maximum file size: 1 MB</small></div></div></section><div className="profile-edit-grid"><label><span>Name</span><input className="text-input" value={managedUserForm.firstName} onChange={(event) => setManagedUserForm((current) => ({ ...current, firstName: event.target.value }))} /></label><label><span>Surname</span><input className="text-input" value={managedUserForm.surname} onChange={(event) => setManagedUserForm((current) => ({ ...current, surname: event.target.value }))} /></label><label className="full-span"><span>Designation</span><input className="text-input" value={managedUserForm.designation} onChange={(event) => setManagedUserForm((current) => ({ ...current, designation: event.target.value }))} /></label><label className="full-span"><span>Email</span><input className="text-input" value={managedUserForm.email} onChange={(event) => setManagedUserForm((current) => ({ ...current, email: event.target.value }))} /></label><label><span>Role</span><select value={managedUserForm.role} onChange={(event) => setManagedUserForm((current) => ({ ...current, role: event.target.value }))}>{ROLE_OPTIONS.map((role) => <option key={role} value={role}>{formatRole(role)}</option>)}</select></label><label className="approval-toggle"><span>Approve / Activate</span><input type="checkbox" checked={managedUserForm.isApproved} onChange={(event) => setManagedUserForm((current) => ({ ...current, isApproved: event.target.checked }))} /><strong>{managedUserForm.isApproved ? 'Approved' : 'Pending approval'}</strong></label><label className="full-span"><span>Assigned Branches</span><div className="profile-branch-selector">{branchOptions.map((option) => <label key={option.abbreviation} className="profile-branch-option"><input type="checkbox" checked={(managedUserForm.assignedBranches || []).includes(option.abbreviation)} onChange={() => toggleManagedUserBranch(option.abbreviation)} /><span className="profile-branch-chip" style={branchStyles[option.abbreviation] || undefined}>{option.abbreviation}</span></label>)}</div><small>Leave all unchecked to allow all branches.</small></label></div><div className="modal-actions profile-admin-actions"><button className="ghost-button" type="button" onClick={() => setEditingUserId('')}>Cancel</button><button className="branch-delete-button danger-button" type="button" onClick={deleteManagedUser}>Delete user</button><button className="primary-button" type="button" onClick={saveManagedUser}>Save user</button></div></div></ModalShell> : null}
-      {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace}>Yes</button></div></div></div></div> : null}
+      {showWorkspaceModal ? <div className="modal-scrim" onClick={() => setShowWorkspaceModal(false)}><div className="modal-panel add-year-panel" role="dialog" aria-modal="true" aria-label="Add year" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h3>Add year</h3></div><div className="simple-stack add-year-confirm"><p>Are you sure you want to add {nextWorkspaceYear}?</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => setShowWorkspaceModal(false)}>No</button><button className="primary-button" type="button" onClick={handleCreateWorkspace} disabled={creatingWorkspace}>{creatingWorkspace ? 'Adding…' : 'Yes'}</button></div></div></div></div> : null}
       {confirmDialog.isOpen ? <ModalShell title={confirmDialog.title} onClose={() => closeConfirmation(false)}><div className="simple-stack"><p>{confirmDialog.message}</p><div className="modal-actions"><button className="ghost-button" type="button" onClick={() => closeConfirmation(false)}>Cancel</button><button className={confirmDialog.tone === 'danger' ? 'branch-delete-button danger-button' : 'primary-button'} type="button" onClick={() => closeConfirmation(true)}>{confirmDialog.confirmLabel}</button></div></div></ModalShell> : null}
       {duplicateDialog.isOpen && duplicateSourceEvent ? <ModalShell title="Duplicate event" onClose={closeDuplicateDialog} closeOnScrimClick={duplicateDialog.step === 'reason'} panelClassName={duplicateDialog.step === 'reason' ? '' : 'dup-panel-wide'}>
         <div className="simple-stack">
@@ -5850,11 +5878,14 @@ function LocationInputField({ value, title, placeholder, readOnly, className = '
     return initPromiseRef.current;
   }, [readOnly]);
 
+  // The Google address search is attached when the field is first focused
+  // (onFocus below), not when it mounts: a board has a Location cell per row,
+  // and setting up ~200 Google Autocomplete widgets on every board load was
+  // needless work (and 200 deprecation warnings in the console).
   useEffect(() => {
     if (readOnly || !hasGoogleMapsApiKey()) {
       return;
     }
-    void ensureAutocomplete();
 
     return () => {
       if (listenerRef.current && window.google?.maps?.event) {
