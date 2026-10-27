@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 
 async function getCurrentUser(ctx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -80,10 +79,9 @@ export const createNextYear = mutation({
       createdAt: Date.now(),
     });
 
-    // A new year starting means the previous one is about to become frozen
-    // history - fold it into the client-recency cache (see events.js).
-    await ctx.scheduler.runAfter(0, internal.events.rebuildClientRecencyCacheInternal, {});
-    await ctx.scheduler.runAfter(0, internal.websiteStats.rebuildQuoteConversionCacheInternal, {});
+    // The client-recency and quote-conversion caches are no longer rebuilt here:
+    // the full rebuild is too slow for one mutation and jammed the dashboard
+    // (27 Oct 2026). Rebuild them from the admin tools at a quiet time.
 
     const created = await ctx.db.get(workspaceId);
     return { id: created._id, year: created.year, name: created.name };
@@ -111,8 +109,6 @@ export const ensureYear = mutation({
       createdAt: Date.now(),
     });
 
-    await ctx.scheduler.runAfter(0, internal.events.rebuildClientRecencyCacheInternal, {});
-    await ctx.scheduler.runAfter(0, internal.websiteStats.rebuildQuoteConversionCacheInternal, {});
 
     const created = await ctx.db.get(workspaceId);
     return { id: created._id, year: created.year, name: created.name, created: true };

@@ -157,7 +157,9 @@ async function rebuildQuoteConversionCacheImpl(ctx) {
 // workspaces.js) so the cache heals itself at each year rollover.
 export const rebuildQuoteConversionCacheInternal = internalMutation({
   args: {},
-  handler: async (ctx) => rebuildQuoteConversionCacheImpl(ctx),
+  // Disabled 27 Oct 2026 (same reason as events.rebuildClientRecencyCacheInternal):
+  // too slow for one mutation, and scheduled mutations that time out retry forever.
+  handler: async () => ({ skipped: true }),
 });
 
 // Manual trigger (admin-only) - for the initial backfill right after

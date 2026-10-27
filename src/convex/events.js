@@ -416,7 +416,12 @@ async function rebuildClientRecencyCacheImpl(ctx) {
 // workspaces.js) so the cache heals itself at each year rollover.
 export const rebuildClientRecencyCacheInternal = internalMutation({
   args: {},
-  handler: async (ctx) => rebuildClientRecencyCacheImpl(ctx),
+  // Disabled 27 Oct 2026: as one mutation the full rebuild reads every event and
+  // now takes longer than Convex's 15 s limit; a scheduled mutation that times
+  // out is retried forever, which jammed the whole dashboard when new boards
+  // were created. Already-scheduled runs finish here at once. Use the admin
+  // rebuildClientRecencyCache at a quiet time until it is made incremental.
+  handler: async () => ({ skipped: true }),
 });
 
 // Manual trigger (admin-only) - useful right after deploying this feature,
