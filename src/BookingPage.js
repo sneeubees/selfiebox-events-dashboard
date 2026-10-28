@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "./convex/_generated/api";
 import {
   BOOKING_CUSTOMER_TYPE_OPTIONS,
+  BOOKING_REGION_OPTIONS,
   BOOKING_TERMS_CONTENT,
   BOOKING_TERMS_TITLE,
   createEmptyBookingForm,
@@ -411,6 +412,15 @@ export default function BookingPage({ token }) {
   const selectedProducts = useMemo(() => pageState.productNames || [], [pageState.productNames]);
   const optionalExtrasOptions = useMemo(() => getOptionalExtrasForProducts(selectedProducts), [selectedProducts]);
   const isLocked = Boolean(pageState.isLocked);
+  // The client sees the date and region locked. Signed-in SelfieBox staff may
+  // change the region (clients sometimes picked the wrong one on the website);
+  // the server ignores a region sent by anyone else.
+  const staffCanEditRegion = pageState.access === "registered" && !isLocked;
+  const currentRegion = form.region || pageState.regionName || "";
+  const regionChoices = useMemo(
+    () => (currentRegion && !BOOKING_REGION_OPTIONS.includes(currentRegion) ? [currentRegion, ...BOOKING_REGION_OPTIONS] : BOOKING_REGION_OPTIONS),
+    [currentRegion]
+  );
 
   const updateField = (key, value) => {
     if (key === "address") {
@@ -618,7 +628,20 @@ export default function BookingPage({ token }) {
           </BookingFormField>
 
           <BookingStaticField label="Date of event" value={form.eventDate || pageState.eventDate} />
-          <BookingStaticField label="Region" value={form.region || pageState.regionName} />
+          {staffCanEditRegion ? (
+            <BookingFormField label="Region" helper="Staff only - the client can't change this">
+              <select className="text-input" value={currentRegion} onChange={(event) => updateField("region", event.target.value)}>
+                {currentRegion ? null : <option value="">Choose a region</option>}
+                {regionChoices.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </BookingFormField>
+          ) : (
+            <BookingStaticField label="Region" value={form.region || pageState.regionName} />
+          )}
 
           <BookingFormField label="Address" className="full-span">
             <BookingAddressInput

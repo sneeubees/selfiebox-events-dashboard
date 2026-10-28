@@ -821,6 +821,14 @@ export const submitPublicForm = mutation({
     const normalizedIp = normalizeString(args.clientIp);
 
     const formData = sanitizeFormData(args.formData);
+    if (!approvedUser) {
+      // The client can't change the region or the date (the form shows them
+      // locked): keep what is stored, whatever the request says. Signed-in
+      // staff may correct the region.
+      const linked = await buildLinkedFormFields(ctx, eventRecord);
+      formData.region = normalizeString(bookingRecord.formData?.region) || linked.region;
+      formData.eventDate = normalizeString(bookingRecord.formData?.eventDate) || linked.eventDate;
+    }
     const validationMessage = validateFormData(formData);
     if (validationMessage) {
       throw new Error(validationMessage);
