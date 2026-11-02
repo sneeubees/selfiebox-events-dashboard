@@ -26,6 +26,7 @@ const GoogleReviewsView = React.lazy(() => import('./GoogleReviewsView'));
 
 const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
 const BOARD_RECONNECTING_MESSAGE = 'The board is reconnecting, so this change was not saved. Please try again in a moment.';
+const COMMISSION_DECEMBER_MISSING_MESSAGE = "Last December's events are still loading, so this sheet is not complete yet.";
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const TURNOVER_MONTH_LABELS = {
@@ -1099,7 +1100,9 @@ function DashboardApp() {
     return accumulator;
   }, {}), [allColumnPermissions]);
   const effectiveColumnRights = useMemo(() => Object.fromEntries(allColumns.map((column) => [column.key, currentUser?.role === 'admin' ? { canView: true, canEdit: true } : (currentColumnRights?.[column.key] || { canView: true, canEdit: true })])), [allColumns, currentColumnRights, currentUser]);
-  const canManageRows = effectiveColumnRights.name?.canEdit ?? true;
+  // Adding, copying and deleting rows wait too while the board query is failing:
+  // the notice says editing is paused, and a new row could not be typed into.
+  const canManageRows = !boardFailing && (effectiveColumnRights.name?.canEdit ?? true);
   const canConfigureBoard = ['admin', 'manager'].includes(currentUser?.role || '');
   const workspaceYears = useMemo(() => {
     if (workspaceRecords === undefined) {
@@ -1472,6 +1475,12 @@ function DashboardApp() {
 
     return [...currentYearEvents, ...previousYearJanuaryEvents].sort((left, right) => sortEvents(left, right));
   }, [commissionDialog.attendant, commissionDialog.month, commissionMonthEvents, currentCommissionAttendantRecord?.isFullTimeEmployee, events, previousCommissionYearEvents, selectedWorkspaceYear]);
+  // A full-time January sheet starts on 26 December, and only the previous year's
+  // query has those rows. Without them the sheet still looks finished, with the
+  // pay understated, so it must say so and not export.
+  const commissionSheetMissingDecember = commissionDialog.month === 'January'
+    && Boolean(currentCommissionAttendantRecord?.isFullTimeEmployee)
+    && (previousCommissionYearEvents === undefined || previousCommissionYearLoad.failing);
   const getCommissionOverrideForAttendant = useCallback((attendantName, eventId) => {
     if (commissionDialog.attendant === attendantName && commissionDialog.overrides[eventId]) {
       return commissionDialog.overrides[eventId];
@@ -1718,6 +1727,16 @@ function DashboardApp() {
 
   const closeNotice = () => {
     setNoticeDialog({ isOpen: false, title: '', message: '' });
+  };
+
+  // True, with a notice, when a change has to wait for the board (see boardFailing
+  // above). Call it before the handler changes anything: refused halfway, a renamed
+  // label would be left on the server with its rows still carrying the old name.
+  const refuseWhileBoardFailing = () => {
+    if (boardFailingRef.current) {
+      openNotice(BOARD_RECONNECTING_MESSAGE);
+    }
+    return boardFailingRef.current;
   };
 
   const buildBookingLinkUrl = (token) => {
@@ -2315,8 +2334,7 @@ function DashboardApp() {
   }, [boardSaveScheduler]);
 
   const retryFailedSave = (eventId) => {
-    if (boardFailingRef.current) {
-      openNotice(BOARD_RECONNECTING_MESSAGE);
+    if (refuseWhileBoardFailing()) {
       return;
     }
     const localEvent = eventsRef.current.find((candidate) => candidate.id === eventId);
@@ -2400,10 +2418,9 @@ function DashboardApp() {
     // Board cells are already read-only while failing (canEdit); this catches the
     // rest, like a picker that was open when it started. The linked-row choices
     // go too, or the row's next save would apply a change that never happened.
-    if (boardFailingRef.current) {
+    if (refuseWhileBoardFailing()) {
       pendingGroupStatusRef.current.delete(eventId);
       pendingGroupSnappicRef.current.delete(eventId);
-      openNotice(BOARD_RECONNECTING_MESSAGE);
       return;
     }
     replaceEvents((current) => current.map((event) => (event.id === eventId ? updater(event) : event)), saveOptions);
@@ -2982,6 +2999,12 @@ function DashboardApp() {
   };
 
   const applyEventDate = async (eventId, nextDateValue, columnKey = 'date') => {
+    // updateEvent would refuse the date too, but only after this function had made
+    // that year's board, and it would still jump there, away from the row.
+    if (refuseWhileBoardFailing()) {
+      closeDateEditor();
+      return;
+    }
     const surface = boardSurfaceRef.current;
     const row = eventRowRefs.current.get(eventId);
     if (surface && row) {
@@ -3003,6 +3026,10 @@ function DashboardApp() {
     if (!hasWorkspace) {
       const shouldCreate = await requestConfirmation({ title: 'Create workspace', message: 'Create ' + nextYear + ' board/workspace for this date?', confirmLabel: 'Create' });
       if (!shouldCreate) {
+        return;
+      }
+      if (refuseWhileBoardFailing()) {
+        closeDateEditor();
         return;
       }
       await ensureWorkspaceYear({ year: nextYear });
@@ -3475,6 +3502,10 @@ function DashboardApp() {
       openNotice('Please choose an attendant first.');
       return;
     }
+    if (commissionSheetMissingDecember) {
+      openNotice(`${COMMISSION_DECEMBER_MISSING_MESSAGE} Please export it again in a moment.`);
+      return;
+    }
     if (!commissionRows.length) {
       openNotice('There are no commission line items for this selection.');
       return;
@@ -3900,6 +3931,9 @@ function DashboardApp() {
   };
 
   const saveCustomOption = async (columnKey, optionKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = ((customOptionDrafts[columnKey] || {})[optionKey]) || {};
     const currentOption = (customItemOptionsByColumn[columnKey] || []).find((option) => option.optionKey === optionKey);
     const nextName = (draft.name ?? currentOption?.name ?? '').trim();
@@ -3937,7 +3971,7 @@ function DashboardApp() {
     const option = (customItemOptionsByColumn[columnKey] || []).find((entry) => entry.optionKey === optionKey);
     const label = option?.name || optionKey;
     const shouldDelete = await requestConfirmation({ title: 'Delete option', message: 'Delete option ' + label + '?', confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption(columnKey, optionKey);
@@ -4194,6 +4228,9 @@ function DashboardApp() {
   };
 
   const saveBranchOption = (branchKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = branchDrafts[branchKey];
     const nextFullName = draft?.fullName?.trim();
     const nextAbbreviation = draft?.abbreviation?.trim().toUpperCase();
@@ -4281,7 +4318,7 @@ function DashboardApp() {
   const deleteBranchOption = async (branchKey) => {
     const label = branchFullNames[branchKey] || branchKey;
     const shouldDelete = await requestConfirmation({ title: 'Delete branch', message: `Delete branch ${label}?`, confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption('branch', branchKey);
@@ -4360,6 +4397,9 @@ function DashboardApp() {
   };
 
   const saveProductOption = (productKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = productDrafts[productKey];
     const nextFullName = draft?.fullName?.trim();
     const nextColor = draft?.color || '#d9edf8';
@@ -4407,7 +4447,7 @@ function DashboardApp() {
   const deleteProductOption = async (productKey) => {
     const label = productFullNames[productKey] || productKey;
     const shouldDelete = await requestConfirmation({ title: 'Delete product', message: `Delete product ${label}?`, confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption('products', productKey);
@@ -4494,6 +4534,9 @@ function DashboardApp() {
   };
 
   const saveStatusOption = (statusKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = statusDrafts[statusKey];
     const nextName = draft?.name?.trim();
     const nextColor = draft?.color || '#23b26d';
@@ -4528,7 +4571,7 @@ function DashboardApp() {
 
   const deleteStatusOption = async (statusKey) => {
     const shouldDelete = await requestConfirmation({ title: 'Delete status', message: 'Delete status ' + statusKey + '?', confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption('status', statusKey);
@@ -4620,6 +4663,9 @@ function DashboardApp() {
   };
 
   const saveManagedSingleOption = (columnKey, optionKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = (managedSingleDrafts[columnKey] || {})[optionKey];
     const nextName = draft?.name?.trim();
     const nextColor = draft?.color || '#d6d6d6';
@@ -4656,7 +4702,7 @@ function DashboardApp() {
 
   const deleteManagedSingleOption = async (columnKey, optionKey) => {
     const shouldDelete = await requestConfirmation({ title: 'Delete option', message: 'Delete option ' + optionKey + '?', confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption(columnKey, optionKey);
@@ -4788,6 +4834,9 @@ function DashboardApp() {
   };
 
   const saveAttendantOption = (attendantKey) => {
+    if (refuseWhileBoardFailing()) {
+      return;
+    }
     const draft = attendantDrafts[attendantKey];
     const nextName = draft?.fullName?.trim();
     const nextDisplayName = draft?.displayName?.trim() || nextName;
@@ -4872,7 +4921,7 @@ function DashboardApp() {
 
   const deleteAttendantOption = async (attendantKey) => {
     const shouldDelete = await requestConfirmation({ title: 'Delete attendant', message: 'Delete attendant ' + attendantKey + '?', confirmLabel: 'Delete', tone: 'danger' });
-    if (!shouldDelete) {
+    if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
     }
     removeLabelOption('attendants', attendantKey);
@@ -5123,7 +5172,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} onBlur={() => boardSaveScheduler.flush(event.id)} onKeyDown={(keyEvent) => { if (keyEvent.key === 'Enter' && keyEvent.target.tagName === 'INPUT') boardSaveScheduler.flush(event.id); }} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: !boardFailing && (effectiveColumnRights[column.key]?.canEdit ?? true), allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} onBlur={() => boardSaveScheduler.flush(event.id)} onKeyDown={(keyEvent) => { if (keyEvent.key === 'Enter' && keyEvent.target.tagName === 'INPUT') boardSaveScheduler.flush(event.id); }} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: !boardFailing && (effectiveColumnRights[column.key]?.canEdit ?? true), allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">{boardFailing && liveEvents === undefined ? 'Loading the board...' : 'No events in this month yet.'}</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -5197,7 +5246,7 @@ function DashboardApp() {
       {commissionDialog.isOpen ? (
         <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog} closeOnScrimClick={false} panelClassName="commission-modal-panel">
           <div className="commission-sheet">
-            <BoardLoadNotice loads={[previousCommissionYearLoad]} />
+            <BoardLoadNotice loads={[boardLoad, previousCommissionYearLoad]} overrideMessage={commissionSheetMissingDecember ? COMMISSION_DECEMBER_MISSING_MESSAGE : ''} />
             <div className="commission-toolbar">
               <label>
                 <span>Attendant</span>
@@ -6854,12 +6903,13 @@ function AuthShell({ authMode, setAuthMode }) {
 }
 
 // Shown while a useResilientQuery board query is failing. loads: the second value
-// that hook returns, for each query on the page.
-function BoardLoadNotice({ loads, editingPaused = false }) {
-  let message = '';
-  if (loads.some((load) => load.stale)) {
+// that hook returns, for each query on the page. overrideMessage: for a page that
+// has something more specific to say, shown in place of the usual text.
+function BoardLoadNotice({ loads, editingPaused = false, overrideMessage = '' }) {
+  let message = overrideMessage;
+  if (!message && loads.some((load) => load.stale)) {
     message = editingPaused ? 'Reconnecting to the board... Editing is paused until it is back.' : 'Reconnecting to the board...';
-  } else if (loads.some((load) => load.stillTrying)) {
+  } else if (!message && loads.some((load) => load.stillTrying)) {
     message = 'The board is taking longer than usual to load. Still trying...';
   }
   if (!message) {
@@ -7520,11 +7570,19 @@ function CommissionView({ reports }) {
     </label>
   );
 
+  const head = (
+    <>
+      <header className="statspage-viewhead">
+        <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Event Completed + In Progress events, {year}.</p></div>
+      </header>
+      <BoardLoadNotice loads={[yearEventsLoad]} />
+    </>
+  );
+  // With no rows every figure below would read R0, which looks like a real result.
+  if (yearEventRows === undefined && yearEventsLoad.failing) return <div className="statspage-view">{head}<div className="webstats-empty">Loading commission&hellip;</div></div>;
+
   return <div className="statspage-view">
-    <header className="statspage-viewhead">
-      <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Event Completed + In Progress events, {year}.</p></div>
-    </header>
-    <BoardLoadNotice loads={[yearEventsLoad]} />
+    {head}
     <div className="webstats-kpis finx-kpis">
       <div className="webstats-kpi"><div className="webstats-kpi-val">{finR(totalTurnover)}</div><div className="webstats-kpi-label">GP Package-Only turnover {year}</div></div>
       <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(totalCommission)}</div><div className="webstats-kpi-label">TK commission {year}</div></div>
