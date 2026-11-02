@@ -589,6 +589,7 @@ button { cursor: pointer; }
 @keyframes inline-spin { to { transform: rotate(360deg); } }
 .file-list-empty { padding: 10px 12px; font-size: 0.82rem; color: #8b98ad; }
 .turnover-loading { margin: 0 0 10px; border: 1px dashed rgba(91,108,138,0.45); border-radius: 10px; }
+.board-shell > .board-load-notice { flex: none; margin: 8px 10px; padding: 6px 12px; }
 :root[data-theme="dark"] .inline-loading { color: #a9b6cc; }
 :root[data-theme="dark"] .file-list-empty { color: #8b98ad; }
 .save-failure-stack { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 1200; display: flex; flex-direction: column; gap: 8px; width: min(720px, calc(100vw - 32px)); }

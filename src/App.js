@@ -8,6 +8,7 @@ import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
 import { createBoardSaveScheduler, flushBeforeUnload, TYPING_SAVE } from './boardSaveScheduler';
+import { useResilientQuery } from './useResilientQuery';
 import {
   BOARD_COLUMNS,
   PAYMENT_OPTIONS,
@@ -24,6 +25,7 @@ import {
 const GoogleReviewsView = React.lazy(() => import('./GoogleReviewsView'));
 
 const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
+const BOARD_RECONNECTING_MESSAGE = 'The board is reconnecting, so this change was not saved. Please try again in a moment.';
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const TURNOVER_MONTH_LABELS = {
@@ -591,10 +593,17 @@ function DashboardApp() {
   const listedUsers = useQuery(api.users.list, currentUser?.role === 'admin' ? {} : 'skip');
   const creatorProfiles = useQuery(api.users.listCreatorProfiles, canAccessDashboard ? {} : 'skip');
   const workspaceRecords = useQuery(api.workspaces.list, canAccessDashboard ? {} : 'skip');
-  const liveEvents = useQuery(
+  const [liveEvents, boardLoad] = useResilientQuery(
     api.events.listByWorkspaceYear,
     canAccessDashboard ? { workspaceYear: selectedWorkspaceYear } : 'skip'
   );
+  // While the board query is failing, the rows on screen can be behind the server,
+  // and a colleague's save is usually what set it off (every save re-runs the
+  // query). A save sends the whole row with no version check, so editing now could
+  // quietly put their old values back. Row edits wait until the board is back.
+  const boardFailing = boardLoad.failing;
+  const boardFailingRef = useRef(boardFailing);
+  boardFailingRef.current = boardFailing;
   const hasAnyEvents = useQuery(api.events.hasAny, canAccessDashboard ? {} : 'skip');
   const webRequestCountsByYear = useQuery(api.events.webRequestCountsByYear, canAccessDashboard ? {} : 'skip');
   const liveLabelOptions = useQuery(api.labels.listAll, canAccessDashboard ? {} : 'skip');
@@ -752,7 +761,7 @@ function DashboardApp() {
         }
       : 'skip'
   );
-  const previousCommissionYearEvents = useQuery(
+  const [previousCommissionYearEvents, previousCommissionYearLoad] = useResilientQuery(
     api.events.listByWorkspaceYear,
     canAccessDashboard && commissionDialog.isOpen && commissionDialog.month === 'January' && selectedWorkspaceYear > 0
       ? { workspaceYear: selectedWorkspaceYear - 1 }
@@ -1962,8 +1971,20 @@ function DashboardApp() {
     eventsRef.current = events;
   }, [events]);
 
+  // `events` starts out as the sample rows from seedData.js. That lasts a moment
+  // on a normal load, but they must not sit on the board looking like real
+  // bookings, or get saved as if they were, while a first load keeps failing.
   useEffect(() => {
-    if (liveEvents === undefined) {
+    if (boardFailing && loadedEventsYear === null) {
+      eventsRef.current = [];
+      setEvents([]);
+    }
+  }, [boardFailing, loadedEventsYear]);
+
+  useEffect(() => {
+    // While failing, liveEvents is an old snapshot. Merging it when a save lock
+    // expires would roll this user's own saved edit back on screen.
+    if (liveEvents === undefined || boardFailing) {
       return;
     }
 
@@ -2016,7 +2037,7 @@ function DashboardApp() {
     }
     const timer = window.setTimeout(() => setRemergeTick((tick) => tick + 1), nextExpiry - now + 50);
     return () => window.clearTimeout(timer);
-  }, [liveEvents, remergeTick]);
+  }, [boardFailing, liveEvents, remergeTick]);
 
   useEffect(() => {
     if (!canAccessDashboard || liveEvents === undefined || hasAnyEvents === undefined || hasAnyEvents || eventsSeededRef.current) {
@@ -2294,6 +2315,10 @@ function DashboardApp() {
   }, [boardSaveScheduler]);
 
   const retryFailedSave = (eventId) => {
+    if (boardFailingRef.current) {
+      openNotice(BOARD_RECONNECTING_MESSAGE);
+      return;
+    }
     const localEvent = eventsRef.current.find((candidate) => candidate.id === eventId);
     if (!localEvent) {
       setSaveFailures((current) => current.filter((failure) => failure.eventId !== eventId));
@@ -2372,6 +2397,15 @@ function DashboardApp() {
   };
 
   const updateEvent = (eventId, updater, saveOptions) => {
+    // Board cells are already read-only while failing (canEdit); this catches the
+    // rest, like a picker that was open when it started. The linked-row choices
+    // go too, or the row's next save would apply a change that never happened.
+    if (boardFailingRef.current) {
+      pendingGroupStatusRef.current.delete(eventId);
+      pendingGroupSnappicRef.current.delete(eventId);
+      openNotice(BOARD_RECONNECTING_MESSAGE);
+      return;
+    }
     replaceEvents((current) => current.map((event) => (event.id === eventId ? updater(event) : event)), saveOptions);
   };
 
@@ -5038,6 +5072,7 @@ function DashboardApp() {
             <button className="workspace-text-button board-activities-link board-toolbar-icon" type="button" title="Activities" aria-label="Activities" onClick={() => setActivitiesOpen(true)}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></button>
           </div>
         </div>
+        <BoardLoadNotice loads={[boardLoad]} editingPaused />
         <div className="board-scroll-frame">
         <div className="board-surface" ref={boardSurfaceRef} style={{ '--board-columns': boardColumnTemplate, '--board-width': `${boardWidth}px` }}>
           {orderedMonths.map((month) => {
@@ -5088,7 +5123,7 @@ function DashboardApp() {
                       ))}
                       {canConfigureBoard ? <button className="cell cell-actions add-column-trigger" type="button" onClick={() => setShowAddColumnModal(true)}>+</button> : <div className="cell cell-actions" />}
                     </div>
-                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} onBlur={() => boardSaveScheduler.flush(event.id)} onKeyDown={(keyEvent) => { if (keyEvent.key === 'Enter' && keyEvent.target.tagName === 'INPUT') boardSaveScheduler.flush(event.id); }} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: effectiveColumnRights[column.key]?.canEdit ?? true, allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
+                    {monthItems.length > 0 ? monthItems.map((event) => <div key={event.id} ref={(node) => setEventRowRef(event.id, node)} onBlur={() => boardSaveScheduler.flush(event.id)} onKeyDown={(keyEvent) => { if (keyEvent.key === 'Enter' && keyEvent.target.tagName === 'INPUT') boardSaveScheduler.flush(event.id); }} className={["board-row", "board-entry", getEventDayShadeClass(event), event.status === 'Web Request' ? "is-new-request" : "", event.digitalOnly ? "is-digital-only" : "", highlightedRowId === event.id ? "is-active" : ""].join(" ").trim()} style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key} style={column.isCustom && column.type === 'singleItem' ? { width: `${getRenderedColumnWidth(column)}px`, minWidth: `${getRenderedColumnWidth(column)}px` } : undefined}>{renderCell({ columnKey: column.key, event, openDrawer, updateEventField, updateEventLocationText, applyEventLocation, updateEventCustomField, dateEditor, setDateEditor, openDateEditor, closeDateEditor, applyEventDate, openBranchSelector, openProductSelector, openStatusSelector, openManagedSingleSelector, openAttendantSelector, openCustomOptionSelector, branchStyles, branchFullNames, productStyles, productFullNames, statusStyles, managedSingleStyles, attendantStyles, customItemStyles, customColumns, customColumnWidths, setActiveRowId, openLocationPreview, mainNameSuggestions, hoursSuggestions, canEdit: !boardFailing && (effectiveColumnRights[column.key]?.canEdit ?? true), allowPastDates: currentUser?.role === 'admin' || isPastEvent(event), creatorProfileMap, groupSizes, groupFilterId, toggleGroupFilter })}</div>)}<div className="cell cell-actions"><button className="row-copy" type="button" title="Copy / clone row" onClick={() => duplicateEvent(event.id)} disabled={!canManageRows}>C</button><button className="row-delete" type="button" title="Delete" onClick={() => deleteEvent(event.id)} disabled={!canManageRows || (isPastEvent(event) && currentUser?.role !== 'admin')}>X</button></div></div>) : <div className="empty-month">No events in this month yet.</div>}
                     <button className="add-inline-row" type="button" onClick={() => addBlankEvent(month)} disabled={!canManageRows || (isPastMonth(month, selectedWorkspaceYear) && currentUser?.role !== 'admin')}><span className="add-inline-label">+ Add Event</span></button>
                     <div className="board-row totals-row" style={{ gridTemplateColumns: boardColumnTemplate, width: `${boardWidth}px` }}>{visibleColumns.map((column) => <div className={`cell cell-${column.key}`} key={column.key}>{column.key === 'name' ? <strong>Totals</strong> : column.type === 'number' ? currencyFormatter.format(totalsByColumn[column.key] || 0) : ''}</div>)}<div className="cell cell-actions" /></div>
                   </>
@@ -5162,6 +5197,7 @@ function DashboardApp() {
       {commissionDialog.isOpen ? (
         <ModalShell title={`Commission - ${commissionDialog.month} ${selectedWorkspaceYear}`} onClose={closeCommissionDialog} closeOnScrimClick={false} panelClassName="commission-modal-panel">
           <div className="commission-sheet">
+            <BoardLoadNotice loads={[previousCommissionYearLoad]} />
             <div className="commission-toolbar">
               <label>
                 <span>Attendant</span>
@@ -6817,6 +6853,21 @@ function AuthShell({ authMode, setAuthMode }) {
     );
 }
 
+// Shown while a useResilientQuery board query is failing. loads: the second value
+// that hook returns, for each query on the page.
+function BoardLoadNotice({ loads, editingPaused = false }) {
+  let message = '';
+  if (loads.some((load) => load.stale)) {
+    message = editingPaused ? 'Reconnecting to the board... Editing is paused until it is back.' : 'Reconnecting to the board...';
+  } else if (loads.some((load) => load.stillTrying)) {
+    message = 'The board is taking longer than usual to load. Still trying...';
+  }
+  if (!message) {
+    return null;
+  }
+  return <div className="inline-loading turnover-loading board-load-notice" role="status"><span className="inline-spinner" aria-hidden="true" />{message}</div>;
+}
+
 function LoadingShell() {
   return (
     <div className="auth-shell">
@@ -7426,7 +7477,8 @@ function tkCommissionFor(turnover, cfg) {
 
 function CommissionView({ reports }) {
   const year = reports?.year || new Date().getFullYear();
-  const events = useQuery(api.events.listByWorkspaceYear, { workspaceYear: year }) || [];
+  const [yearEventRows, yearEventsLoad] = useResilientQuery(api.events.listByWorkspaceYear, { workspaceYear: year });
+  const events = yearEventRows || [];
   const ladderCfg = useQuery(api.expenses.getCommissionConfig, {});
   const expensesCurrent = useQuery(api.expenses.getCurrent, {});
   const saveLadder = useMutation(api.expenses.saveCommissionConfig);
@@ -7472,6 +7524,7 @@ function CommissionView({ reports }) {
     <header className="statspage-viewhead">
       <div><h2>Commission — TK</h2><p>Gauteng &ldquo;Package Only&rdquo; turnover, Event Completed + In Progress events, {year}.</p></div>
     </header>
+    <BoardLoadNotice loads={[yearEventsLoad]} />
     <div className="webstats-kpis finx-kpis">
       <div className="webstats-kpi"><div className="webstats-kpi-val">{finR(totalTurnover)}</div><div className="webstats-kpi-label">GP Package-Only turnover {year}</div></div>
       <div className="webstats-kpi is-highlight"><div className="webstats-kpi-val">{finR(totalCommission)}</div><div className="webstats-kpi-label">TK commission {year}</div></div>
@@ -8500,8 +8553,8 @@ function ResponseTimesReportView({ reports }) {
 
 function GeneralReportView({ reports }) {
   const { year, canAccess, branchOptions, productFullNames, productStyles, statusStyles, customColumns } = reports;
-  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
-  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const [curEvents, curLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const [prevEvents, prevLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
   const classifications = useQuery(api.bookings.listClassifications, canAccess ? {} : 'skip');
 
   const [regionSel, setRegionSel] = useState([]);
@@ -8623,9 +8676,12 @@ function GeneralReportView({ reports }) {
   }, [curF, classifications]);
 
   const head = (
-    <header className="statspage-viewhead report-head">
-      <div><h2>General</h2><p>Business overview across events, revenue and features &mdash; {year}.</p></div>
-    </header>
+    <>
+      <header className="statspage-viewhead report-head">
+        <div><h2>General</h2><p>Business overview across events, revenue and features &mdash; {year}.</p></div>
+      </header>
+      <BoardLoadNotice loads={[curLoad, prevLoad]} />
+    </>
   );
 
   if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading your reports&hellip;</div></div>;
@@ -8824,8 +8880,8 @@ function reportAggregateClients(events, money, classByKey) {
 // and a Corporate-only "not booked recently" follow-up list. Show-all subviews.
 function ClientsReportView({ reports }) {
   const { year, canAccess, branchOptions, productFullNames, productStyles, branchStyles, customColumns } = reports;
-  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
-  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const [curEvents, curLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const [prevEvents, prevLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
   const classifications = useQuery(api.bookings.listClassifications, canAccess ? {} : 'skip');
   const recency = useQuery(api.events.clientRecency, canAccess ? {} : 'skip');
 
@@ -8882,9 +8938,12 @@ function ClientsReportView({ reports }) {
   const unitTagStyle = (abbr) => ({ background: (productStyles[abbr] || {}).background || 'var(--panel-alt)', color: (productStyles[abbr] || {}).color || 'var(--text)' });
 
   const head = (
-    <header className="statspage-viewhead report-head">
-      <div><h2>Clients</h2><p>Your best clients, their favourite units, and who&rsquo;s due a follow-up &mdash; {year}.</p></div>
-    </header>
+    <>
+      <header className="statspage-viewhead report-head">
+        <div><h2>Clients</h2><p>Your best clients, their favourite units, and who&rsquo;s due a follow-up &mdash; {year}.</p></div>
+      </header>
+      <BoardLoadNotice loads={[curLoad, prevLoad]} />
+    </>
   );
   if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading client reports&hellip;</div></div>;
 
@@ -9044,8 +9103,8 @@ function reportAggregateAttendants(events, overrideMap, rates, attendantRecordMa
 function AttendantsReportView({ reports }) {
   const { year, canAccess, role, isAdmin, branchOptions, productFullNames, branchStyles, attendantStyles, attendantRecordMap } = reports;
   const canSee = isAdmin || role === 'manager';
-  const curEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
-  const prevEvents = useQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
+  const [curEvents, curLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year } : 'skip');
+  const [prevEvents, prevLoad] = useResilientQuery(api.events.listByWorkspaceYear, canAccess ? { workspaceYear: year - 1 } : 'skip');
   const ratesRecord = useQuery(api.commissions.getRates, (canAccess && canSee) ? {} : 'skip');
   const curOverrides = useQuery(api.commissions.listYearOverrides, (canAccess && canSee) ? { year } : 'skip');
   const prevOverrides = useQuery(api.commissions.listYearOverrides, (canAccess && canSee) ? { year: year - 1 } : 'skip');
@@ -9104,9 +9163,12 @@ function AttendantsReportView({ reports }) {
   const coverage = team.cur.functions ? Math.round((team.cur.covered / team.cur.functions) * 100) : 0;
 
   const head = (
-    <header className="statspage-viewhead report-head">
-      <div><h2>Attendants</h2><p>Functions worked, commission earned and distance travelled &mdash; {year}.</p></div>
-    </header>
+    <>
+      <header className="statspage-viewhead report-head">
+        <div><h2>Attendants</h2><p>Functions worked, commission earned and distance travelled &mdash; {year}.</p></div>
+      </header>
+      <BoardLoadNotice loads={[curLoad, prevLoad]} />
+    </>
   );
   if (loading) return <div className="statspage-view statspage-view-wide">{head}<div className="webstats-empty">Loading attendant reports&hellip;</div></div>;
 
