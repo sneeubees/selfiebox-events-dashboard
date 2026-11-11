@@ -2271,8 +2271,15 @@ function DashboardApp() {
       pendingGroupStatusRef.current.delete(event.id);
       const applySnappicToGroup = pendingGroupSnappicRef.current.has(event.id);
       pendingGroupSnappicRef.current.delete(event.id);
+      // Quote/invoice numbers read from a PDF can land on this row while the
+      // save waits; take them from the row as it is now, or this older copy
+      // would blank them again (Reddford House, 5 Nov 2026).
+      const latestEvent = eventsRef.current.find((candidate) => candidate.id === event.id);
+      const eventToSave = latestEvent
+        ? { ...event, quoteNumber: latestEvent.quoteNumber, invoiceNumber: latestEvent.invoiceNumber, exVatAuto: latestEvent.exVatAuto }
+        : event;
       void upsertEventMutation({
-        event: serializeEventForConvex(event),
+        event: serializeEventForConvex(eventToSave),
         ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}),
         ...(applySnappicToGroup ? { applySnappicToGroup: true } : {}),
       })
@@ -2554,17 +2561,39 @@ function DashboardApp() {
         if (result.documentNumber) patch.documentNumber = result.documentNumber;
         if (result.exVatAuto !== undefined && result.exVatAuto !== null && result.exVatAuto !== '') patch.exVatAuto = result.exVatAuto;
         if (patch.documentType || patch.documentNumber || patch.exVatAuto !== undefined) {
-          const saved = await applyExtractedPdfDataMutation(patch);
-          // Put the numbers into THIS tab's copy of the row straight away. Relying
-          // on the server push alone left a stale copy behind whenever a save had
-          // just locked the row, and the next save then wiped the numbers again
-          // (the "upload it twice" complaint).
-          if (saved) {
+          // Put the numbers into THIS tab's copy of the row as soon as the PDF is
+          // read, not after the save: the save only resolves once the whole board
+          // has re-run (seconds on a busy day), and a status change made in that
+          // gap saved the old copy and wiped the numbers (Reddford House + 21
+          // other rows, Oct-Nov 2026). The lock stops a board push from before
+          // the save putting the blank copy back meanwhile.
+          const applyNumbersLocally = (values) => {
             const nextEvents = eventsRef.current.map((event) => (event.id === job.eventKey
-              ? { ...event, quoteNumber: saved.quoteNumber ?? event.quoteNumber, invoiceNumber: saved.invoiceNumber ?? event.invoiceNumber, exVatAuto: saved.exVatAuto ?? event.exVatAuto }
+              ? { ...event, quoteNumber: values.quoteNumber ?? event.quoteNumber, invoiceNumber: values.invoiceNumber ?? event.invoiceNumber, exVatAuto: values.exVatAuto ?? event.exVatAuto }
               : event));
             eventsRef.current = nextEvents;
             setEvents(nextEvents);
+          };
+          const readLock = { expiresAt: Number.POSITIVE_INFINITY, deleted: false, pending: true };
+          if (!eventSyncLocksRef.current.has(job.eventKey)) {
+            eventSyncLocksRef.current.set(job.eventKey, readLock);
+          }
+          applyNumbersLocally({
+            quoteNumber: patch.documentType === 'quote' ? patch.documentNumber : undefined,
+            invoiceNumber: patch.documentType === 'invoice' ? patch.documentNumber : undefined,
+            exVatAuto: patch.exVatAuto,
+          });
+          try {
+            const saved = await applyExtractedPdfDataMutation(patch);
+            if (saved) {
+              applyNumbersLocally(saved);
+            }
+          } finally {
+            // Hand the row back to the board, unless an edit has taken the lock since.
+            if (eventSyncLocksRef.current.get(job.eventKey) === readLock) {
+              eventSyncLocksRef.current.set(job.eventKey, { expiresAt: Date.now() + 2000, deleted: false, pending: false });
+              setRemergeTick((tick) => tick + 1);
+            }
           }
         }
         setPdfReadFailures((current) => current.filter((item) => item.storageId !== job.storageId));
