@@ -8,6 +8,20 @@ function isPdfUpload(name, contentType) {
   return String(contentType || "").toLowerCase().includes("pdf") || /\.pdf$/i.test(String(name || ""));
 }
 
+// Only files named like a quote or invoice are read. Payment notices, POPs,
+// statements, POs and credit notes quote invoice numbers too; reading them
+// overwrote the row's real invoice number (a Telesure remittance listing two
+// invoices put INV28600 on the 11 Dec row, 18 Nov 2026).
+const DOCUMENT_NUMBER_IN_NAME = /(?:^|[^a-z0-9])q\d{4,}|inv[-_ ]?\d{3,}|(?:^|[^a-z0-9])i\d{5,}/i;
+const DOCUMENT_WORD_IN_NAME = /quot|invoice/i;
+const NOT_A_DOCUMENT_IN_NAME = /remit|payment|(?:^|[^a-z])pop(?:[^a-z]|$)|proof[ _-]?of|statement|receipt|notice[ _-]?of|credit[ _-]?note|(?:^|[^a-z])crn|purchase[ _-]?order|jobrpt/i;
+
+function looksLikeQuoteOrInvoiceName(name) {
+  const fileName = String(name || "");
+  if (NOT_A_DOCUMENT_IN_NAME.test(fileName)) return false;
+  return DOCUMENT_NUMBER_IN_NAME.test(fileName) || DOCUMENT_WORD_IN_NAME.test(fileName);
+}
+
 function normalizeExtractedText(value) {
   return String(value || "")
     .replace(/\r/g, "\n")
@@ -185,6 +199,10 @@ async function processUploadedDocument(ctx, args, { skipUserCheck = false } = {}
 
   if (!isPdfUpload(args.name, args.contentType)) {
     return { processed: false, reason: "not_pdf" };
+  }
+  if (!looksLikeQuoteOrInvoiceName(args.name)) {
+    console.log("Document extraction skipped: file name is not a quote/invoice", { eventKey: args.eventKey, name: args.name });
+    return { processed: false, reason: "not_quote_or_invoice_name" };
   }
 
   const fileUrl = String(args.fileUrl || "").trim();

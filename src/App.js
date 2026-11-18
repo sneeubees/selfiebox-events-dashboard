@@ -27,6 +27,10 @@ const GoogleReviewsView = React.lazy(() => import('./GoogleReviewsView'));
 const PENDING_REGISTRATION_KEY = 'sb-pending-registration';
 const BOARD_RECONNECTING_MESSAGE = 'The board is reconnecting, so this change was not saved. Please try again in a moment.';
 const COMMISSION_DECEMBER_MISSING_MESSAGE = "Last December's events are still loading, so this sheet is not complete yet.";
+// Confirmed bookings: they can't be deleted, and moving one anywhere except
+// In Progress -> Event Completed emails info@ (see convex/bookingAlerts.js).
+const CONFIRMED_STATUSES = ['In Progress', 'Event Completed'];
+const isStatusRevert = (fromStatus, toStatus) => CONFIRMED_STATUSES.includes(fromStatus) && fromStatus !== toStatus && !(fromStatus === 'In Progress' && toStatus === 'Event Completed');
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const TURNOVER_MONTH_LABELS = {
@@ -2966,11 +2970,18 @@ function DashboardApp() {
 
   const deleteEvent = async (eventId) => {
     const eventRecord = eventsRef.current.find((event) => event.id === eventId);
+    if (eventRecord && CONFIRMED_STATUSES.includes(eventRecord.status)) {
+      openNotice(`${eventRecord.name || 'This booking'} is ${eventRecord.status}, so it can't be deleted. If the booking is not going ahead, change its status back to Quote Sent first. An admin will be notified of that change.`, 'This booking cannot be deleted');
+      return;
+    }
     if (eventRecord && isPastEvent(eventRecord) && currentUser?.role !== 'admin') {
       openNotice('Only admins can delete past events.');
       return;
     }
-    const shouldDelete = await requestConfirmation({ title: 'Delete event', message: 'Delete this event?', confirmLabel: 'Delete', tone: 'danger' });
+    const deleteLabel = eventRecord
+      ? [eventRecord.name || 'Untitled event', formatDateDisplay(eventRecord.date), (eventRecord.branch || []).join('/'), eventRecord.status].filter(Boolean).join(' · ')
+      : 'this event';
+    const shouldDelete = await requestConfirmation({ title: 'Delete event', message: `Delete ${deleteLabel}? This can't be undone, and an admin will be notified.`, confirmLabel: 'Delete', tone: 'danger' });
     if (!shouldDelete) {
       return;
     }
@@ -4578,6 +4589,10 @@ function DashboardApp() {
       window.alert('That status already exists.');
       return;
     }
+    if (nextName !== statusKey && CONFIRMED_STATUSES.includes(statusKey)) {
+      openNotice(`"${statusKey}" can't be renamed: reports, delete protection and the status alerts depend on it. You can still change its colour.`);
+      return;
+    }
     persistLabelOption('status', nextName, nextName, '', nextColor, statusOptions.findIndex((option) => option.name === statusKey));
       if (nextName !== statusKey) {
         removeLabelOption('status', statusKey);
@@ -4599,6 +4614,10 @@ function DashboardApp() {
   };
 
   const deleteStatusOption = async (statusKey) => {
+    if (CONFIRMED_STATUSES.includes(statusKey)) {
+      openNotice(`"${statusKey}" can't be deleted: reports, delete protection and the status alerts depend on it.`);
+      return;
+    }
     const shouldDelete = await requestConfirmation({ title: 'Delete status', message: 'Delete status ' + statusKey + '?', confirmLabel: 'Delete', tone: 'danger' });
     if (!shouldDelete || refuseWhileBoardFailing()) {
       return;
@@ -4620,9 +4639,18 @@ function DashboardApp() {
     setStatusEditorEventId(eventId);
   };
 
-  const selectStatusOnEvent = (eventId, statusName) => {
+  const selectStatusOnEvent = async (eventId, statusName) => {
     const target = eventsRef.current.find((event) => event.id === eventId);
     setStatusEditorEventId(null);
+    if (target && isStatusRevert(target.status, statusName)) {
+      const confirmed = await requestConfirmation({
+        title: 'Move a confirmed booking back?',
+        message: `${target.name || 'This booking'} is ${target.status}. Change it to ${statusName || 'no status'}? An admin will be notified of this change.`,
+        confirmLabel: `Change to ${statusName || 'no status'}`,
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+    }
     if (target && target.bookingGroupId && target.status !== statusName && (groupSizes.get(target.bookingGroupId) || 0) > 1) {
       setGroupStatusPrompt({ eventId, statusName, count: groupSizes.get(target.bookingGroupId) || 0 });
       return;

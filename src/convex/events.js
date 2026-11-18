@@ -1,5 +1,6 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { fanOutSharedFields, handOverPrimary } from "./bookingGroups";
+import { bookingAlertSummary, isConfirmedStatus, isStatusRevert, scheduleBookingAlert } from "./bookingAlerts";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { seedEvents } from "../seedData";
 
@@ -711,12 +712,24 @@ export const upsert = mutation({
       await ctx.db.patch(existing._id, payload);
       const refreshed = await ctx.db.get(existing._id);
       // Linked booking: copy the SHARED fields that actually changed to the siblings.
+      let siblingsPatched = 0;
       if (refreshed.bookingGroupId) {
-        await fanOutSharedFields(ctx, existing, refreshed, currentUser, { applyStatusToGroup: Boolean(args.applyStatusToGroup), applySnappicToGroup: Boolean(args.applySnappicToGroup) });
+        siblingsPatched = await fanOutSharedFields(ctx, existing, refreshed, currentUser, { applyStatusToGroup: Boolean(args.applyStatusToGroup), applySnappicToGroup: Boolean(args.applySnappicToGroup) });
+      }
+      const actorName = currentUser.fullName || currentUser.firstName || currentUser.email;
+      if (isStatusRevert(existing.status, refreshed.status)) {
+        await scheduleBookingAlert(ctx, {
+          kind: "status_revert",
+          booking: bookingAlertSummary(refreshed),
+          fromStatus: existing.status,
+          toStatus: refreshed.status || "",
+          actorName,
+          at: Date.now(),
+          linkedRowsChanged: args.applyStatusToGroup ? siblingsPatched : 0,
+        });
       }
       const changedFields = getChangedEventFields(existing, refreshed);
       if (changedFields.length) {
-        const actorName = currentUser.fullName || currentUser.firstName || currentUser.email;
         const eventName = refreshed.name || "Untitled event";
         const text = `Updated ${changedFields.join(", ")}.`;
         await ctx.db.insert("activityLog", {
@@ -1000,7 +1013,7 @@ export const cloneEvent = mutation({
 export const remove = mutation({
   args: { eventId: v.string() },
   handler: async (ctx, args) => {
-    await requireCurrentUser(ctx);
+    const currentUser = await requireCurrentUser(ctx);
     const existing = await ctx.db
       .query("events")
       .withIndex("by_event_key", (q) => q.eq("eventKey", args.eventId))
@@ -1013,6 +1026,19 @@ export const remove = mutation({
     if (!existing) {
       return null;
     }
+
+    // Confirmed bookings can't be deleted by anyone; the status has to go back
+    // to Quote Sent first (which emails info@). The board checks this too.
+    if (isConfirmedStatus(existing.status)) {
+      throw new ConvexError(`This booking is ${existing.status} and can't be deleted. Change its status back to Quote Sent first.`);
+    }
+
+    await scheduleBookingAlert(ctx, {
+      kind: "deleted",
+      booking: bookingAlertSummary(existing),
+      actorName: currentUser.fullName || currentUser.firstName || currentUser.email,
+      at: Date.now(),
+    });
 
     if (existing.bookingGroupId) {
       await handOverPrimary(ctx, existing);
