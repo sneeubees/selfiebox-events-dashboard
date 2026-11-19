@@ -36,6 +36,9 @@ async function requireAdminUser(ctx) {
 const MONTH_KEYS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const GP_BRANCHES = new Set(["GP", "GAUTENG"]);
 const CT_BRANCHES = new Set(["CT", "CAPE TOWN", "CAPETOWN"]);
+// KZN and NW are shown on their own only. Combined stays GP + CT.
+const KZN_BRANCHES = new Set(["KZN", "KWAZULU-NATAL", "KWAZULU NATAL"]);
+const NW_BRANCHES = new Set(["NW", "NORTH WEST"]);
 
 function normalizeBranchValue(value) {
   return String(value || "")
@@ -135,6 +138,8 @@ export const getLiveTurnover = query({
       gp: {},
       ct: {},
       combined: {},
+      kzn: {},
+      nw: {},
     };
     const noEventsOverrides = await ctx.db.query("turnoverNoEventsOverrides").collect();
     const overrides = Object.fromEntries(
@@ -152,6 +157,8 @@ export const getLiveTurnover = query({
       const branchValues = Array.isArray(event.branch) ? event.branch.map(normalizeBranchValue) : [];
       const isGp = branchValues.some((value) => GP_BRANCHES.has(value));
       const isCt = branchValues.some((value) => CT_BRANCHES.has(value));
+      const isKzn = branchValues.some((value) => KZN_BRANCHES.has(value));
+      const isNw = branchValues.some((value) => NW_BRANCHES.has(value));
       const included = isIncludedTurnoverStatus(event.status);
       const completed = isCompletedStatus(event.status);
 
@@ -167,6 +174,12 @@ export const getLiveTurnover = query({
       }
       if (isGp || isCt) {
         addToRegionYear(grouped.combined, year, month, amount, completed);
+      }
+      if (isKzn) {
+        addToRegionYear(grouped.kzn, year, month, amount, completed);
+      }
+      if (isNw) {
+        addToRegionYear(grouped.nw, year, month, amount, completed);
       }
     });
 

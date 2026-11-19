@@ -18,6 +18,8 @@ import { query, internalMutation } from "./_generated/server";
 const MONTH_KEYS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const GP_BRANCHES = new Set(["GP", "GAUTENG"]);
 const CT_BRANCHES = new Set(["CT", "CAPE TOWN", "CAPETOWN"]);
+const KZN_BRANCHES = new Set(["KZN", "KWAZULU-NATAL", "KWAZULU NATAL"]);
+const NW_BRANCHES = new Set(["NW", "NORTH WEST"]);
 
 function normalizeBranchValue(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toUpperCase();
@@ -58,7 +60,9 @@ function regionMatches(event, region) {
   const isCt = branches.some((b) => CT_BRANCHES.has(b));
   if (region === "gp") return isGp;
   if (region === "ct") return isCt;
-  return isGp || isCt; // combined
+  if (region === "kzn") return branches.some((b) => KZN_BRANCHES.has(b));
+  if (region === "nw") return branches.some((b) => NW_BRANCHES.has(b));
+  return isGp || isCt; // combined (GP + CT only)
 }
 
 async function resolveConfirmedAt(ctx, event) {
@@ -99,7 +103,7 @@ export const monthDrilldown = query({
   args: {
     workspaceYear: v.number(),
     monthIndex: v.number(), // 0-11
-    region: v.string(), // 'gp' | 'ct' | 'combined'
+    region: v.string(), // 'gp' | 'ct' | 'combined' | 'kzn' | 'nw'
   },
   handler: async (ctx, { workspaceYear, monthIndex, region }) => {
     await requireAdmin(ctx);
