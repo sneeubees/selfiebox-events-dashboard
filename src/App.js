@@ -1572,7 +1572,9 @@ function DashboardApp() {
   }, [commissionDialog.month, commissionDialog.period, commissionMonthEvents, commissionRates, commissionSummaryAttendantNames, getCommissionOverrideForAttendant, selectedWorkspaceYear]);
   const turnoverRegionOptions = useMemo(
     () => [
-      ...Object.entries(TURNOVER_HISTORY_DATA.sections).map(([value, section]) => ({ value, label: section.label })),
+      ...Object.entries(TURNOVER_HISTORY_DATA.sections)
+        .filter(([value]) => !TURNOVER_LIVE_ONLY_REGIONS.some((option) => option.value === value))
+        .map(([value, section]) => ({ value, label: section.label })),
       ...TURNOVER_LIVE_ONLY_REGIONS,
     ],
     []
@@ -7706,7 +7708,7 @@ function TurnoverView({ isAdmin, turnover }) {
       <header className="statspage-viewhead"><div><h2>Turnover Figures</h2></div></header>
       {isLoading ? <div className="inline-loading turnover-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Loading this year&rsquo;s figures and the totals&hellip; (older years are shown already)</div> : null}
       {loadFailed ? <div className="inline-loading turnover-loading" role="alert">This year&rsquo;s figures could not be loaded. Press Refresh to try again.</div> : null}
-      {TURNOVER_LIVE_ONLY_REGIONS.some((option) => option.value === region) ? <div className="webstats-muted turnover-region-note">{regionLabel}: this year only, from the Excl JC column on the board. Not included in Combined, which is Gauteng and Cape Town.</div> : null}
+      {TURNOVER_LIVE_ONLY_REGIONS.some((option) => option.value === region) ? <div className="webstats-muted turnover-region-note">{regionLabel}: {TURNOVER_HISTORY_DATA.sections[region] ? 'earlier years from the KZN year-on-year stats sheet, this year' : 'this year only,'} from the Excl JC column on the board. Not included in Combined, which is Gauteng and Cape Town.</div> : null}
       <div className="turnover-sheet turnover-sheet-inpage">
         <div className="turnover-toolbar">
           <label>
@@ -10287,8 +10289,9 @@ function calculateTurnoverNetProfit(total, netProfitRatio) {
   return numeric * netProfitRatio;
 }
 
-// Regions with no typed-in history: only this year's live figures, and they
-// are not part of Combined (which stays GP + CT).
+// Regions that are not part of Combined (which stays GP + CT). Their earlier
+// years come from TURNOVER_HISTORY_DATA when a section exists (KZN: 2024-2025
+// from Johan's stats sheet); otherwise only this year's live figures show.
 const TURNOVER_LIVE_ONLY_REGIONS = [
   { value: 'kzn', label: 'KwaZulu-Natal' },
   { value: 'nw', label: 'North West' },
@@ -10296,9 +10299,8 @@ const TURNOVER_LIVE_ONLY_REGIONS = [
 
 function buildTurnoverRows(regionKey, liveTurnoverRecords = {}, netProfitPct = 70) {
   const isLiveOnlyRegion = TURNOVER_LIVE_ONLY_REGIONS.some((option) => option.value === regionKey);
-  const region = isLiveOnlyRegion
-    ? { rows: [] }
-    : TURNOVER_HISTORY_DATA.sections[regionKey] || TURNOVER_HISTORY_DATA.sections.combined;
+  const region = TURNOVER_HISTORY_DATA.sections[regionKey]
+    || (isLiveOnlyRegion ? { rows: [] } : TURNOVER_HISTORY_DATA.sections.combined);
   const liveRegionRows = liveTurnoverRecords?.regions?.[regionKey] || {};
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();

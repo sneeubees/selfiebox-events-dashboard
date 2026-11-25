@@ -710,6 +710,55 @@ export const TURNOVER_HISTORY_DATA = {
           "notes": ""
         }
       ]
+    },
+    "kzn": {
+      "label": "KwaZulu-Natal",
+      "rows": [
+        {
+          "year": 2024,
+          "months": {
+            "Jan": 30000,
+            "Feb": 33000,
+            "Mar": 120000,
+            "Apr": 85000,
+            "May": 80000,
+            "Jun": 145000,
+            "Jul": 160000,
+            "Aug": 98000,
+            "Sep": 89000,
+            "Oct": 113000,
+            "Nov": 144000,
+            "Dec": 268000
+          },
+          "total": 1365000,
+          "growthPct": null,
+          "growthRand": null,
+          "noEvents": null,
+          "notes": "From KZN Year-On-Year Stats.xlsx"
+        },
+        {
+          "year": 2025,
+          "months": {
+            "Jan": 35000,
+            "Feb": 43000,
+            "Mar": 120000,
+            "Apr": 113000,
+            "May": 240000,
+            "Jun": 115000,
+            "Jul": 150000,
+            "Aug": 143000,
+            "Sep": 138000,
+            "Oct": 182000,
+            "Nov": 142000,
+            "Dec": 213000
+          },
+          "total": 1634000,
+          "growthPct": 0.19706959706959706,
+          "growthRand": 269000,
+          "noEvents": null,
+          "notes": "From KZN Year-On-Year Stats.xlsx"
+        }
+      ]
     }
   }
 };
