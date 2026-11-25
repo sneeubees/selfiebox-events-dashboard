@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveStorageEvent } from "./bookingGroups";
 
 // wipeRuntimeData (delete every event, update, log entry and stored file) was
 // removed on 2026-09-21: nothing in the app called it, and one compromised
@@ -78,5 +79,69 @@ export const setRegionalExclJc = internalMutation({
       applied.push(change.id);
     }
     return { applied: applied.length, skipped };
+  },
+});
+
+// Internal (admin key / CLI only): attach a PDF that was uploaded to storage
+// (via adminGenerateUploadUrl) to a booking row, exactly like an upload in the
+// Files tab: stored on the row's storage event (shared drawer for linked rows),
+// skipped if a file with the same name is already there, logged in activity.
+// The invoice number / ExVAT Auto are only filled when the row has none yet.
+export const adminGenerateUploadUrl = internalMutation({
+  args: {},
+  handler: async (ctx) => ctx.storage.generateUploadUrl(),
+});
+
+export const adminAttachEventFile = internalMutation({
+  args: {
+    eventId: v.id("events"),
+    storageId: v.id("_storage"),
+    name: v.string(),
+    sizeLabel: v.optional(v.string()),
+    actorName: v.string(),
+    invoiceNumber: v.optional(v.string()),
+    exVatAuto: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const eventRecord = await ctx.db.get(args.eventId);
+    if (!eventRecord) return { attached: false, why: "event not found" };
+    const storageEvent = await resolveStorageEvent(ctx, eventRecord);
+    const existingFiles = await ctx.db
+      .query("eventFiles")
+      .withIndex("by_event", (q) => q.eq("eventId", storageEvent._id))
+      .collect();
+    if (existingFiles.some((file) => file.name === args.name)) {
+      await ctx.storage.delete(args.storageId);
+      return { attached: false, why: "a file with this name is already on the row" };
+    }
+    const now = Date.now();
+    await ctx.db.insert("eventFiles", {
+      eventId: storageEvent._id,
+      name: args.name,
+      storageId: args.storageId,
+      contentType: "application/pdf",
+      sizeLabel: args.sizeLabel,
+      createdAt: now,
+    });
+    const eventName = eventRecord.name || "Untitled event";
+    const text = `Uploaded file: ${args.name}`;
+    await ctx.db.insert("activityLog", {
+      workspaceYear: eventRecord.workspaceYear,
+      eventId: eventRecord._id,
+      eventName,
+      text,
+      shortText: `${eventName}: ${text}`.slice(0, 120),
+      actorName: args.actorName,
+      createdAt: now,
+    });
+    const patch = {};
+    if (args.invoiceNumber && !String(eventRecord.invoiceNumber || "").trim()) {
+      patch.invoiceNumber = args.invoiceNumber;
+      if (args.exVatAuto && !String(eventRecord.exVatAuto ?? "").trim()) patch.exVatAuto = args.exVatAuto;
+    }
+    if (Object.keys(patch).length) {
+      await ctx.db.patch(eventRecord._id, { ...patch, updatedAt: now });
+    }
+    return { attached: true, filledInvoiceNumber: Boolean(patch.invoiceNumber) };
   },
 });
