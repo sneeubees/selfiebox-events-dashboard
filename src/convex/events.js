@@ -575,6 +575,42 @@ export const seedInitialData = mutation({
   },
 });
 
+const CUSTOM_FIELD_PREFIX = "customFields.";
+
+// The write for a save that names its changed fields: those top-level keys
+// from the browser's row, custom columns merged one key at a time into the
+// stored customFields, and updatedAt. Keys the server does not store (like
+// "id") are ignored.
+export function mergeChangedEventFields(existing, payload, changedFields) {
+  const write = { updatedAt: payload.updatedAt };
+  const customKeys = [];
+  let wholeCustomFields = false;
+  for (const field of changedFields) {
+    if (field.startsWith(CUSTOM_FIELD_PREFIX)) {
+      customKeys.push(field.slice(CUSTOM_FIELD_PREFIX.length));
+    } else if (field === "customFields") {
+      wholeCustomFields = true;
+    } else if (field in payload && field !== "eventKey") {
+      write[field] = payload[field];
+    }
+  }
+  if (wholeCustomFields) {
+    write.customFields = payload.customFields;
+  } else if (customKeys.length) {
+    const merged = { ...(existing.customFields || {}) };
+    const sent = payload.customFields || {};
+    for (const key of customKeys) {
+      if (Object.prototype.hasOwnProperty.call(sent, key)) {
+        merged[key] = sent[key];
+      } else {
+        delete merged[key];
+      }
+    }
+    write.customFields = merged;
+  }
+  return write;
+}
+
 export const upsert = mutation({
   args: {
     event: v.object({
@@ -633,6 +669,11 @@ export const upsert = mutation({
     // Linked bookings: when the status changed on this row, also move the siblings.
     applyStatusToGroup: v.optional(v.boolean()),
     applySnappicToGroup: v.optional(v.boolean()),
+    // The fields this user actually edited since their last save: top-level
+    // keys, plus "customFields.<key>" for single custom columns. When given,
+    // only those are written and everything else keeps what is stored now.
+    // Without it (older tabs) the whole row is written, as before.
+    changedFields: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const currentUser = await requireCurrentUser(ctx);
@@ -645,7 +686,7 @@ export const upsert = mutation({
       .withIndex("by_event_key", (q) => q.eq("eventKey", args.event.id))
       .unique();
 
-    const payload = {
+    let payload = {
       eventKey: args.event.id,
       workspaceYear: args.event.workspaceYear,
       name: args.event.name,
@@ -691,6 +732,15 @@ export const upsert = mutation({
       if (args.event[key] !== undefined) {
         payload[key] = args.event[key];
       }
+    }
+
+    if (existing && args.changedFields && !args.changedFields.includes("*")) {
+      // Each browser sends its whole copy of the row, and that copy can be a
+      // few seconds old. Writing all of it put back values a colleague had
+      // just changed (26 Nov 2026: Tamika renamed Tshepo Sekhokho 6 s after
+      // Johan typed its Excl JC, and her save blanked it). Keep only what
+      // this user changed; the rest stays as stored.
+      payload = mergeChangedEventFields(existing, payload, args.changedFields);
     }
 
     if (existing) {

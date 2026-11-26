@@ -1,4 +1,4 @@
-// Emails info@ when a confirmed booking (In Progress / Event Completed) is moved
+// Emails info@ and Johan when a confirmed booking (In Progress / Event Completed) is moved
 // to any other status - except the normal step forward, In Progress -> Event
 // Completed - and whenever a booking is deleted. Scheduled from events.upsert and
 // events.remove so every path that saves a status or deletes a row is covered.
@@ -9,7 +9,8 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-const ALERT_RECIPIENTS = ["info@selfiebox.co.za"];
+// Johan added 26 Nov 2026: info@ alone meant he never saw the alerts.
+const ALERT_RECIPIENTS = ["info@selfiebox.co.za", "johan@thewebjockeys.co.za"];
 
 // Bookings in these statuses are confirmed: they can't be deleted, and moving
 // them anywhere but forward sends an alert.

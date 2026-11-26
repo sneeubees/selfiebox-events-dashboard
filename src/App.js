@@ -4,6 +4,7 @@ import { SignIn, SignUp, useClerk, useUser } from '@clerk/react';
 import { Authenticated, AuthLoading, Unauthenticated, useAction, useConvex, useMutation, useQuery } from 'convex/react';
 import { api } from './convex/_generated/api';
 import { extractPlaceResult, hasGoogleMapsApiKey, loadGoogleMapsApi } from './googleMaps';
+import { changedEventFieldsForSave, serializeEventForConvex } from './eventSaveFields';
 import BookingPage, { getBookingTokenFromPath } from './BookingPage';
 import './App.css';
 import { TURNOVER_HISTORY_DATA } from './turnoverHistoryData';
@@ -539,48 +540,6 @@ function getColumnWidth(column) {
   if (column.type === 'singleItem') return 168;
   if (column.type === 'multiItem') return 146;
   return 170;
-}
-
-function serializeEventForConvex(event) {
-  const workspaceYear = event.date ? new Date(event.date).getFullYear() : event.workspaceYear || 2026;
-  return {
-    id: event.id,
-    workspaceYear,
-    name: event.name || '',
-    eventTitle: event.eventTitle || '',
-    date: event.date || '',
-    draftMonth: event.draftMonth || '',
-    hours: event.hours || '',
-    time: event.time || '',
-    branch: event.branch || [],
-    products: event.products || [],
-    // Missing until 2026-09-21: the server defaulted it to {} on every save, so
-    // product quantities (x2, x3...) never survived a save.
-    productQuantities: event.productQuantities || {},
-    status: event.status || '',
-    digitalOnly: Boolean(event.digitalOnly),
-    location: event.location || '',
-    locationPlaceId: event.locationPlaceId || '',
-    locationLat: typeof event.locationLat === 'number' ? event.locationLat : null,
-    locationLng: typeof event.locationLng === 'number' ? event.locationLng : null,
-    paymentStatus: event.paymentStatus || '',
-    accounts: event.accounts || '',
-    quoteNumber: event.quoteNumber || '',
-    invoiceNumber: event.invoiceNumber || '',
-    exVatAuto: event.exVatAuto ?? '',
-    vinyl: event.vinyl || '',
-    gsAi: event.gsAi || '',
-    imagesSent: event.imagesSent || '',
-    snappic: event.snappic || '',
-    attendants: event.attendants || [],
-    exVat: event.exVat ?? '',
-    packageOnly: event.packageOnly || '',
-    notes: event.notes || '',
-    customFields: event.customFields || {},
-    updates: event.updates || [],
-    files: event.files || [],
-    activity: event.activity || [],
-  };
 }
 
 function createEventKey() {
@@ -1179,6 +1138,8 @@ function DashboardApp() {
   // Pending events.upsert per row (typed cell edits wait for blur / 2 s idle).
   const [boardSaveScheduler] = useState(() => createBoardSaveScheduler());
   const eventPersistVersionsRef = useRef(new Map());
+  // Fields edited on each row since its last save was sent ("*" = whole row).
+  const dirtyEventFieldsRef = useRef(new Map());
   const eventDeleteVersionsRef = useRef(new Map());
   const commissionOverrideSaveTimeoutsRef = useRef(new Map());
   const commissionOverridesLoadedKeyRef = useRef('');
@@ -2287,8 +2248,14 @@ function DashboardApp() {
       const eventToSave = latestEvent
         ? { ...event, quoteNumber: latestEvent.quoteNumber, invoiceNumber: latestEvent.invoiceNumber, exVatAuto: latestEvent.exVatAuto }
         : event;
+      // Only the fields edited here since the last save go to the server. No
+      // record (a retry after a reload, say) means the whole row, as before.
+      const dirtyFields = dirtyEventFieldsRef.current.get(event.id);
+      dirtyEventFieldsRef.current.delete(event.id);
+      const changedFields = dirtyFields && !dirtyFields.has('*') ? [...dirtyFields] : null;
       void upsertEventMutation({
         event: serializeEventForConvex(eventToSave),
+        ...(changedFields ? { changedFields } : {}),
         ...(applyStatusToGroup ? { applyStatusToGroup: true } : {}),
         ...(applySnappicToGroup ? { applySnappicToGroup: true } : {}),
       })
@@ -2305,6 +2272,12 @@ function DashboardApp() {
         })
         .catch((error) => {
           console.error('Failed to persist event', error);
+          // The edit was not saved: its fields still need sending on the retry.
+          if (dirtyFields) {
+            const stillDirty = dirtyEventFieldsRef.current.get(event.id) || new Set();
+            dirtyFields.forEach((field) => stillDirty.add(field));
+            dirtyEventFieldsRef.current.set(event.id, stillDirty);
+          }
           if (eventPersistVersionsRef.current.get(event.id) !== nextPersistVersion) {
             return;
           }
@@ -2363,6 +2336,7 @@ function DashboardApp() {
 
   const discardFailedSave = (eventId) => {
     eventSyncLocksRef.current.delete(eventId);
+    dirtyEventFieldsRef.current.delete(eventId);
     setSaveFailures((current) => current.filter((failure) => failure.eventId !== eventId));
     const remoteEvent = (liveEvents || []).find((candidate) => candidate.id === eventId);
     if (remoteEvent) {
@@ -2384,6 +2358,13 @@ function DashboardApp() {
       const hasChanged = !previousEvent || JSON.stringify(previousEvent) !== JSON.stringify(event);
       if (hasChanged) {
         changedEvents.push(event);
+        const dirty = dirtyEventFieldsRef.current.get(event.id) || new Set();
+        if (previousEvent) {
+          changedEventFieldsForSave(previousEvent, event).forEach((field) => dirty.add(field));
+        } else {
+          dirty.add('*');
+        }
+        dirtyEventFieldsRef.current.set(event.id, dirty);
         eventSyncLocksRef.current.set(event.id, { expiresAt: Number.POSITIVE_INFINITY, deleted: false, pending: true });
       }
     });
@@ -2404,6 +2385,7 @@ function DashboardApp() {
     previousEvents.forEach((event) => {
       if (!nextIds.has(event.id)) {
         boardSaveScheduler.cancel(event.id);
+        dirtyEventFieldsRef.current.delete(event.id);
         const nextPersistVersion = (eventPersistVersionsRef.current.get(event.id) || 0) + 1;
         eventPersistVersionsRef.current.set(event.id, nextPersistVersion);
         const nextDeleteVersion = (eventDeleteVersionsRef.current.get(event.id) || 0) + 1;
